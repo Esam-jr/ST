@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Card, CardContent } from '@/components/ui/card';
 
 type DashboardStatsProps = {
   userRole: string;
@@ -65,13 +66,10 @@ export default function DashboardStats({ userRole }: DashboardStatsProps) {
     return (
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {[...Array(6)].map((_, index) => (
-          <div
-            key={index}
-            className="rounded-lg bg-white p-6 shadow dark:bg-gray-800"
-          >
-            <div className="h-4 w-1/3 animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
-            <div className="mt-4 h-8 w-2/3 animate-pulse rounded bg-gray-200 dark:bg-gray-700"></div>
-          </div>
+          <Card key={index} className="p-6">
+            <div className="h-4 w-1/3 animate-pulse rounded bg-muted"></div>
+            <div className="mt-4 h-8 w-2/3 animate-pulse rounded bg-muted"></div>
+          </Card>
         ))}
       </div>
     );
@@ -461,14 +459,14 @@ type StatCardProps = {
 
 function StatCard({ title, value, icon }: StatCardProps) {
   return (
-    <div className="rounded-lg bg-white p-6 shadow dark:bg-gray-800">
-      <div className="flex items-center">
-        {icon && <div className="flex-shrink-0">{icon}</div>}
+    <Card className="transition-all duration-200 hover:shadow-md">
+      <CardContent className="flex items-center p-6">
+        {icon && <div className="flex-shrink-0 text-primary">{icon}</div>}
         <div className="ml-3">
-          <p className="text-sm font-medium text-gray-500 dark:text-gray-400">{title}</p>
-          <p className="text-3xl font-bold text-gray-900 dark:text-white">{value}</p>
+          <p className="text-sm font-medium text-muted-foreground">{title}</p>
+          <p className="text-3xl font-bold">{value}</p>
         </div>
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 }
