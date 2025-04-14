@@ -59,11 +59,14 @@ const customPrismaAdapter = {
         return existingUser;
       }
 
-      // Create new user with ENTREPRENEUR role by default
+      // Create new user with USER role by default
       const user = await prisma.user.create({
         data: {
-          ...data,
-          role: Role.ENTREPRENEUR,
+          name: data.name || null,
+          email: data.email || '',  // Set a default empty string if email is undefined
+          image: data.image || null,
+          emailVerified: data.emailVerified || null,
+          role: Role.USER,
         },
       });
       
@@ -222,24 +225,73 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     async signIn({ user, account, profile }) {
       console.log("Sign in callback running for:", user.email);
+      console.log("Account provider:", account?.provider);
+      console.log("User ID:", user?.id);
+      console.log("User object:", JSON.stringify(user));
+      
+      // Check if this is an OAuth sign-in and the user has a USER role
+      if (
+        account && 
+        (account.provider === 'google' || account.provider === 'github') && 
+        user && 
+        user.id
+      ) {
+        try {
+          // Get the user from the database to check their role
+          const dbUser = await prisma.user.findUnique({
+            where: { id: user.id },
+            select: { role: true }
+          });
+          
+          console.log("Database user role:", dbUser?.role);
+          
+          // If user has a base USER role, they need to select a specific role
+          if (dbUser?.role === Role.USER) {
+            console.log("Redirecting to role selection page");
+            return true; // Allow sign in, and we'll redirect in the client
+          } else {
+            console.log("User already has a role:", dbUser?.role);
+          }
+        } catch (error) {
+          console.error("Error checking user role in signIn callback:", error);
+        }
+      } else {
+        console.log("Not an OAuth sign-in or missing user info");
+      }
+      
       return true;
     },
     async jwt({ token, user, account }) {
+      console.log("JWT callback running for token:", token.email);
+      
       if (user) {
         token.id = user.id;
         token.role = user.role;
+        console.log("JWT callback - User role:", user.role);
       }
 
       // If we don't have a role yet but have an email, try to get it from the database
-      if (!token.role && token.email) {
+      if (token.email) {
         try {
           const dbUser = await prisma.user.findUnique({
             where: { email: token.email as string },
           });
-          if (dbUser?.role) {
+          
+          if (dbUser) {
+            console.log("JWT callback - Database user role:", dbUser.role);
+            token.id = dbUser.id;
             token.role = dbUser.role;
+            
+            // Mark users with USER role as needing role selection
+            if (dbUser.role === Role.USER) {
+              token.needsRoleSelection = true;
+              console.log("JWT callback - User needs role selection");
+            } else {
+              token.needsRoleSelection = false;
+            }
           } else {
-            // Default to ENTREPRENEUR if no role found
+            // Default to ENTREPRENEUR if no user found
+            console.log("JWT callback - No database user found");
             token.role = 'ENTREPRENEUR';
           }
         } catch (error) {
@@ -250,10 +302,22 @@ export const authOptions: NextAuthOptions = {
       return token;
     },
     async session({ session, token }) {
+      console.log("Session callback running");
+      
       if (session.user) {
         session.user.id = token.id as string;
         session.user.role = token.role as string || 'ENTREPRENEUR';
+        
+        // Pass the needsRoleSelection flag to the client
+        if (token.needsRoleSelection) {
+          console.log("Session callback - User needs role selection");
+          (session as any).needsRoleSelection = true;
+        } else {
+          (session as any).needsRoleSelection = false;
+        }
       }
+      
+      console.log("Session data:", JSON.stringify(session));
       return session;
     },
   }
