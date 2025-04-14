@@ -1,22 +1,22 @@
-import { SessionProvider } from 'next-auth/react';
-import { QueryClient, QueryClientProvider } from 'react-query';
-import type { AppProps } from 'next/app';
-import { useState } from 'react';
-import { ThemeProvider } from '@/components/ui/theme-provider';
-import { Toaster } from '@/components/ui/toaster';
-import '../styles/globals.css';
+import '@/styles/globals.css'
+import type { AppProps } from 'next/app'
+import { SessionProvider } from 'next-auth/react'
+import { ThemeProvider } from 'next-themes'
+import { ThemeProvider as NextThemesProvider } from "@/components/ui/theme-provider"
+import { Toaster } from "@/components/ui/toaster"
 
 export default function App({ Component, pageProps: { session, ...pageProps } }: AppProps) {
-  const [queryClient] = useState(() => new QueryClient());
-
   return (
     <SessionProvider session={session}>
-      <QueryClientProvider client={queryClient}>
-        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-          <Component {...pageProps} />
-          <Toaster />
-        </ThemeProvider>
-      </QueryClientProvider>
+      <NextThemesProvider
+        attribute="class"
+        defaultTheme="system"
+        enableSystem
+        disableTransitionOnChange
+      >
+        <Component {...pageProps} />
+        <Toaster />
+      </NextThemesProvider>
     </SessionProvider>
-  );
+  )
 }

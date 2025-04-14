@@ -5,12 +5,9 @@ import Link from 'next/link';
 import Layout from '../../components/layout/Layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { AlertCircle } from 'lucide-react';
 
 export default function SignUp() {
   const router = useRouter();
@@ -99,13 +96,9 @@ export default function SignUp() {
           <Card>
             <CardContent className="pt-6">
               {error && (
-                <Alert variant="destructive" className="mb-6">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertTitle>Error</AlertTitle>
-                  <AlertDescription>
-                    {error}
-                  </AlertDescription>
-                </Alert>
+                <div className="mb-6 p-4 text-sm border border-red-300 bg-red-50 text-red-800 rounded-md">
+                  {error}
+                </div>
               )}
 
               <form className="space-y-6" onSubmit={handleSubmit}>
@@ -178,13 +171,14 @@ export default function SignUp() {
                 </div>
 
                 <div className="flex items-center space-x-2">
-                  <Checkbox 
-                    id="terms" 
+                  <input 
+                    type="checkbox" 
+                    id="terms"
                     checked={agreedToTerms}
-                    onCheckedChange={(checked) => setAgreedToTerms(checked as boolean)}
-                    required
+                    onChange={(e) => setAgreedToTerms(e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
                   />
-                  <Label htmlFor="terms" className="text-sm leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                  <label htmlFor="terms" className="text-sm">
                     I agree to the{' '}
                     <Link href="/terms" className="text-primary hover:underline">
                       Terms of Service
@@ -193,7 +187,7 @@ export default function SignUp() {
                     <Link href="/privacy" className="text-primary hover:underline">
                       Privacy Policy
                     </Link>
-                  </Label>
+                  </label>
                 </div>
 
                 <Button
