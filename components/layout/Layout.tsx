@@ -21,9 +21,12 @@ export default function Layout({
         <meta name="description" content={description} />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </Head>
-      <div className="flex min-h-screen flex-col">
+      <div className="flex min-h-screen flex-col bg-background">
+        <div className="fixed inset-0 w-full h-full overflow-hidden">
+          <div className="grid-bg-pattern" />
+        </div>
         <Navbar />
-        <main className="flex-grow">{children}</main>
+        <main className="flex-grow relative z-10">{children}</main>
         <Footer />
       </div>
     </>
