@@ -8,6 +8,7 @@ export default function GoogleDebug() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [response, setResponse] = useState<any>(null);
+  const [envInfo, setEnvInfo] = useState<any>(null);
 
   const handleGoogleSignIn = async () => {
     setIsLoading(true);
@@ -15,6 +16,11 @@ export default function GoogleDebug() {
     setResponse(null);
 
     try {
+      // Check environment variables first
+      const envResponse = await fetch('/api/auth/check-env');
+      const envData = await envResponse.json();
+      setEnvInfo(envData);
+      
       // Directly call the Google provider with callback URL to this page
       const result = await signIn('google', { 
         redirect: false,
@@ -29,6 +35,21 @@ export default function GoogleDebug() {
     } catch (err: any) {
       setError(err.message || 'An unknown error occurred');
       console.error(err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const checkGoogle = async () => {
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      const response = await fetch('/api/auth/debug-google');
+      const data = await response.json();
+      setEnvInfo(data);
+    } catch (err: any) {
+      setError(err.message || 'An unknown error occurred');
     } finally {
       setIsLoading(false);
     }
@@ -51,17 +72,20 @@ export default function GoogleDebug() {
             <CardTitle>Google OAuth Troubleshooting</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="mb-6">
-              <h2 className="text-xl font-semibold mb-2">Test Google OAuth</h2>
-              <p className="text-sm text-muted-foreground mb-4">
-                Click the button below to test Google OAuth sign-in. This will attempt to sign you in with Google
-                and display the full response for debugging.
-              </p>
+            <div className="flex flex-col sm:flex-row gap-4 mb-6">
               <Button 
                 onClick={handleGoogleSignIn} 
                 disabled={isLoading}
               >
                 {isLoading ? 'Testing...' : 'Test Google Sign In'}
+              </Button>
+              
+              <Button 
+                onClick={checkGoogle}
+                variant="outline" 
+                disabled={isLoading}
+              >
+                Check Google Config
               </Button>
             </div>
 
@@ -69,6 +93,15 @@ export default function GoogleDebug() {
               <div className="mb-6 p-4 text-sm border border-red-300 bg-red-50 text-red-800 rounded-md">
                 <p className="font-semibold">Error:</p>
                 <p>{error}</p>
+              </div>
+            )}
+
+            {envInfo && (
+              <div className="mb-6">
+                <h2 className="text-xl font-semibold mb-2">Environment Info</h2>
+                <div className="bg-muted p-4 rounded overflow-auto max-h-64">
+                  <pre className="whitespace-pre-wrap text-xs">{JSON.stringify(envInfo, null, 2)}</pre>
+                </div>
               </div>
             )}
 
