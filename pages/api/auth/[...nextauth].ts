@@ -9,22 +9,11 @@ import { compare } from 'bcrypt';
 import { Role, Prisma } from '@prisma/client';
 import { AdapterUser } from 'next-auth/adapters';
 
-// Log environment variables to help with debugging
-console.log('Environment check for OAuth providers:');
-console.log('GOOGLE_ID exists:', !!process.env.GOOGLE_ID);
-console.log('GOOGLE_SECRET exists:', !!process.env.GOOGLE_SECRET);
-console.log('GITHUB_ID exists:', !!process.env.GITHUB_ID);
-console.log('GITHUB_SECRET exists:', !!process.env.GITHUB_SECRET);
-
 // Get the actual values of environment variables
 const googleClientId = process.env.GOOGLE_ID || '';
 const googleClientSecret = process.env.GOOGLE_SECRET || '';
 const githubClientId = process.env.GITHUB_ID || '';
 const githubClientSecret = process.env.GITHUB_SECRET || '';
-
-// Log the first few characters to verify they're loaded correctly
-console.log('GOOGLE_ID prefix:', googleClientId.substring(0, 5));
-console.log('GITHUB_ID prefix:', githubClientId.substring(0, 5));
 
 // User data type for createUser
 type CreateUserData = {
@@ -47,7 +36,6 @@ type LinkAccountData = {
 const customPrismaAdapter = {
   ...PrismaAdapter(prisma),
   createUser: async (data: CreateUserData) => {
-    console.log("Creating new user with data:", { ...data, email: data.email });
     try {
       // Check if user already exists first to avoid conflicts
       const existingUser = data.email 
@@ -55,7 +43,6 @@ const customPrismaAdapter = {
         : null;
       
       if (existingUser) {
-        console.log("User already exists, returning existing user:", existingUser.id);
         return existingUser;
       }
 
@@ -70,20 +57,15 @@ const customPrismaAdapter = {
         },
       });
       
-      console.log("Successfully created new user:", user.id);
       return user;
     } catch (error) {
-      console.error("Error in createUser:", error);
-      
       // If we got a unique constraint error, try to find the user
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002' && data.email) {
-        console.log("Unique constraint error, trying to find existing user");
         const user = await prisma.user.findUnique({
           where: { email: data.email },
         });
         
         if (user) {
-          console.log("Found existing user:", user.id);
           return user;
         }
       }
@@ -92,7 +74,6 @@ const customPrismaAdapter = {
     }
   },
   linkAccount: async (data: LinkAccountData) => {
-    console.log("Linking account:", { provider: data.provider, providerAccountId: data.providerAccountId });
     try {
       // Check if account already exists
       const existingAccount = await prisma.account.findFirst({
@@ -103,20 +84,15 @@ const customPrismaAdapter = {
       });
 
       if (existingAccount) {
-        console.log("Account already exists, returning existing:", existingAccount.id);
         return existingAccount;
       }
 
       // Create new account link
       const account = await prisma.account.create({ data });
-      console.log("Successfully linked account:", account.id);
       return account;
     } catch (error) {
-      console.error("Error in linkAccount:", error);
-      
       // If we got a unique constraint error, try to find the account
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-        console.log("Unique constraint error, trying to find existing account");
         const account = await prisma.account.findFirst({
           where: {
             provider: data.provider,
@@ -125,7 +101,6 @@ const customPrismaAdapter = {
         });
         
         if (account) {
-          console.log("Found existing account:", account.id);
           return account;
         }
       }
@@ -144,7 +119,6 @@ const customPrismaAdapter = {
       });
       
       if (!account) {
-        console.log("Account not found for:", providerAccountId);
         return null;
       }
       
@@ -153,7 +127,6 @@ const customPrismaAdapter = {
         where: { id: account.userId },
       });
     } catch (error) {
-      console.error("Error in getUserByAccount:", error);
       return null;
     }
   }
@@ -210,6 +183,19 @@ export const authOptions: NextAuthOptions = {
     GitHubProvider({
       clientId: githubClientId,
       clientSecret: githubClientSecret,
+      authorization: {
+        params: {
+          scope: 'read:user user:email',
+        },
+      },
+      profile(profile) {
+        return {
+          id: profile.id.toString(),
+          name: profile.name || profile.login,
+          email: profile.email,
+          image: profile.avatar_url,
+        }
+      },
     }),
   ],
   session: {
@@ -224,11 +210,6 @@ export const authOptions: NextAuthOptions = {
   },
   callbacks: {
     async signIn({ user, account, profile }) {
-      console.log("Sign in callback running for:", user.email);
-      console.log("Account provider:", account?.provider);
-      console.log("User ID:", user?.id);
-      console.log("User object:", JSON.stringify(user));
-      
       // Check if this is an OAuth sign-in and the user has a USER role
       if (
         account && 
@@ -243,34 +224,29 @@ export const authOptions: NextAuthOptions = {
             select: { role: true }
           });
           
-          console.log("Database user role:", dbUser?.role);
-          
           // If user has a base USER role, they need to select a specific role
           if (dbUser?.role === Role.USER) {
-            console.log("Redirecting to role selection page");
             return true; // Allow sign in, and we'll redirect in the client
-          } else {
-            console.log("User already has a role:", dbUser?.role);
           }
         } catch (error) {
           console.error("Error checking user role in signIn callback:", error);
         }
-      } else {
-        console.log("Not an OAuth sign-in or missing user info");
       }
       
       return true;
     },
     async jwt({ token, user, account }) {
-      console.log("JWT callback running for token:", token.email);
-      
       if (user) {
         token.id = user.id;
         token.role = user.role;
-        console.log("JWT callback - User role:", user.role);
       }
 
-      // If we don't have a role yet but have an email, try to get it from the database
+      // Store the provider if available
+      if (account) {
+        token.provider = account.provider;
+      }
+
+      // If we have an email, get the user from the database
       if (token.email) {
         try {
           const dbUser = await prisma.user.findUnique({
@@ -278,20 +254,17 @@ export const authOptions: NextAuthOptions = {
           });
           
           if (dbUser) {
-            console.log("JWT callback - Database user role:", dbUser.role);
             token.id = dbUser.id;
             token.role = dbUser.role;
             
             // Mark users with USER role as needing role selection
             if (dbUser.role === Role.USER) {
               token.needsRoleSelection = true;
-              console.log("JWT callback - User needs role selection");
             } else {
               token.needsRoleSelection = false;
             }
           } else {
             // Default to ENTREPRENEUR if no user found
-            console.log("JWT callback - No database user found");
             token.role = 'ENTREPRENEUR';
           }
         } catch (error) {
@@ -302,22 +275,23 @@ export const authOptions: NextAuthOptions = {
       return token;
     },
     async session({ session, token }) {
-      console.log("Session callback running");
-      
       if (session.user) {
         session.user.id = token.id as string;
         session.user.role = token.role as string || 'ENTREPRENEUR';
         
         // Pass the needsRoleSelection flag to the client
         if (token.needsRoleSelection) {
-          console.log("Session callback - User needs role selection");
           (session as any).needsRoleSelection = true;
         } else {
           (session as any).needsRoleSelection = false;
         }
+        
+        // Pass the provider to the client
+        if (token.provider) {
+          (session as any).provider = token.provider;
+        }
       }
       
-      console.log("Session data:", JSON.stringify(session));
       return session;
     },
   }

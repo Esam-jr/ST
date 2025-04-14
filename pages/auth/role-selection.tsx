@@ -15,18 +15,12 @@ export default function RoleSelection() {
 
   // Redirect if not authenticated
   useEffect(() => {
-    console.log("Role selection page - Session status:", status);
-    console.log("Role selection page - User role:", session?.user?.role);
-    console.log("Role selection page - Callback URL:", callbackUrl);
-    
     if (status === 'unauthenticated') {
-      console.log("User is unauthenticated, redirecting to signin");
       router.push('/auth/signin');
     }
     
     // If user already has a role other than USER, redirect to the callback URL or dashboard
     if (session?.user?.role && session.user.role !== 'USER') {
-      console.log("User already has a non-USER role, redirecting to:", (callbackUrl as string) || '/dashboard');
       router.push((callbackUrl as string) || '/dashboard');
     }
   }, [status, session, router, callbackUrl]);
@@ -36,8 +30,6 @@ export default function RoleSelection() {
     setError('');
 
     try {
-      console.log(`Selecting role: ${role}`);
-      
       // Call the API to update the user's role
       const response = await fetch('/api/auth/update-role', {
         method: 'POST',
@@ -48,23 +40,17 @@ export default function RoleSelection() {
       });
 
       const data = await response.json();
-      console.log("API response:", data);
 
       if (!response.ok) {
         throw new Error(data.message || 'Failed to update role');
       }
 
-      console.log("Role updated successfully, updating session...");
-
       // Update the session with the new role
       await update();
-      
-      console.log("Session updated, redirecting to:", (callbackUrl as string) || '/dashboard');
       
       // Redirect to the callback URL or dashboard
       router.push((callbackUrl as string) || '/dashboard');
     } catch (err) {
-      console.error("Error selecting role:", err);
       setError(err instanceof Error ? err.message : 'An error occurred');
       setIsLoading(false);
     }

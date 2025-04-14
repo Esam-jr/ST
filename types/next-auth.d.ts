@@ -11,6 +11,7 @@ declare module "next-auth" {
       role: string
     } & DefaultSession["user"]
     needsRoleSelection?: boolean
+    provider?: string
   }
 
   interface User {
@@ -25,5 +26,6 @@ declare module "next-auth/jwt" {
     id?: string
     role?: string
     needsRoleSelection?: boolean
+    provider?: string
   }
 } 
