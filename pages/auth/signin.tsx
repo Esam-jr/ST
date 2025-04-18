@@ -47,9 +47,9 @@ export default function SignIn() {
         if (role === 'ADMIN') {
           router.push('/admin');
         } else if (role === 'SPONSER') {
-          router.push('/dashbored');
+          router.push('/sponsor-dashbored');
         } else if (role === 'ENTREPRENEUR') {
-          router.push('/startupCalls');
+          router.push('/startup-calls');
         } else {
           router.push('/');
         }
