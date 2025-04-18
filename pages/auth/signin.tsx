@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { signIn } from 'next-auth/react';
+import { getSession, signIn } from 'next-auth/react';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
 import Layout from '../../components/layout/Layout';
@@ -29,26 +29,38 @@ export default function SignIn() {
     setIsLoading(true);
     setError('');
     setSuccessMessage('');
-
+  
     try {
       const result = await signIn('credentials', {
         redirect: false,
         email,
         password,
       });
-
+  
       if (result?.error) {
         setError('Invalid email or password');
         setIsLoading(false);
       } else {
-        // Successful login
-        router.push((callbackUrl as string) || '/dashboard');
+        const session = await getSession();
+        const role = session?.user?.role;
+  
+        if (role === 'ADMIN') {
+          router.push('/admin');
+        } else if (role === 'SPONSER') {
+          router.push('/dashbored');
+        } else if (role === 'ENTREPRENEUR') {
+          router.push('/startupCalls');
+        } else {
+          router.push('/');
+        }
       }
     } catch (err) {
+      console.error(err);
       setError('An error occurred during sign in');
       setIsLoading(false);
     }
   };
+  
 
   return (
     <Layout title="Sign In | Startup Call Management System">
