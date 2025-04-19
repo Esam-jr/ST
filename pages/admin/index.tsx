@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from 'react';
-import { useSession } from 'next-auth/react';
+import { useSession, signOut } from 'next-auth/react';
 import { useRouter } from 'next/router';
 import Layout from '../../components/layout/Layout';
 import { Card, CardContent } from '@/components/ui/card';
@@ -206,7 +206,7 @@ export default function AdminDashboard() {
           </div>
 
           <div className="p-4 mt-auto border-t border-border">
-            <Button variant="outline" className="w-full justify-start" onClick={() => router.push('/api/auth/signout')}>
+            <Button variant="outline" className="w-full justify-start" onClick={() => signOut({ callbackUrl: '/' })}>
               <LogOut className="mr-2 h-4 w-4" />
               Sign Out
             </Button>
