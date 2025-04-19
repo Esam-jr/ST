@@ -79,50 +79,39 @@ export default function StartupCallDetails() {
         setCall(response.data);
       } catch (error: any) {
         console.error('Error fetching startup call:', error);
-        toast({
-          title: "Error",
-          description: error.response?.data?.message || "Failed to fetch startup call details",
-          variant: "destructive",
-        });
         
-        // For demo purposes, set mock data if the API fails
-        // In a real app, you might want to redirect or show an error page
-        const mockCall: StartupCall = {
-          id: id as string,
-          title: 'Green Technology Innovation Fund',
-          description: 'We are seeking innovative technology startups that have developed solutions addressing environmental sustainability. Selected startups will receive funding, mentorship, and access to our network of industry experts.',
-          status: 'PUBLISHED',
-          applicationDeadline: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-          publishedDate: new Date().toISOString(),
-          industry: 'Technology',
-          location: 'Global',
-          fundingAmount: '$50,000 - $100,000',
-          requirements: ['MVP ready', 'Less than 3 years old', 'Sustainability focus'],
-          applicationStatus: 'NOT_APPLIED',
-          eligibilityCriteria: [
-            'Startups must be legally registered entities',
-            'Founding team must have at least 2 members',
-            'Must have a working prototype or MVP',
-            'Product or service must address environmental sustainability'
-          ],
-          selectionProcess: [
-            'Initial application screening',
-            'Technical assessment of product/solution',
-            'Panel interview with industry experts',
-            'Final selection by investment committee'
-          ],
-          aboutSponsor: 'This program is sponsored by GreenTech Ventures, a leading venture capital firm specializing in sustainable technology investments.',
-          applicationProcess: 'Applications open until deadline. Shortlisted startups will be contacted within 2 weeks.'
-        };
-        
-        setCall(mockCall);
+        // Check if this is a 404 or 403 error
+        if (error.response?.status === 404) {
+          toast({
+            title: "Startup call not found",
+            description: "The requested startup call doesn't exist or has been removed.",
+            variant: "destructive",
+          });
+          setCall(null);
+          return;
+        } else if (error.response?.status === 403) {
+          toast({
+            title: "Access Denied",
+            description: "You don't have permission to view this startup call.",
+            variant: "destructive",
+          });
+          router.push('/startup-calls');
+          return;
+        } else {
+          toast({
+            title: "Error",
+            description: error.response?.data?.message || "Failed to fetch startup call details. Please try again.",
+            variant: "destructive",
+          });
+          router.push('/startup-calls');
+        }
       } finally {
         setLoading(false);
       }
     };
 
     fetchStartupCall();
-  }, [id, toast]);
+  }, [id, toast, router]);
 
   // No need to restrict access - anyone can view startup call details
 
@@ -170,6 +159,8 @@ export default function StartupCallDetails() {
 
   const daysLeft = getDaysLeft(call.applicationDeadline);
   const isExpired = daysLeft <= 0;
+  const isClosed = call.status === 'CLOSED';
+  const canApply = !isExpired && !isClosed;
   const hasApplied = call.applicationStatus && call.applicationStatus !== 'NOT_APPLIED';
   const isEntrepreneur = session?.user?.role === 'ENTREPRENEUR';
 
@@ -193,13 +184,16 @@ export default function StartupCallDetails() {
                 <h1 className="text-2xl font-bold tracking-tight">{call.title}</h1>
                 <p className="text-muted-foreground mt-1">
                   {call.industry} • {call.location}
+                  {isClosed && (
+                    <> • <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-800">CLOSED</span></>
+                  )}
                 </p>
               </div>
               
               <div className="flex gap-2">
                 {isEntrepreneur && (
                   <>
-                    {!isExpired && (!call.applicationStatus || call.applicationStatus === 'NOT_APPLIED') ? (
+                    {canApply && (!call.applicationStatus || call.applicationStatus === 'NOT_APPLIED') ? (
                       <Button onClick={() => router.push(`/startup-calls/${call.id}/apply`)}>
                         Apply Now <ArrowRight className="ml-1.5 h-4 w-4" />
                       </Button>
@@ -210,7 +204,7 @@ export default function StartupCallDetails() {
                     ) : null}
                   </>
                 )}
-                {!isEntrepreneur && !session && !isExpired && (
+                {!isEntrepreneur && !session && canApply && (
                   <Button onClick={() => router.push(`/auth/signin?callbackUrl=/startup-calls/${call.id}`)}>
                     Sign in to Apply
                   </Button>
@@ -246,8 +240,8 @@ export default function StartupCallDetails() {
                       <div>
                         <h4 className="font-medium">Application Deadline</h4>
                         <p className="text-sm text-muted-foreground">{formatDate(call.applicationDeadline)}</p>
-                        <p className={`text-sm font-medium ${isExpired ? 'text-red-500' : 'text-amber-500'}`}>
-                          {isExpired ? 'Applications closed' : `${daysLeft} days left`}
+                        <p className={`text-sm font-medium ${isExpired || isClosed ? 'text-red-500' : 'text-amber-500'}`}>
+                          {isClosed ? 'Call closed' : isExpired ? 'Applications closed' : `${daysLeft} days left`}
                         </p>
                       </div>
                     </div>
@@ -356,7 +350,7 @@ export default function StartupCallDetails() {
               <CardFooter className="flex justify-end pt-0">
                 {isEntrepreneur ? (
                   <>
-                    {!isExpired && (!call.applicationStatus || call.applicationStatus === 'NOT_APPLIED') ? (
+                    {canApply && (!call.applicationStatus || call.applicationStatus === 'NOT_APPLIED') ? (
                       <Button onClick={() => router.push(`/startup-calls/${call.id}/apply`)}>
                         Apply Now <ArrowRight className="ml-1.5 h-4 w-4" />
                       </Button>
@@ -365,15 +359,15 @@ export default function StartupCallDetails() {
                         View My Application
                       </Button>
                     ) : (
-                      <Button disabled>Applications Closed</Button>
+                      <Button disabled>{isClosed ? 'Call Closed' : 'Applications Closed'}</Button>
                     )}
                   </>
-                ) : !session && !isExpired ? (
+                ) : !session && canApply ? (
                   <Button onClick={() => router.push(`/auth/signin?callbackUrl=/startup-calls/${call.id}`)}>
                     Sign in to Apply
                   </Button>
-                ) : isExpired && (
-                  <Button disabled>Applications Closed</Button>
+                ) : (
+                  <Button disabled>{isClosed ? 'Call Closed' : 'Applications Closed'}</Button>
                 )}
               </CardFooter>
             </Card>

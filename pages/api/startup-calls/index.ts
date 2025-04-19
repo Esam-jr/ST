@@ -1,86 +1,134 @@
-import { NextApiRequest, NextApiResponse } from 'next';
+import type { NextApiRequest, NextApiResponse } from 'next';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '../auth/[...nextauth]';
 import prisma from '@/lib/prisma';
+
+// Define enum for application status
+enum ApplicationStatus {
+  NOT_APPLIED = 'NOT_APPLIED',
+  SUBMITTED = 'SUBMITTED',
+  UNDER_REVIEW = 'UNDER_REVIEW',
+  APPROVED = 'APPROVED',
+  REJECTED = 'REJECTED',
+  WITHDRAWN = 'WITHDRAWN'
+}
+
+// Define interface for application status mapping
+interface ApplicationStatusMap {
+  [callId: string]: string;
+}
+
+// Define interface for startup call from database
+interface StartupCall {
+  id: string;
+  title: string;
+  description: string;
+  status: string;
+  applicationDeadline: Date;
+  publishedDate: Date | null;
+  industry: string;
+  location: string;
+  fundingAmount: string | null;
+  requirements: string[];
+  eligibilityCriteria: string[];
+  selectionProcess: string[];
+  aboutSponsor: string | null;
+  applicationProcess: string;
+  createdById: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// Define interface for call with application status
+interface StartupCallWithStatus extends StartupCall {
+  applicationStatus: string;
+}
 
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
   const session = await getServerSession(req, res, authOptions);
-
-  // Check if user is authenticated
-  if (!session) {
-    return res.status(401).json({ message: 'Not authenticated' });
-  }
-
-  // GET /api/startup-calls - Get all startup calls
+  
+  // GET - Fetch startup calls
   if (req.method === 'GET') {
     try {
-      // Different handling based on user role
-      if (session.user.role === 'ADMIN') {
-        // Admins see all calls
-        const startupCalls = await prisma.startupCall.findMany({
-          orderBy: { 
-            createdAt: 'desc'
-          },
-          include: {
-            _count: {
-              select: { applications: true }
-            }
-          }
-        });
-
-        return res.status(200).json(startupCalls);
-      } else {
-        // Regular users see both published and closed calls
-        const startupCalls = await prisma.startupCall.findMany({
-          where: {
-            status: { in: ['PUBLISHED', 'CLOSED'] }
-          },
-          orderBy: { 
-            publishedDate: 'desc'
-          }
-        });
-
-        // For entrepreneurs, include their application status
-        if (session.user.role === 'ENTREPRENEUR') {
-          const callsWithApplicationStatus = await Promise.all(
-            startupCalls.map(async (call) => {
-              const application = await prisma.startupCallApplication.findFirst({
-                where: {
-                  callId: call.id,
-                  userId: session.user.id
-                }
-              });
-
-              return {
-                ...call,
-                applicationStatus: application 
-                  ? application.status
-                  : 'NOT_APPLIED'
-              };
-            })
-          );
-
-          return res.status(200).json(callsWithApplicationStatus);
+      // Define base query with filtering conditions
+      const queryConditions: any = {
+        where: {},
+        orderBy: { updatedAt: 'desc' }
+      };
+      
+      // Filter based on user role
+      if (session?.user) {
+        // Admin can see all calls
+        if (session.user.role === 'ADMIN') {
+          // No additional filters needed
+        } 
+        // Entrepreneurs can see published and closed calls
+        else if (session.user.role === 'ENTREPRENEUR') {
+          queryConditions.where = {
+            OR: [
+              { status: 'PUBLISHED' },
+              { status: 'CLOSED' }
+            ]
+          };
+        } 
+        // Other authenticated users can see published calls
+        else {
+          queryConditions.where = { status: 'PUBLISHED' };
         }
-
-        return res.status(200).json(startupCalls);
+      } 
+      // Unauthenticated users can see published and closed calls
+      else {
+        queryConditions.where = {
+          OR: [
+            { status: 'PUBLISHED' },
+            { status: 'CLOSED' }
+          ]
+        };
       }
+      
+      // Fetch startup calls from database
+      const startupCalls = await prisma.startupCall.findMany(queryConditions);
+      
+      // For entrepreneurs, include application status for each call
+      if (session?.user?.role === 'ENTREPRENEUR') {
+        // Get all applications for this user
+        const applications = await prisma.startupCallApplication.findMany({
+          where: { userId: session.user.id },
+          select: { callId: true, status: true }
+        });
+        
+        // Create a map of callId to application status
+        const applicationStatusMap = applications.reduce((map: ApplicationStatusMap, app: { callId: string, status: string }) => {
+          map[app.callId] = app.status;
+          return map;
+        }, {} as ApplicationStatusMap);
+        
+        // Add application status to each call
+        const callsWithApplicationStatus = startupCalls.map((call: any) => ({
+          ...call,
+          applicationStatus: applicationStatusMap[call.id] || ApplicationStatus.NOT_APPLIED
+        }));
+        
+        return res.status(200).json(callsWithApplicationStatus);
+      }
+      
+      return res.status(200).json(startupCalls);
     } catch (error) {
       console.error('Error fetching startup calls:', error);
       return res.status(500).json({ message: 'Error fetching startup calls' });
     }
   }
-
-  // POST /api/startup-calls - Create a new startup call
+  
+  // POST - Create a new startup call
   if (req.method === 'POST') {
-    // Only administrators can create startup calls
-    if (session.user.role !== 'ADMIN') {
-      return res.status(403).json({ message: 'Not authorized to create startup calls' });
+    // Only admin can create startup calls
+    if (!session?.user || session.user.role !== 'ADMIN') {
+      return res.status(403).json({ message: 'Unauthorized' });
     }
-
+    
     try {
       const {
         title,
@@ -96,13 +144,13 @@ export default async function handler(
         applicationProcess,
         status
       } = req.body;
-
+      
       // Basic validation
       if (!title || !description || !applicationDeadline || !industry || !location) {
         return res.status(400).json({ message: 'Missing required fields' });
       }
-
-      // Create startup call
+      
+      // Create new startup call in database
       const newStartupCall = await prisma.startupCall.create({
         data: {
           title,
@@ -118,17 +166,19 @@ export default async function handler(
           aboutSponsor,
           applicationProcess,
           status: status || 'DRAFT',
-          createdById: session.user.id
+          createdBy: {
+            connect: { id: session.user.id }
+          }
         }
       });
-
+      
       return res.status(201).json(newStartupCall);
     } catch (error) {
       console.error('Error creating startup call:', error);
       return res.status(500).json({ message: 'Error creating startup call' });
     }
   }
-
-  // Return 405 Method Not Allowed for other methods
+  
+  // For all other HTTP methods
   return res.status(405).json({ message: 'Method not allowed' });
 } 

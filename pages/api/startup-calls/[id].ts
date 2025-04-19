@@ -31,8 +31,10 @@ export default async function handler(
         return res.status(404).json({ message: 'Startup call not found' });
       }
 
-      // For non-admins, only published calls are visible
-      if (session.user.role !== 'ADMIN' && startupCall.status !== 'PUBLISHED') {
+      // For non-admins, only published and closed calls are visible
+      if (session.user.role !== 'ADMIN' && 
+          startupCall.status !== 'PUBLISHED' && 
+          startupCall.status !== 'CLOSED') {
         return res.status(403).json({ message: 'Not authorized to view this startup call' });
       }
 

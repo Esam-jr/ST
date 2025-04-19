@@ -37,6 +37,7 @@ import {
 } from 'lucide-react';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import { useToast } from '@/hooks/use-toast';
+import Link from 'next/link';
 // Define types
 type CallStatus = 'DRAFT' | 'PUBLISHED' | 'CLOSED' | 'ARCHIVED';
 type ApplicationStatus = 'NOT_APPLIED' | 'SUBMITTED' | 'UNDER_REVIEW' | 'APPROVED' | 'REJECTED' | 'WITHDRAWN';
@@ -90,15 +91,6 @@ export default function StartupCalls() {
 
     fetchStartupCalls();
   }, [toast]);
-
-  // Redirect if not authenticated or not an entrepreneur
-  useEffect(() => {
-    if (status === 'unauthenticated') {
-      router.push('/auth/signin?callbackUrl=/startup-calls');
-    } else if (status === 'authenticated' && session?.user?.role !== 'ENTREPRENEUR') {
-      router.push('/dashboard');
-    }
-  }, [status, session, router]);
 
   // Filter and sort functions
   const filteredCalls = startupCalls.filter(call => {
@@ -172,19 +164,26 @@ export default function StartupCalls() {
     );
   }
 
-  if (status === 'authenticated' && session?.user?.role !== 'ENTREPRENEUR') {
-    return null; // Will redirect in useEffect
-  }
-
   return (
     <Layout title="Startup Calls | Find Opportunities">
       <div className="min-h-screen">
         <header className="bg-card/80 backdrop-blur-sm shadow">
           <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-            <h1 className="text-2xl font-bold tracking-tight">Startup Calls</h1>
-            <p className="text-muted-foreground mt-2">
-              Browse and apply for startup funding and support opportunities
-            </p>
+            <div className="flex justify-between items-center">
+              <div>
+                <h1 className="text-2xl font-bold tracking-tight">Startup Calls</h1>
+                <p className="text-muted-foreground mt-2">
+                  Browse and apply for startup funding and support opportunities
+                </p>
+              </div>
+              {!session && (
+                <Button asChild>
+                  <Link href="/auth/signin?callbackUrl=/startup-calls">
+                    Sign in to apply
+                  </Link>
+                </Button>
+              )}
+            </div>
           </div>
         </header>
 

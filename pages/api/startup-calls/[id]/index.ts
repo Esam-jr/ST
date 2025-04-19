@@ -1,115 +1,14 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-// import prisma from '@/lib/prisma';
-// import { getServerSession } from 'next-auth/next';
-// import { authOptions } from '../../auth/[...nextauth]';
-
-// Mock data for startup calls
-const mockCalls = [
-  {
-    id: '1',
-    title: 'Green Technology Innovation Fund',
-    description: 'Funding for startups working on sustainable technologies and renewable energy solutions.',
-    status: 'PUBLISHED',
-    applicationDeadline: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-    publishedDate: new Date().toISOString(),
-    industry: 'CleanTech',
-    location: 'Global',
-    fundingAmount: 'Up to $500,000',
-    requirements: ['Early Stage', 'Sustainability Focus', 'Innovative Technology'],
-    eligibilityCriteria: [
-      'Startups must be legally registered entities',
-      'Founding team must have at least 2 members',
-      'Must have a working prototype or MVP',
-      'Product or service must address environmental sustainability'
-    ],
-    selectionProcess: [
-      'Initial application screening',
-      'Technical assessment of product/solution',
-      'Panel interview with industry experts'
-    ],
-    aboutSponsor: 'GreenTech Ventures is dedicated to supporting sustainable innovation worldwide.',
-    applicationProcess: 'Apply through our online portal by the deadline. Selected startups will be notified within 2 weeks.'
-  },
-  {
-    id: '2',
-    title: 'HealthTech Accelerator Program',
-    description: 'Supporting innovative healthcare startups with funding and mentorship.',
-    status: 'PUBLISHED',
-    applicationDeadline: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString(),
-    publishedDate: new Date().toISOString(),
-    industry: 'Healthcare',
-    location: 'Europe',
-    fundingAmount: 'Up to $250,000',
-    requirements: ['Seed Stage', 'Healthcare Innovation', 'Technical Team'],
-    eligibilityCriteria: [
-      'Must be focused on healthcare technology',
-      'Team with healthcare and technical experience',
-      'Incorporated in a European country'
-    ],
-    selectionProcess: [
-      'Application review',
-      'Pitch to investment committee',
-      'Due diligence'
-    ],
-    aboutSponsor: 'MedInvest is a leading healthcare investment fund in Europe.',
-    applicationProcess: 'Submit your application with pitch deck and team profiles.'
-  },
-  {
-    id: '3',
-    title: 'AI & Machine Learning Venture Fund',
-    description: 'Investment fund for startups leveraging artificial intelligence and machine learning technologies.',
-    status: 'PUBLISHED',
-    applicationDeadline: new Date(Date.now() + 45 * 24 * 60 * 60 * 1000).toISOString(),
-    publishedDate: new Date().toISOString(),
-    industry: 'Artificial Intelligence',
-    location: 'Global',
-    fundingAmount: 'Up to $1,000,000',
-    requirements: ['AI/ML Focus', 'Proven Technology', 'Growth Stage'],
-    eligibilityCriteria: [
-      'Product must utilize AI/ML technologies',
-      'Minimum viable product with active users',
-      'Clear business model and growth metrics'
-    ],
-    selectionProcess: [
-      'Application review',
-      'Technical assessment',
-      'Business model evaluation',
-      'Final pitch'
-    ],
-    aboutSponsor: 'TechFund AI specializes in AI and ML investments globally.',
-    applicationProcess: 'Submit detailed application with technical documentation.'
-  },
-  {
-    id: '4',
-    title: 'EdTech Innovation Challenge',
-    description: 'Funding and support for startups transforming education through technology.',
-    status: 'PUBLISHED',
-    applicationDeadline: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString(),
-    publishedDate: new Date().toISOString(),
-    industry: 'Education Technology',
-    location: 'North America',
-    fundingAmount: 'Up to $300,000',
-    requirements: ['Education Focus', 'Technology Solution', 'Early Traction'],
-    eligibilityCriteria: [
-      'Technology solution for education sector',
-      'Based in North America',
-      'Minimum 3 months of operation with pilot users'
-    ],
-    selectionProcess: [
-      'Initial screening',
-      'Product demo',
-      'Interview with education experts'
-    ],
-    aboutSponsor: 'EduInnovate Foundation supports technology transformation in education.',
-    applicationProcess: 'Apply with a 5-minute video demo and business plan.'
-  }
-];
+import prisma from '@/lib/prisma';
+import { getServerSession } from 'next-auth/next';
+import { authOptions } from '../../auth/[...nextauth]';
 
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
   const { id } = req.query;
+  const session = await getServerSession(req, res, authOptions);
 
   // Check if id is valid
   if (!id || typeof id !== 'string') {
@@ -119,11 +18,34 @@ export default async function handler(
   // GET /api/startup-calls/:id - Get a specific startup call
   if (req.method === 'GET') {
     try {
-      // Find the startup call in our mock data
-      const startupCall = mockCalls.find(call => call.id === id);
+      const startupCall = await prisma.startupCall.findUnique({
+        where: { id }
+      });
 
       if (!startupCall) {
         return res.status(404).json({ message: 'Startup call not found' });
+      }
+
+      // For non-authenticated users or non-admins, only published and closed calls are visible
+      if ((!session || session.user.role !== 'ADMIN') && 
+          startupCall.status !== 'PUBLISHED' && 
+          startupCall.status !== 'CLOSED') {
+        return res.status(403).json({ message: 'Not authorized to view this startup call' });
+      }
+
+      // For entrepreneurs, include application status
+      if (session?.user?.role === 'ENTREPRENEUR') {
+        const application = await prisma.startupCallApplication.findFirst({
+          where: {
+            callId: id,
+            userId: session.user.id
+          }
+        });
+
+        return res.status(200).json({
+          ...startupCall,
+          applicationStatus: application ? application.status : 'NOT_APPLIED'
+        });
       }
 
       // Return the startup call
@@ -131,6 +53,115 @@ export default async function handler(
     } catch (error) {
       console.error('Error fetching startup call:', error);
       return res.status(500).json({ message: 'Error fetching startup call' });
+    }
+  }
+
+  // PUT /api/startup-calls/:id - Update a startup call
+  if (req.method === 'PUT') {
+    // Only administrators can update startup calls
+    if (!session || session.user.role !== 'ADMIN') {
+      return res.status(403).json({ message: 'Not authorized to update startup calls' });
+    }
+
+    try {
+      const {
+        title,
+        description,
+        applicationDeadline,
+        industry,
+        location,
+        fundingAmount,
+        requirements,
+        eligibilityCriteria,
+        selectionProcess,
+        aboutSponsor,
+        applicationProcess,
+        status
+      } = req.body;
+
+      // Basic validation
+      if (!title || !description || !applicationDeadline || !industry || !location) {
+        return res.status(400).json({ message: 'Missing required fields' });
+      }
+
+      // Check if the call exists
+      const existingCall = await prisma.startupCall.findUnique({
+        where: { id }
+      });
+
+      if (!existingCall) {
+        return res.status(404).json({ message: 'Startup call not found' });
+      }
+
+      // Update publishedDate if status is changing to PUBLISHED
+      const wasPublished = existingCall.status === 'PUBLISHED';
+      const isBeingPublished = status === 'PUBLISHED' && !wasPublished;
+      
+      // Update startup call
+      const updatedStartupCall = await prisma.startupCall.update({
+        where: { id },
+        data: {
+          title,
+          description,
+          applicationDeadline: new Date(applicationDeadline),
+          publishedDate: isBeingPublished ? new Date() : existingCall.publishedDate,
+          industry,
+          location,
+          fundingAmount,
+          requirements: requirements || [],
+          eligibilityCriteria: eligibilityCriteria || [],
+          selectionProcess: selectionProcess || [],
+          aboutSponsor,
+          applicationProcess,
+          status: status || existingCall.status
+        }
+      });
+
+      return res.status(200).json(updatedStartupCall);
+    } catch (error) {
+      console.error('Error updating startup call:', error);
+      return res.status(500).json({ message: 'Error updating startup call' });
+    }
+  }
+
+  // DELETE /api/startup-calls/:id - Delete a startup call
+  if (req.method === 'DELETE') {
+    // Only administrators can delete startup calls
+    if (!session || session.user.role !== 'ADMIN') {
+      return res.status(403).json({ message: 'Not authorized to delete startup calls' });
+    }
+
+    try {
+      // Check if the call exists
+      const existingCall = await prisma.startupCall.findUnique({
+        where: { id },
+        include: {
+          _count: {
+            select: { applications: true }
+          }
+        }
+      });
+
+      if (!existingCall) {
+        return res.status(404).json({ message: 'Startup call not found' });
+      }
+
+      // If there are applications, don't allow deletion
+      if (existingCall._count.applications > 0) {
+        return res.status(400).json({ 
+          message: 'Cannot delete startup call with existing applications. Archive it instead.' 
+        });
+      }
+
+      // Delete the startup call
+      await prisma.startupCall.delete({
+        where: { id }
+      });
+
+      return res.status(200).json({ message: 'Startup call deleted successfully' });
+    } catch (error) {
+      console.error('Error deleting startup call:', error);
+      return res.status(500).json({ message: 'Error deleting startup call' });
     }
   }
 
