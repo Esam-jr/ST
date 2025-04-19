@@ -167,7 +167,37 @@ export default function SignIn() {
               <div className="mt-6 grid grid-cols-2 gap-3">
                 <Button
                   variant="outline"
-                  onClick={() => signIn('google', { callbackUrl: (callbackUrl as string) || '/dashboard' })}
+                  onClick={() => {
+                    setIsLoading(true);
+                    signIn('google', { redirect: false })
+                      .then(async (result) => {
+                        if (!result?.error) {
+                          // Wait a moment for the session to be updated
+                          setTimeout(async () => {
+                            const session = await getSession();
+                            const role = session?.user?.role;
+                            
+                            if (role === 'ADMIN') {
+                              router.push('/admin');
+                            } else if (role === 'SPONSER') {
+                              router.push('/sponsor-dashbored');
+                            } else if (role === 'ENTREPRENEUR') {
+                              router.push('/startup-calls');
+                            } else {
+                              router.push('/');
+                            }
+                          }, 500);
+                        } else {
+                          setError(`Authentication error: ${result.error}`);
+                          setIsLoading(false);
+                        }
+                      })
+                      .catch((err) => {
+                        console.error('Google sign-in error:', err);
+                        setError('An error occurred during Google sign in');
+                        setIsLoading(false);
+                      });
+                  }}
                   type="button"
                 >
                   <svg className="h-4 w-4 mr-2" viewBox="0 0 24 24">
@@ -181,7 +211,37 @@ export default function SignIn() {
 
                 <Button
                   variant="outline"
-                  onClick={() => signIn('github', { callbackUrl: (callbackUrl as string) || '/dashboard' })}
+                  onClick={() => {
+                    setIsLoading(true);
+                    signIn('github', { redirect: false })
+                      .then(async (result) => {
+                        if (!result?.error) {
+                          // Wait a moment for the session to be updated
+                          setTimeout(async () => {
+                            const session = await getSession();
+                            const role = session?.user?.role;
+                            
+                            if (role === 'ADMIN') {
+                              router.push('/admin');
+                            } else if (role === 'SPONSER') {
+                              router.push('/sponsor-dashbored');
+                            } else if (role === 'ENTREPRENEUR') {
+                              router.push('/startup-calls');
+                            } else {
+                              router.push('/');
+                            }
+                          }, 500);
+                        } else {
+                          setError(`Authentication error: ${result.error}`);
+                          setIsLoading(false);
+                        }
+                      })
+                      .catch((err) => {
+                        console.error('GitHub sign-in error:', err);
+                        setError('An error occurred during GitHub sign in');
+                        setIsLoading(false);
+                      });
+                  }}
                   type="button"
                 >
                   <svg className="h-4 w-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
