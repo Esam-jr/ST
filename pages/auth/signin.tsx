@@ -46,8 +46,8 @@ export default function SignIn() {
   
         if (role === 'ADMIN') {
           router.push('/admin');
-        } else if (role === 'SPONSER') {
-          router.push('/sponsor-dashbored');
+        } else if (role === 'SPONSOR') {
+          router.push('/sponsor-dashboard');
         } else if (role === 'ENTREPRENEUR') {
           router.push('/startup-calls');
         } else {
@@ -179,8 +179,8 @@ export default function SignIn() {
                             
                             if (role === 'ADMIN') {
                               router.push('/admin');
-                            } else if (role === 'SPONSER') {
-                              router.push('/sponsor-dashbored');
+                            } else if (role === 'SPONSOR') {
+                              router.push('/sponsor-dashboard');
                             } else if (role === 'ENTREPRENEUR') {
                               router.push('/startup-calls');
                             } else {
@@ -223,8 +223,8 @@ export default function SignIn() {
                             
                             if (role === 'ADMIN') {
                               router.push('/admin');
-                            } else if (role === 'SPONSER') {
-                              router.push('/sponsor-dashbored');
+                            } else if (role === 'SPONSOR') {
+                              router.push('/sponsor-dashboard');
                             } else if (role === 'ENTREPRENEUR') {
                               router.push('/startup-calls');
                             } else {

@@ -4,7 +4,7 @@ import { PrismaAdapter } from '@next-auth/prisma-adapter';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import GoogleProvider from 'next-auth/providers/google';
 import GitHubProvider from 'next-auth/providers/github';
-import { prisma } from '../../../lib/prisma';
+import prisma from '../../../lib/prisma';
 import { compare } from 'bcrypt';
 import { Role, Prisma } from '@prisma/client';
 import { AdapterUser } from 'next-auth/adapters';
@@ -269,7 +269,14 @@ export const authOptions: NextAuthOptions = {
           }
         } catch (error) {
           console.error("Error fetching user role for JWT:", error);
+          // Ensure we still have a default role if there's an error
+          if (!token.role) {
+            token.role = 'ENTREPRENEUR';
+          }
         }
+      } else if (!token.role) {
+        // Default role if no email is present
+        token.role = 'ENTREPRENEUR';
       }
 
       return token;

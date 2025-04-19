@@ -34,6 +34,8 @@ model User {
   meetings      Meeting[]
   tasks         Task[]          @relation("AssigneeToTask")
   createdTasks  Task[]          @relation("CreatorToTask")
+  startupCalls  StartupCall[]
+  callApplications StartupCallApplication[]
 }
 
 model Account {
@@ -106,6 +108,7 @@ model Startup {
   meetings        Meeting[]
   financials      Financial[]
   comments        Comment[]
+  callApplications StartupCallApplication[]
 }
 
 // Status enum for startup progress
@@ -262,6 +265,83 @@ model Comment {
   user            User      @relation(fields: [userId], references: [id])
   parent          Comment?  @relation("CommentToReply", fields: [parentId], references: [id])
   replies         Comment[] @relation("CommentToReply")
+}
+
+// StartupCall model for funding and support opportunities
+model StartupCall {
+  id                  String              @id @default(cuid())
+  title               String
+  description         String              @db.Text
+  status              StartupCallStatus   @default(DRAFT)
+  applicationDeadline DateTime
+  publishedDate       DateTime?
+  industry            String
+  location            String
+  fundingAmount       String?
+  requirements        String[]
+  eligibilityCriteria String[]
+  selectionProcess    String[]
+  aboutSponsor        String?
+  applicationProcess  String
+  createdById         String
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+
+  // Relations
+  createdBy           User                @relation(fields: [createdById], references: [id])
+  applications        StartupCallApplication[]
+}
+
+// Status enum for startup calls
+enum StartupCallStatus {
+  DRAFT
+  PUBLISHED
+  CLOSED
+  ARCHIVED
+}
+
+// Application model for startup calls
+model StartupCallApplication {
+  id                String                      @id @default(cuid())
+  callId            String
+  startupId         String?
+  userId            String
+  startupName       String
+  website           String?
+  foundingDate      DateTime
+  teamSize          String
+  industry          String
+  stage             String
+  description       String                      @db.Text
+  problem           String                      @db.Text
+  solution          String                      @db.Text
+  traction          String?                     @db.Text
+  businessModel     String                      @db.Text
+  funding           String?                     @db.Text
+  useOfFunds        String                      @db.Text
+  competitiveAdvantage String                   @db.Text
+  founderBio        String                      @db.Text
+  pitchDeckUrl      String?
+  financialsUrl     String?
+  status            StartupCallApplicationStatus @default(SUBMITTED)
+  reviewsCompleted  Int                         @default(0)
+  reviewsTotal      Int                         @default(3)
+  submittedAt       DateTime                    @default(now())
+  updatedAt         DateTime                    @updatedAt
+
+  // Relations
+  call              StartupCall                @relation(fields: [callId], references: [id])
+  startup           Startup?                   @relation(fields: [startupId], references: [id])
+  user              User                       @relation(fields: [userId], references: [id])
+}
+
+// Status enum for startup call applications
+enum StartupCallApplicationStatus {
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  WITHDRAWN
 }
 
 // Notification model for alerts

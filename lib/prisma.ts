@@ -4,33 +4,24 @@ import { PrismaClient } from '@prisma/client';
 // exhausting your database connection limit.
 // Learn more: https://pris.ly/d/help/next-js-best-practices
 
-// Add specific options to avoid the prepared statement issue
-const prismaClientSingleton = () => {
-  return new PrismaClient({
-    log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
-    // Add data proxy options to fix PostgreSQL prepared statement errors
-    datasources: {
-      db: {
-        url: process.env.DATABASE_URL,
-      },
-    },
-  });
-};
+// Add prisma to the NodeJS global type
+interface CustomNodeJsGlobal {
+  prisma: PrismaClient;
+}
 
-type PrismaClientSingleton = ReturnType<typeof prismaClientSingleton>;
+// Prevent multiple instances of Prisma Client in development
+declare const global: CustomNodeJsGlobal;
 
-const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClientSingleton | undefined;
-};
+const prisma = global.prisma || new PrismaClient();
 
-export const prisma = globalForPrisma.prisma ?? prismaClientSingleton();
+if (process.env.NODE_ENV === 'development') global.prisma = prisma;
 
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
+export default prisma;
 
 // Disconnect Prisma Client during Next.js Fast Refresh
 if (process.env.NODE_ENV === 'development')
-  if ((globalForPrisma as any)._preventConnectionLeaks !== true) {
-    (globalForPrisma as any)._preventConnectionLeaks = true;
+  if ((global as any)._preventConnectionLeaks !== true) {
+    (global as any)._preventConnectionLeaks = true;
     
     // During development, ensure we clean up any lingering connections
     const originalBeforeExit = process.listeners('beforeExit')[0];

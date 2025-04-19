@@ -35,19 +35,43 @@ const TabsTrigger = React.forwardRef<
 ))
 TabsTrigger.displayName = TabsPrimitive.Trigger.displayName
 
+// Create a context to check if TabsContent is within Tabs
+const TabsContext = React.createContext<boolean>(false)
+
+// Update the Tabs component to provide context
+const SafeTabs = React.forwardRef<
+  React.ElementRef<typeof TabsPrimitive.Root>,
+  React.ComponentPropsWithoutRef<typeof TabsPrimitive.Root>
+>((props, ref) => (
+  <TabsContext.Provider value={true}>
+    <TabsPrimitive.Root {...props} ref={ref} />
+  </TabsContext.Provider>
+))
+SafeTabs.displayName = TabsPrimitive.Root.displayName
+
 const TabsContent = React.forwardRef<
   React.ElementRef<typeof TabsPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof TabsPrimitive.Content>
->(({ className, ...props }, ref) => (
-  <TabsPrimitive.Content
-    ref={ref}
-    className={cn(
-      "mt-2 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-      className
-    )}
-    {...props}
-  />
-))
+>(({ className, ...props }, ref) => {
+  const isWithinTabs = React.useContext(TabsContext)
+  
+  // If not within Tabs context, return a div instead
+  if (!isWithinTabs) {
+    console.warn('TabsContent must be used within Tabs component. Rendering as a div instead.')
+    return <div className={className} {...props} ref={ref as React.RefObject<HTMLDivElement>} />
+  }
+  
+  return (
+    <TabsPrimitive.Content
+      ref={ref}
+      className={cn(
+        "mt-2 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+        className
+      )}
+      {...props}
+    />
+  )
+})
 TabsContent.displayName = TabsPrimitive.Content.displayName
 
-export { Tabs, TabsList, TabsTrigger, TabsContent }
+export { SafeTabs as Tabs, TabsList, TabsTrigger, TabsContent }
