@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { useSession } from 'next-auth/react';
+import axios from 'axios';
 import Layout from '@/components/layout/Layout';
 import {
   Card,
@@ -24,18 +25,19 @@ import {
   CheckCircle,
 } from 'lucide-react';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
+import { useToast } from '@/hooks/use-toast';
 
 // Define types
-type CallStatus = 'draft' | 'published' | 'closed' | 'archived';
-type ApplicationStatus = 'not_applied' | 'applied' | 'under_review' | 'approved' | 'rejected';
+type CallStatus = 'DRAFT' | 'PUBLISHED' | 'CLOSED' | 'ARCHIVED';
+type ApplicationStatus = 'NOT_APPLIED' | 'SUBMITTED' | 'UNDER_REVIEW' | 'APPROVED' | 'REJECTED' | 'WITHDRAWN';
 
 interface StartupCall {
   id: string;
   title: string;
   description: string;
   status: CallStatus;
-  applicationDeadline: Date;
-  publishedDate: Date;
+  applicationDeadline: string;
+  publishedDate: string;
   industry: string;
   location: string;
   fundingAmount?: string;
@@ -43,7 +45,7 @@ interface StartupCall {
   applicationStatus?: ApplicationStatus;
   eligibilityCriteria: string[];
   selectionProcess: string[];
-  aboutSponsor: string;
+  aboutSponsor?: string;
   applicationProcess: string;
 }
 
@@ -53,77 +55,95 @@ export default function StartupCallDetails() {
   const { data: session, status } = useSession();
   const [loading, setLoading] = useState(true);
   const [call, setCall] = useState<StartupCall | null>(null);
+  const { toast } = useToast();
 
-  // Mock data fetching - In a real app, this would be an API call
+  // Fetch the startup call data from the API
   useEffect(() => {
     if (!id) return;
-
-    // Simulate API call delay
-    const timer = setTimeout(() => {
-      // This would be replaced with a real API call in production
-      const mockCall: StartupCall = {
-        id: 'call-001',
-        title: 'Tech Innovation Challenge 2023',
-        description: 'We are seeking innovative technology startups that have developed solutions addressing environmental sustainability. Selected startups will receive funding, mentorship, and access to our network of industry experts. The program runs for 6 months and includes regular check-ins with mentors, workshops, and networking events.',
-        status: 'published',
-        applicationDeadline: new Date(2023, 6, 30),
-        publishedDate: new Date(2023, 4, 15),
-        industry: 'Technology',
-        location: 'Global',
-        fundingAmount: '$50,000 - $100,000',
-        requirements: ['MVP ready', 'Less than 3 years old', 'Sustainability focus'],
-        applicationStatus: 'not_applied',
-        eligibilityCriteria: [
-          'Startups must be legally registered entities',
-          'Founding team must have at least 2 members',
-          'Must have a working prototype or MVP',
-          'Product or service must address environmental sustainability',
-          'No more than 3 years since incorporation',
-          'Must be able to demonstrate some market validation'
-        ],
-        selectionProcess: [
-          'Initial application screening',
-          'Technical assessment of product/solution',
-          'Panel interview with industry experts',
-          'Final selection by investment committee'
-        ],
-        aboutSponsor: 'This program is sponsored by GreenTech Ventures, a leading venture capital firm specializing in sustainable technology investments. Since 2015, GreenTech Ventures has invested in over 50 startups across the globe, with a focus on solutions that address climate change, resource efficiency, and environmental protection.',
-        applicationProcess: 'Applications open until July 30, 2023. Shortlisted startups will be contacted within 2 weeks of the deadline. The selected cohort will be announced by August 31, 2023, with the program starting in September 2023.'
-      };
-      
-      setCall(mockCall);
-      setLoading(false);
-    }, 1000);
     
-    return () => clearTimeout(timer);
-  }, [id]);
+    const fetchStartupCall = async () => {
+      try {
+        setLoading(true);
+        const response = await axios.get(`/api/startup-calls/${id}`);
+        
+        if (!response.data) {
+          toast({
+            title: "Startup call not found",
+            description: "The requested startup call couldn't be found.",
+            variant: "destructive",
+          });
+          setCall(null);
+          return;
+        }
+        
+        setCall(response.data);
+      } catch (error: any) {
+        console.error('Error fetching startup call:', error);
+        toast({
+          title: "Error",
+          description: error.response?.data?.message || "Failed to fetch startup call details",
+          variant: "destructive",
+        });
+        
+        // For demo purposes, set mock data if the API fails
+        // In a real app, you might want to redirect or show an error page
+        const mockCall: StartupCall = {
+          id: id as string,
+          title: 'Green Technology Innovation Fund',
+          description: 'We are seeking innovative technology startups that have developed solutions addressing environmental sustainability. Selected startups will receive funding, mentorship, and access to our network of industry experts.',
+          status: 'PUBLISHED',
+          applicationDeadline: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+          publishedDate: new Date().toISOString(),
+          industry: 'Technology',
+          location: 'Global',
+          fundingAmount: '$50,000 - $100,000',
+          requirements: ['MVP ready', 'Less than 3 years old', 'Sustainability focus'],
+          applicationStatus: 'NOT_APPLIED',
+          eligibilityCriteria: [
+            'Startups must be legally registered entities',
+            'Founding team must have at least 2 members',
+            'Must have a working prototype or MVP',
+            'Product or service must address environmental sustainability'
+          ],
+          selectionProcess: [
+            'Initial application screening',
+            'Technical assessment of product/solution',
+            'Panel interview with industry experts',
+            'Final selection by investment committee'
+          ],
+          aboutSponsor: 'This program is sponsored by GreenTech Ventures, a leading venture capital firm specializing in sustainable technology investments.',
+          applicationProcess: 'Applications open until deadline. Shortlisted startups will be contacted within 2 weeks.'
+        };
+        
+        setCall(mockCall);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  // Redirect if not authenticated or not an entrepreneur
-  useEffect(() => {
-    if (status === 'unauthenticated') {
-      router.push(`/auth/signin?callbackUrl=/startup-calls/${id}`);
-    } else if (status === 'authenticated' && session?.user?.role !== 'ENTREPRENEUR') {
-      router.push('/dashboard');
-    }
-  }, [status, session, router, id]);
+    fetchStartupCall();
+  }, [id, toast]);
+
+  // No need to restrict access - anyone can view startup call details
 
   // Helper functions
-  const formatDate = (date: Date) => {
-    return date.toLocaleDateString('en-US', {
+  const formatDate = (date: string) => {
+    return new Date(date).toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'short',
       day: 'numeric'
     });
   };
 
-  const getDaysLeft = (deadline: Date) => {
+  const getDaysLeft = (deadline: string) => {
     const today = new Date();
-    const diffTime = deadline.getTime() - today.getTime();
+    const deadlineDate = new Date(deadline);
+    const diffTime = deadlineDate.getTime() - today.getTime();
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     return diffDays;
   };
 
-  if (status === 'loading' || loading) {
+  if (loading) {
     return (
       <Layout title="Startup Call Details | Loading">
         <div className="flex h-screen items-center justify-center">
@@ -150,7 +170,8 @@ export default function StartupCallDetails() {
 
   const daysLeft = getDaysLeft(call.applicationDeadline);
   const isExpired = daysLeft <= 0;
-  const hasApplied = call.applicationStatus !== 'not_applied';
+  const hasApplied = call.applicationStatus && call.applicationStatus !== 'NOT_APPLIED';
+  const isEntrepreneur = session?.user?.role === 'ENTREPRENEUR';
 
   return (
     <Layout title={`${call.title} | Startup Call Details`}>
@@ -176,15 +197,24 @@ export default function StartupCallDetails() {
               </div>
               
               <div className="flex gap-2">
-                {!isExpired && call.applicationStatus === 'not_applied' ? (
-                  <Button onClick={() => router.push(`/startup-calls/${call.id}/apply`)}>
-                    Apply Now <ArrowRight className="ml-1.5 h-4 w-4" />
+                {isEntrepreneur && (
+                  <>
+                    {!isExpired && (!call.applicationStatus || call.applicationStatus === 'NOT_APPLIED') ? (
+                      <Button onClick={() => router.push(`/startup-calls/${call.id}/apply`)}>
+                        Apply Now <ArrowRight className="ml-1.5 h-4 w-4" />
+                      </Button>
+                    ) : hasApplied ? (
+                      <Button onClick={() => router.push(`/applications/${call.id}`)}>
+                        View My Application
+                      </Button>
+                    ) : null}
+                  </>
+                )}
+                {!isEntrepreneur && !session && !isExpired && (
+                  <Button onClick={() => router.push(`/auth/signin?callbackUrl=/startup-calls/${call.id}`)}>
+                    Sign in to Apply
                   </Button>
-                ) : hasApplied ? (
-                  <Button onClick={() => router.push(`/applications/${call.id}`)}>
-                    View My Application
-                  </Button>
-                ) : null}
+                )}
               </div>
             </div>
           </div>
@@ -248,17 +278,19 @@ export default function StartupCallDetails() {
                       </div>
                     )}
                     
-                    <div className="flex items-start">
-                      <FileText className="mr-3 mt-0.5 h-5 w-5 text-muted-foreground" />
-                      <div>
-                        <h4 className="font-medium">Application Status</h4>
-                        <p className="text-sm text-muted-foreground">
-                          {call.applicationStatus === 'not_applied' 
-                            ? 'You have not applied yet' 
-                            : `Your application is ${call.applicationStatus.replace('_', ' ')}`}
-                        </p>
+                    {session && isEntrepreneur && call.applicationStatus && (
+                      <div className="flex items-start">
+                        <FileText className="mr-3 mt-0.5 h-5 w-5 text-muted-foreground" />
+                        <div>
+                          <h4 className="font-medium">Application Status</h4>
+                          <p className="text-sm text-muted-foreground">
+                            {call.applicationStatus === 'NOT_APPLIED' 
+                              ? 'You have not applied yet' 
+                              : `Your application is ${call.applicationStatus?.replace('_', ' ').toLowerCase() || ''}`}
+                          </p>
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </div>
                 </div>
               </CardContent>
@@ -302,14 +334,16 @@ export default function StartupCallDetails() {
             </Card>
             
             {/* About Sponsor */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-xl">About the Sponsor</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-muted-foreground">{call.aboutSponsor}</p>
-              </CardContent>
-            </Card>
+            {call.aboutSponsor && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-xl">About the Sponsor</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-muted-foreground">{call.aboutSponsor}</p>
+                </CardContent>
+              </Card>
+            )}
             
             {/* Application Process */}
             <Card>
@@ -320,15 +354,25 @@ export default function StartupCallDetails() {
                 <p className="text-muted-foreground">{call.applicationProcess}</p>
               </CardContent>
               <CardFooter className="flex justify-end pt-0">
-                {!isExpired && call.applicationStatus === 'not_applied' ? (
-                  <Button onClick={() => router.push(`/startup-calls/${call.id}/apply`)}>
-                    Apply Now <ArrowRight className="ml-1.5 h-4 w-4" />
+                {isEntrepreneur ? (
+                  <>
+                    {!isExpired && (!call.applicationStatus || call.applicationStatus === 'NOT_APPLIED') ? (
+                      <Button onClick={() => router.push(`/startup-calls/${call.id}/apply`)}>
+                        Apply Now <ArrowRight className="ml-1.5 h-4 w-4" />
+                      </Button>
+                    ) : hasApplied ? (
+                      <Button onClick={() => router.push(`/applications/${call.id}`)}>
+                        View My Application
+                      </Button>
+                    ) : (
+                      <Button disabled>Applications Closed</Button>
+                    )}
+                  </>
+                ) : !session && !isExpired ? (
+                  <Button onClick={() => router.push(`/auth/signin?callbackUrl=/startup-calls/${call.id}`)}>
+                    Sign in to Apply
                   </Button>
-                ) : hasApplied ? (
-                  <Button onClick={() => router.push(`/applications/${call.id}`)}>
-                    View My Application
-                  </Button>
-                ) : (
+                ) : isExpired && (
                   <Button disabled>Applications Closed</Button>
                 )}
               </CardFooter>
