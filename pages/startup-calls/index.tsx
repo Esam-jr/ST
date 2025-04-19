@@ -107,7 +107,6 @@ export default function StartupCalls() {
     const matchesIndustry = industryFilter === 'all' || call.industry === industryFilter;
     const matchesStatus = 
       (activeTab === 'open' && call.status === 'PUBLISHED') || 
-      (activeTab === 'applications' && call.applicationStatus && call.applicationStatus !== 'NOT_APPLIED') ||
       (activeTab === 'closed' && call.status === 'CLOSED');
     
     return matchesQuery && matchesIndustry && matchesStatus;
@@ -231,7 +230,6 @@ export default function StartupCalls() {
             <Tabs defaultValue="open" value={activeTab} onValueChange={setActiveTab}>
               <TabsList className="bg-muted/50 backdrop-blur-sm">
                 <TabsTrigger value="open">Open Calls</TabsTrigger>
-                <TabsTrigger value="applications">My Applications</TabsTrigger>
                 <TabsTrigger value="closed">Closed Calls</TabsTrigger>
               </TabsList>
               
@@ -258,30 +256,6 @@ export default function StartupCalls() {
                 )}
               </TabsContent>
               
-              <TabsContent value="applications" className="mt-6 space-y-6">
-                {sortedCalls.length === 0 ? (
-                  <div className="rounded-lg border border-dashed p-8 text-center">
-                    <h3 className="mb-2 text-lg font-medium">No applications yet</h3>
-                    <p className="text-muted-foreground">
-                      You haven't applied to any startup calls. Browse open calls to get started.
-                    </p>
-                  </div>
-                ) : (
-                  sortedCalls.map((call) => (
-                    <CallCard 
-                      key={call.id} 
-                      call={call} 
-                      onViewDetails={() => router.push(`/startup-calls/${call.id}`)}
-                      onViewApplication={() => router.push(`/applications/${call.id}`)}
-                      showApplicationStatus
-                      formatDate={formatDate}
-                      getDaysLeft={getDaysLeft}
-                      getStatusBadge={getStatusBadge}
-                    />
-                  ))
-                )}
-              </TabsContent>
-              
               <TabsContent value="closed" className="mt-6 space-y-6">
                 {sortedCalls.length === 0 ? (
                   <div className="rounded-lg border border-dashed p-8 text-center">
@@ -296,8 +270,8 @@ export default function StartupCalls() {
                       key={call.id} 
                       call={call} 
                       onViewDetails={() => router.push(`/startup-calls/${call.id}`)}
-                      showApplicationStatus={call.applicationStatus !== 'NOT_APPLIED'}
-                      onViewApplication={call.applicationStatus !== 'NOT_APPLIED' 
+                      showApplicationStatus={call.applicationStatus && call.applicationStatus !== 'NOT_APPLIED'}
+                      onViewApplication={call.applicationStatus && call.applicationStatus !== 'NOT_APPLIED' 
                         ? () => router.push(`/applications/${call.id}`)
                         : undefined
                       }
@@ -345,7 +319,12 @@ function CallCard({
       <CardHeader>
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
-            <CardTitle className="text-xl">{call.title}</CardTitle>
+            <div className="flex items-center gap-2">
+              <CardTitle className="text-xl">{call.title}</CardTitle>
+              {call.status === 'CLOSED' && (
+                <Badge variant="secondary" className="bg-gray-200 text-gray-700">CLOSED</Badge>
+              )}
+            </div>
             <CardDescription className="mt-1 max-w-3xl">
               {call.industry} • {call.location}
               {call.fundingAmount && ` • Funding: ${call.fundingAmount}`}

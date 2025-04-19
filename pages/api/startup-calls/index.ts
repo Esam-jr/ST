@@ -33,13 +33,10 @@ export default async function handler(
 
         return res.status(200).json(startupCalls);
       } else {
-        // Regular users only see published calls
+        // Regular users see both published and closed calls
         const startupCalls = await prisma.startupCall.findMany({
           where: {
-            status: 'PUBLISHED',
-            applicationDeadline: {
-              gte: new Date()
-            }
+            status: { in: ['PUBLISHED', 'CLOSED'] }
           },
           orderBy: { 
             publishedDate: 'desc'
