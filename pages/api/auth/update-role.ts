@@ -1,8 +1,8 @@
-import { NextApiRequest, NextApiResponse } from 'next';
+import type { NextApiRequest, NextApiResponse } from 'next';
 import { getServerSession } from 'next-auth/next';
-import { authOptions } from './[...nextauth]';
-import { prisma } from '../../../lib/prisma';
+import prisma from '../../../lib/prisma';
 import { Role } from '@prisma/client';
+import { authOptions } from './[...nextauth]';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   // Only POST method is accepted
