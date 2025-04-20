@@ -10,11 +10,6 @@ export default async function handler(
   const { id } = req.query;
   const session = await getServerSession(req, res, authOptions);
 
-  // Check if user is authenticated
-  if (!session) {
-    return res.status(401).json({ message: 'Not authenticated' });
-  }
-
   // Check if id is valid
   if (!id || typeof id !== 'string') {
     return res.status(400).json({ message: 'Invalid startup call ID' });
@@ -31,15 +26,15 @@ export default async function handler(
         return res.status(404).json({ message: 'Startup call not found' });
       }
 
-      // For non-admins, only published and closed calls are visible
-      if (session.user.role !== 'ADMIN' && 
+      // For public access or non-admin users, only published and closed calls are visible
+      if ((!session || session.user.role !== 'ADMIN') && 
           startupCall.status !== 'PUBLISHED' && 
           startupCall.status !== 'CLOSED') {
         return res.status(403).json({ message: 'Not authorized to view this startup call' });
       }
 
       // For entrepreneurs, include application status
-      if (session.user.role === 'ENTREPRENEUR') {
+      if (session?.user?.role === 'ENTREPRENEUR') {
         const application = await prisma.startupCallApplication.findFirst({
           where: {
             callId: id,
@@ -58,6 +53,11 @@ export default async function handler(
       console.error('Error fetching startup call:', error);
       return res.status(500).json({ message: 'Error fetching startup call' });
     }
+  }
+
+  // For all other methods, require authentication
+  if (!session) {
+    return res.status(401).json({ message: 'Not authenticated' });
   }
 
   // PUT /api/startup-calls/:id - Update a startup call

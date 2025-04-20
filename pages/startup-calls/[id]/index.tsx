@@ -80,7 +80,7 @@ export default function StartupCallDetails() {
       } catch (error: any) {
         console.error('Error fetching startup call:', error);
         
-        // Check if this is a 404 or 403 error
+        // Check for different error types
         if (error.response?.status === 404) {
           toast({
             title: "Startup call not found",
@@ -88,6 +88,15 @@ export default function StartupCallDetails() {
             variant: "destructive",
           });
           setCall(null);
+          return;
+        } else if (error.response?.status === 401) {
+          // Redirect unauthenticated users to sign-in page with a return URL
+          toast({
+            title: "Authentication Required",
+            description: "Please sign in to view this startup call.",
+            variant: "default",
+          });
+          router.push(`/auth/signin?callbackUrl=/startup-calls/${id}`);
           return;
         } else if (error.response?.status === 403) {
           toast({
