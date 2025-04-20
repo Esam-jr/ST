@@ -19,9 +19,17 @@ export default function RoleSelection() {
       router.push('/auth/signin');
     }
     
-    // If user already has a role other than USER, redirect to the callback URL or dashboard
+    // If user already has a role other than USER, redirect based on their role
     if (session?.user?.role && session.user.role !== 'USER') {
-      router.push((callbackUrl as string) || '/dashboard');
+      if (session.user.role === 'ENTREPRENEUR') {
+        router.push('/startup-calls');
+      } else if (session.user.role === 'SPONSOR') {
+        router.push('/sponsor-dashboard');
+      } else if (session.user.role === 'ADMIN') {
+        router.push('/admin');
+      } else {
+        router.push((callbackUrl as string) || '/profile');
+      }
     }
   }, [status, session, router, callbackUrl]);
 
@@ -48,8 +56,14 @@ export default function RoleSelection() {
       // Update the session with the new role
       await update();
       
-      // Redirect to the callback URL or dashboard
-      router.push((callbackUrl as string) || '/dashboard');
+      // Redirect based on selected role
+      if (role === 'ENTREPRENEUR') {
+        router.push('/startup-calls');
+      } else if (role === 'SPONSOR') {
+        router.push('/sponsor-dashboard');
+      } else {
+        router.push((callbackUrl as string) || '/profile');
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
       setIsLoading(false);

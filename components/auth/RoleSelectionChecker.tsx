@@ -22,8 +22,9 @@ export default function RoleSelectionChecker({ children }: RoleSelectionCheckerP
       !isRoleSelectionPage &&
       !isAuthPage
     ) {
-      // Store the current URL as the callback URL
-      const callbackUrl = router.asPath !== '/' ? router.asPath : '/dashboard';
+      // Store the current URL as the callback URL or use a role-appropriate default
+      const defaultPath = '/profile'; // Default for new users
+      const callbackUrl = router.asPath !== '/' ? router.asPath : defaultPath;
       router.push(`/auth/role-selection?callbackUrl=${encodeURIComponent(callbackUrl)}`);
     }
   }, [status, session, router, isRoleSelectionPage, isAuthPage]);

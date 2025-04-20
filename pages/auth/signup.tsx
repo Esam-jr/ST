@@ -66,7 +66,7 @@ export default function SignUp() {
         router.push('/auth/signin?registered=true');
       } else {
         // Successful login after registration
-        router.push('/dashboard');
+        router.push('/profile');
       }
     } catch (err: any) {
       setError(err.message || 'Registration failed');
@@ -213,7 +213,7 @@ export default function SignUp() {
               <div className="mt-6 grid grid-cols-2 gap-3">
                 <Button 
                   variant="outline" 
-                  onClick={() => signIn('google', { callbackUrl: '/dashboard' })}
+                  onClick={() => signIn('google', { callbackUrl: '/profile' })}
                   type="button"
                 >
                   <svg className="h-4 w-4 mr-2" viewBox="0 0 24 24">
@@ -227,7 +227,7 @@ export default function SignUp() {
 
                 <Button 
                   variant="outline" 
-                  onClick={() => signIn('github', { callbackUrl: '/dashboard' })}
+                  onClick={() => signIn('github', { callbackUrl: '/profile' })}
                   type="button"
                 >
                   <svg className="h-4 w-4 mr-2" fill="currentColor" viewBox="0 0 20 20">

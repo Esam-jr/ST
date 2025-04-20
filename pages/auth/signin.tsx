@@ -51,7 +51,7 @@ export default function SignIn() {
         } else if (role === 'ENTREPRENEUR') {
           router.push('/startup-calls');
         } else {
-          router.push('/');
+          router.push('/profile');
         }
       }
     } catch (err) {
@@ -184,7 +184,7 @@ export default function SignIn() {
                             } else if (role === 'ENTREPRENEUR') {
                               router.push('/startup-calls');
                             } else {
-                              router.push('/');
+                              router.push('/profile');
                             }
                           }, 500);
                         } else {
@@ -228,7 +228,7 @@ export default function SignIn() {
                             } else if (role === 'ENTREPRENEUR') {
                               router.push('/startup-calls');
                             } else {
-                              router.push('/');
+                              router.push('/profile');
                             }
                           }, 500);
                         } else {
