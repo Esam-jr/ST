@@ -104,22 +104,34 @@ export default function ApplyForCall() {
   useEffect(() => {
     if (!id) return;
 
-    // Simulate API call
-    const timer = setTimeout(() => {
-      // This would be replaced with a real API call
-      const mockCall: StartupCall = {
-        id: id as string,
-        title: 'Tech Innovation Challenge 2023',
-        applicationDeadline: new Date(2023, 6, 30),
-        industry: 'Technology'
-      };
-      
-      setCall(mockCall);
-      setLoading(false);
-    }, 1000);
+    const fetchStartupCall = async () => {
+      try {
+        setLoading(true);
+        const response = await fetch(`/api/startup-calls/${id}`);
+        
+        if (!response.ok) {
+          if (response.status === 404) {
+            setCall(null);
+          } else if (response.status === 401) {
+            router.push(`/auth/signin?callbackUrl=/startup-calls/${id}/apply`);
+          } else {
+            throw new Error(`Error: ${response.status}`);
+          }
+          return;
+        }
+        
+        const data = await response.json();
+        setCall(data);
+      } catch (error) {
+        console.error('Error fetching startup call:', error);
+        setCall(null);
+      } finally {
+        setLoading(false);
+      }
+    };
     
-    return () => clearTimeout(timer);
-  }, [id]);
+    fetchStartupCall();
+  }, [id, router]);
 
   // Redirect if not authenticated or not an entrepreneur
   useEffect(() => {
@@ -136,11 +148,42 @@ export default function ApplyForCall() {
     setSubmitError('');
     
     try {
-      // Simulate API call to submit application
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Prepare data for submission
+      const formData = {
+        startupName: data.startupName,
+        website: data.website,
+        foundingDate: data.foundingDate,
+        teamSize: data.teamSize,
+        industry: data.industry,
+        stage: data.stage,
+        description: data.description,
+        problem: data.problem,
+        solution: data.solution,
+        traction: data.traction,
+        businessModel: data.businessModel,
+        funding: data.funding,
+        useOfFunds: data.useOfFunds,
+        competitiveAdvantage: data.competitiveAdvantage,
+        founderBio: data.founderBio,
+        // In a real implementation, you would upload files to storage
+        // and use the returned URLs here
+        pitchDeckUrl: data.pitchDeck ? 'mock-pitch-deck-url.pdf' : null,
+        financialsUrl: data.financials ? 'mock-financials-url.xlsx' : null
+      };
       
-      // In a real app, you would upload the form data to your backend
-      console.log('Application submitted:', data);
+      // Submit application to API
+      const response = await fetch(`/api/startup-calls/${id}/applications`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to submit application');
+      }
       
       setSubmitSuccess(true);
       
@@ -148,8 +191,8 @@ export default function ApplyForCall() {
       setTimeout(() => {
         router.push('/startup-calls');
       }, 3000);
-    } catch (error) {
-      setSubmitError('Failed to submit your application. Please try again.');
+    } catch (error: any) {
+      setSubmitError(error.message || 'Failed to submit your application. Please try again.');
       console.error('Application submission error:', error);
     } finally {
       setSubmitting(false);

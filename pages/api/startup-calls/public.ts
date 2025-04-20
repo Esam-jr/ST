@@ -1,6 +1,11 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import prisma from '@/lib/prisma';
 
+/**
+ * This endpoint is deprecated and can be removed.
+ * The main startup-calls endpoint and [id] endpoint now handle public access appropriately
+ * by checking the session and applying the correct visibility rules.
+ */
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
