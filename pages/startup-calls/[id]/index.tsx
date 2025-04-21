@@ -122,7 +122,6 @@ export default function StartupCallDetails() {
     fetchStartupCall();
   }, [id, toast, router]);
 
-  // No need to restrict access - anyone can view startup call details
 
   // Helper functions
   const formatDate = (date: string) => {
@@ -207,8 +206,8 @@ export default function StartupCallDetails() {
                         Apply Now <ArrowRight className="ml-1.5 h-4 w-4" />
                       </Button>
                     ) : hasApplied ? (
-                      <Button onClick={() => router.push(`/applications/${call.id}`)}>
-                        View My Application
+                      <Button onClick={() => router.push(`/startup-calls?tab=myapplications`)}>
+                        View My Applications
                       </Button>
                     ) : null}
                   </>
@@ -364,8 +363,8 @@ export default function StartupCallDetails() {
                         Apply Now <ArrowRight className="ml-1.5 h-4 w-4" />
                       </Button>
                     ) : hasApplied ? (
-                      <Button onClick={() => router.push(`/applications/${call.id}`)}>
-                        View My Application
+                      <Button onClick={() => router.push(`/startup-calls?tab=myapplications`)}>
+                        View My Applications
                       </Button>
                     ) : (
                       <Button disabled>{isClosed ? 'Call Closed' : 'Applications Closed'}</Button>

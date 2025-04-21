@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '../auth/[...nextauth]';
 import prisma from '@/lib/prisma';
+import withPrisma from '@/lib/prisma-wrapper';
 import { StartupCallStatus, StartupCallApplicationStatus } from '@prisma/client';
 
 // Define enum for application status
@@ -60,27 +61,29 @@ export default async function handler(
     const userId = session?.user?.id;
     const userRole = session?.user?.role;
 
-    // Fetch all startup calls - query params could be used for filtering
-    const calls = await prisma.startupCall.findMany({
-      where: {
-        // You can add additional filters based on query params
-        // Example: status: req.query.status as StartupCallStatus
-      },
-      orderBy: {
-        publishedDate: 'desc'
-      },
-      include: {
-        // For each call, check if the user has applied
-        applications: userId && userRole === 'ENTREPRENEUR' ? {
-          where: {
-            userId: userId
-          },
-          select: {
-            id: true,
-            status: true
-          }
-        } : false
-      }
+    // Use withPrisma wrapper to handle prepared statement errors with automatic retries
+    const calls = await withPrisma(async () => {
+      return prisma.startupCall.findMany({
+        where: {
+          // You can add additional filters based on query params
+          // Example: status: req.query.status as StartupCallStatus
+        },
+        orderBy: {
+          publishedDate: 'desc'
+        },
+        include: {
+          // For each call, check if the user has applied
+          applications: userId && userRole === 'ENTREPRENEUR' ? {
+            where: {
+              userId: userId
+            },
+            select: {
+              id: true,
+              status: true
+            }
+          } : false
+        }
+      });
     });
 
     // Transform the data to match the expected format

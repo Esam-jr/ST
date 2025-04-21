@@ -39,12 +39,10 @@ interface StartupCallApplication {
   callTitle: string;
   submittedAt: string;
   status: ApplicationStatus;
-  feedback?: string;
-  reviewedAt?: string;
   
   // Startup information
   startupName: string;
-  website: string;
+  website?: string;
   foundingDate: string;
   teamSize: string;
   industry: string;
@@ -54,16 +52,20 @@ interface StartupCallApplication {
   // Application details
   problem: string;
   solution: string;
-  traction: string;
+  traction?: string;
   businessModel: string;
-  funding: string;
+  funding?: string;
   useOfFunds: string;
   competitiveAdvantage: string;
   founderBio: string;
   
   // Files
-  pitchDeckUrl: string;
+  pitchDeckUrl?: string;
   financialsUrl?: string;
+  
+  // Review information
+  reviewsCompleted: number;
+  reviewsTotal: number;
 }
 
 export default function ApplicationDetails() {
@@ -216,15 +218,22 @@ export default function ApplicationDetails() {
                       <Clock className="h-5 w-5 mr-2 text-muted-foreground" />
                       <span>Submitted on {formatDate(application.submittedAt)}</span>
                     </div>
-                    {application.reviewedAt && (
-                      <div className="flex items-center">
-                        <Calendar className="h-5 w-5 mr-2 text-muted-foreground" />
-                        <span>Reviewed on {formatDate(application.reviewedAt)}</span>
-                      </div>
-                    )}
                     <div className="flex items-center">
                       <FileText className="h-5 w-5 mr-2 text-muted-foreground" />
                       <span>Current status: {getStatusBadge(application.status)}</span>
+                    </div>
+                    
+                    <div className="flex flex-col space-y-1 mt-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Review progress</span>
+                        <span className="font-medium">{application.reviewsCompleted} of {application.reviewsTotal} reviews</span>
+                      </div>
+                      <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-blue-500 rounded-full"
+                          style={{ width: `${(application.reviewsCompleted / application.reviewsTotal) * 100}%` }}
+                        ></div>
+                      </div>
                     </div>
                   </div>
                   
@@ -253,13 +262,6 @@ export default function ApplicationDetails() {
                     )}
                   </div>
                 </div>
-                
-                {application.feedback && (
-                  <div className="mt-6 rounded-md bg-muted p-4">
-                    <h3 className="font-medium mb-2">Feedback from Reviewers</h3>
-                    <p className="text-muted-foreground">{application.feedback}</p>
-                  </div>
-                )}
               </CardContent>
             </Card>
 

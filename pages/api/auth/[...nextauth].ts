@@ -5,6 +5,7 @@ import CredentialsProvider from 'next-auth/providers/credentials';
 import GoogleProvider from 'next-auth/providers/google';
 import GitHubProvider from 'next-auth/providers/github';
 import prisma from '../../../lib/prisma';
+import withPrisma from '@/lib/prisma-wrapper';
 import { compare } from 'bcrypt';
 import { Role, Prisma } from '@prisma/client';
 import { AdapterUser } from 'next-auth/adapters';
@@ -39,7 +40,7 @@ const customPrismaAdapter = {
     try {
       // Check if user already exists first to avoid conflicts
       const existingUser = data.email 
-        ? await prisma.user.findUnique({ where: { email: data.email } })
+        ? await withPrisma(() => prisma.user.findUnique({ where: { email: data.email } }))
         : null;
       
       if (existingUser) {
@@ -47,23 +48,27 @@ const customPrismaAdapter = {
       }
 
       // Create new user with USER role by default
-      const user = await prisma.user.create({
-        data: {
-          name: data.name || null,
-          email: data.email || '',  // Set a default empty string if email is undefined
-          image: data.image || null,
-          emailVerified: data.emailVerified || null,
-          role: Role.USER,
-        },
-      });
+      const user = await withPrisma(() => 
+        prisma.user.create({
+          data: {
+            name: data.name || null,
+            email: data.email || '',  // Set a default empty string if email is undefined
+            image: data.image || null,
+            emailVerified: data.emailVerified || null,
+            role: Role.USER,
+          },
+        })
+      );
       
       return user;
     } catch (error) {
       // If we got a unique constraint error, try to find the user
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002' && data.email) {
-        const user = await prisma.user.findUnique({
-          where: { email: data.email },
-        });
+        const user = await withPrisma(() => 
+          prisma.user.findUnique({
+            where: { email: data.email },
+          })
+        );
         
         if (user) {
           return user;
@@ -76,29 +81,33 @@ const customPrismaAdapter = {
   linkAccount: async (data: LinkAccountData) => {
     try {
       // Check if account already exists
-      const existingAccount = await prisma.account.findFirst({
-        where: {
-          provider: data.provider,
-          providerAccountId: data.providerAccountId,
-        },
-      });
+      const existingAccount = await withPrisma(() => 
+        prisma.account.findFirst({
+          where: {
+            provider: data.provider,
+            providerAccountId: data.providerAccountId,
+          },
+        })
+      );
 
       if (existingAccount) {
         return existingAccount;
       }
 
       // Create new account link
-      const account = await prisma.account.create({ data });
+      const account = await withPrisma(() => prisma.account.create({ data }));
       return account;
     } catch (error) {
       // If we got a unique constraint error, try to find the account
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-        const account = await prisma.account.findFirst({
-          where: {
-            provider: data.provider,
-            providerAccountId: data.providerAccountId,
-          },
-        });
+        const account = await withPrisma(() => 
+          prisma.account.findFirst({
+            where: {
+              provider: data.provider,
+              providerAccountId: data.providerAccountId,
+            },
+          })
+        );
         
         if (account) {
           return account;
@@ -111,21 +120,25 @@ const customPrismaAdapter = {
   getUserByAccount: async (providerAccountId: { provider: string, providerAccountId: string }) => {
     try {
       // First try to find the account
-      const account = await prisma.account.findFirst({
-        where: {
-          provider: providerAccountId.provider,
-          providerAccountId: providerAccountId.providerAccountId,
-        },
-      });
+      const account = await withPrisma(() => 
+        prisma.account.findFirst({
+          where: {
+            provider: providerAccountId.provider,
+            providerAccountId: providerAccountId.providerAccountId,
+          },
+        })
+      );
       
       if (!account) {
         return null;
       }
       
       // Then get the user by ID
-      return prisma.user.findUnique({
-        where: { id: account.userId },
-      });
+      return withPrisma(() => 
+        prisma.user.findUnique({
+          where: { id: account.userId },
+        })
+      );
     } catch (error) {
       return null;
     }
@@ -147,9 +160,11 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
 
-        const user = await prisma.user.findUnique({
-          where: { email: credentials.email }
-        });
+        const user = await withPrisma(() => 
+          prisma.user.findUnique({
+            where: { email: credentials.email }
+          })
+        );
 
         if (!user || !user.password) {
           return null;
@@ -249,9 +264,12 @@ export const authOptions: NextAuthOptions = {
       // If we have an email, get the user from the database
       if (token.email) {
         try {
-          const dbUser = await prisma.user.findUnique({
-            where: { email: token.email as string },
-          });
+          // Use withPrisma wrapper to handle potential prepared statement errors
+          const dbUser = await withPrisma(() => 
+            prisma.user.findUnique({
+              where: { email: token.email as string },
+            })
+          );
           
           if (dbUser) {
             token.id = dbUser.id;

@@ -1,88 +1,130 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Prisma } from '@prisma/client';
 
 /**
- * PrismaClient Singleton Implementation for Next.js
+ * PrismaClient Singleton Implementation for Next.js with Supabase
  * 
- * This module creates a singleton instance of PrismaClient that works reliably:
- * 1. Prevents multiple instances during development hot reloads
- * 2. Configures the client to work with Supabase's PgBouncer
- * 3. Properly handles connection cleanup on process exit
- * 4. Configures the client based on the environment
+ * This solution addresses the critical "prepared statement does not exist" error
+ * by completely disabling prepared statements and implementing proper connection management
  */
 
-// Define globals for PrismaClient
+// For singleton pattern
 declare global {
   // eslint-disable-next-line no-var
-  var _prisma: PrismaClient | undefined;
+  var prismaClient: PrismaClient | undefined;
 }
 
-// Configuration for PrismaClient to work with connection poolers like PgBouncer
-const prismaClientSingleton = () => {
+// Create a client with all necessary fixes for the prepared statement issue
+function createPrismaClient() {
+  // First, enable direct SQL queries instead of prepared statements
+  // This is set before client initialization to ensure it's applied
+  process.env.PRISMA_DISABLE_PREPARED_STATEMENTS = "true";
+  
+  // Create with basic logging options
   const client = new PrismaClient({
-    // Log queries only in development
-    log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
+    log: process.env.NODE_ENV === 'development' 
+      ? ['error', 'warn'] as Prisma.LogLevel[]
+      : ['error'] as Prisma.LogLevel[],
     
-    // Critical configuration for Supabase
+    // Add the pgBouncer flag directly in the connection URL
     datasources: {
       db: {
-        url: process.env.DATABASE_URL,
-      },
-    },
+        url: `${process.env.DATABASE_URL}${process.env.DATABASE_URL?.includes('?') ? '&' : '?'}pgbouncer=true&connection_limit=1&pool_timeout=0`
+      }
+    }
   });
-
-  // Access internal client to configure it to work with PgBouncer
-  // This is necessary to avoid "prepared statement already exists" errors
-  // TypeScript doesn't know about these internal properties, so we need to use any
-  const prismaAny = client as any;
   
-  // Disable prepared statements to prevent errors with PgBouncer
+  // Access internal configs to enforce disabling prepared statements at all levels
+  const prismaAny = client as any;
   if (prismaAny._engineConfig) {
+    // Modify internal engine configuration to force disable prepared statements
     prismaAny._engineConfig.previewFeatures = [
       ...(prismaAny._engineConfig.previewFeatures || []),
       'nativeTypes'
     ];
     
-    // Set internal transaction options - critical for fixing the error
+    // Also override datasource URL to include pgBouncer flag
+    prismaAny._engineConfig.datasourceOverrides = {
+      db: {
+        url: `${process.env.DATABASE_URL}${process.env.DATABASE_URL?.includes('?') ? '&' : '?'}pgbouncer=true&connection_limit=1&pool_timeout=0`
+      }
+    };
+    
+    // Set transaction options to disable prepared statements
     prismaAny._engineConfig.transactionOptions = {
+      isolationLevel: 'ReadCommitted',
+      maxWait: 5000,
+      timeout: 10000,
       usePreparedStatements: false
     };
+    
+    // For Prisma 4+, add this if available
+    if (prismaAny._baseDmmf) {
+      prismaAny._baseDmmf.featuresEnvVars = {
+        ...prismaAny._baseDmmf.featuresEnvVars,
+        nativeBindings: true
+      };
+    }
   }
   
   return client;
-};
+}
 
-// Use globalThis to create a singleton that survives Next.js hot reloads
-// In production, this creates a new instance once for the entire application
-// In development, this maintains a single instance across hot reloads
-const prisma = globalThis._prisma ?? prismaClientSingleton();
+// Function to force-reconnect when issues are detected
+async function resetConnection(client: PrismaClient) {
+  try {
+    // Forcibly disconnect
+    await client.$disconnect();
+    
+    // For more aggressive reset (optional - uncomment if needed)
+    // const prismaAny = client as any;
+    // if (prismaAny._engine?.disconnect) {
+    //   await prismaAny._engine.disconnect();
+    // }
+    
+    console.log('Prisma connection reset successfully');
+  } catch (e) {
+    console.error('Error resetting Prisma connection:', e);
+  }
+}
 
-// Handle connection management - important for development hot reloading
+// Use cached client or create new one
+const prisma = global.prismaClient || createPrismaClient();
+
+// Set up proper connection management
 if (process.env.NODE_ENV !== 'production') {
-  // In development, store the instance on the global object
-  globalThis._prisma = prisma;
+  global.prismaClient = prisma;
   
-  // Add clean disconnection handler only once
-  if (typeof window === 'undefined') { // Only in Node.js environment, not in browser
-    // Track if we've already added a listener to avoid memory leaks
-    if (!(globalThis as any).__prismaListenerAdded) {
-      (globalThis as any).__prismaListenerAdded = true;
+  // Register connection management handlers
+  if (typeof window === 'undefined') {
+    if (!(global as any).__prismaListenerInitialized) {
+      (global as any).__prismaListenerInitialized = true;
       
-      // Clean up connections before Node.js process exits
-      // The beforeExit event is emitted when Node.js empties its event loop
+      // Clean up on process exit
       process.on('beforeExit', async () => {
         await prisma.$disconnect();
       });
       
-      // Also handle force termination scenarios
-      process.on('SIGTERM', async () => {
-        await prisma.$disconnect();
-        process.exit(0);
+      // Handle various process termination signals
+      ['SIGINT', 'SIGTERM', 'SIGQUIT'].forEach(signal => {
+        process.on(signal, async () => {
+          console.log(`${signal} received, cleaning up Prisma connections`);
+          await prisma.$disconnect();
+          process.exit(0);
+        });
       });
       
-      // Also listen for manual interruption
-      process.on('SIGINT', async () => {
-        await prisma.$disconnect();
-        process.exit(0);
+      // For Next.js Fast Refresh
+      process.on('SIGHUP', async () => {
+        console.log('SIGHUP received, reconnecting Prisma');
+        await resetConnection(prisma);
+      });
+      
+      // Additionally, handle uncaught errors that might be due to connection issues
+      process.on('uncaughtException', async (err) => {
+        if (err.message && err.message.includes('prepared statement')) {
+          console.log('Uncaught Prisma prepared statement error, resetting connection');
+          await resetConnection(prisma);
+        }
       });
     }
   }

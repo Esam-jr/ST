@@ -2,6 +2,7 @@ import { NextApiRequest, NextApiResponse } from 'next';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '../auth/[...nextauth]';
 import prisma from '@/lib/prisma';
+import withPrisma from '@/lib/prisma-wrapper';
 
 // Type definitions
 type CallStatus = 'DRAFT' | 'PUBLISHED' | 'CLOSED' | 'ARCHIVED';
@@ -118,37 +119,41 @@ export default async function handler(
     }
 
     // Check if user has the ENTREPRENEUR role
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { role: true }
-    });
+    const user = await withPrisma(() => 
+      prisma.user.findUnique({
+        where: { id: session.user.id },
+        select: { role: true }
+      })
+    );
 
     if (!user || user.role !== 'ENTREPRENEUR') {
       return res.status(403).json({ message: 'Not authorized to view applications' });
     }
 
-    // Fetch applications for the authenticated entrepreneur
-    const applications = await prisma.startupCallApplication.findMany({
-      where: {
-        userId: session.user.id
-      },
-      include: {
-        call: {
-          select: {
-            id: true,
-            title: true,
-            status: true,
-            applicationDeadline: true,
-            industry: true,
-            location: true,
-            fundingAmount: true
+    // Fetch applications for the authenticated entrepreneur with error handling
+    const applications = await withPrisma(() => 
+      prisma.startupCallApplication.findMany({
+        where: {
+          userId: session.user.id
+        },
+        include: {
+          call: {
+            select: {
+              id: true,
+              title: true,
+              status: true,
+              applicationDeadline: true,
+              industry: true,
+              location: true,
+              fundingAmount: true
+            }
           }
+        },
+        orderBy: {
+          submittedAt: 'desc'
         }
-      },
-      orderBy: {
-        submittedAt: 'desc'
-      }
-    });
+      })
+    );
 
     // Format and return the applications
     const formattedApplications = applications.map((app) => ({
