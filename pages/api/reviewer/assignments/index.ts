@@ -8,7 +8,7 @@ export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
-  // Only allow GET requests
+  // Only allow GET requests for this endpoint
   if (req.method !== 'GET') {
     return res.status(405).json({ message: 'Method not allowed' });
   }
@@ -21,98 +21,83 @@ export default async function handler(
       return res.status(401).json({ message: 'Not authenticated' });
     }
 
-    // Check if user is a reviewer
-    const user = await withPrisma(() => 
+    // Check if the user is a reviewer
+    const user = await withPrisma(() =>
       prisma.user.findUnique({
         where: { id: session.user.id },
-        select: { role: true }
+        select: { id: true, role: true }
       })
     );
 
     if (!user || user.role !== 'REVIEWER') {
-      return res.status(403).json({ message: 'Not authorized to view review assignments' });
+      return res.status(403).json({ message: 'Only reviewers can access their assignments' });
     }
 
-    // Fetch all review assignments for the reviewer
+    // Use a raw query to avoid the Prisma schema issues
+    const assignmentsQuery = `
+      SELECT 
+        ar.id, ar.status, ar."assignedAt", ar."dueDate", ar."completedAt",
+        a.id as "applicationId", a."startupName", a.industry, a.stage, a.status as "applicationStatus", a."submittedAt",
+        c.id as "callId", c.title as "callTitle"
+      FROM "ApplicationReview" ar
+      JOIN "StartupCallApplication" a ON ar."applicationId" = a.id
+      JOIN "StartupCall" c ON a."callId" = c.id
+      WHERE ar."reviewerId" = $1
+      ORDER BY 
+        CASE 
+          WHEN ar.status = 'COMPLETED' THEN 3
+          WHEN ar.status = 'OVERDUE' THEN 2
+          WHEN ar.status = 'IN_PROGRESS' THEN 1
+          ELSE 0
+        END,
+        ar."dueDate" ASC NULLS LAST
+    `;
+
     const assignments = await withPrisma(() => 
-      prisma.applicationReview.findMany({
-        where: { reviewerId: session.user.id },
-        select: {
-          id: true,
-          status: true,
-          assignedAt: true,
-          dueDate: true,
-          completedAt: true,
-          application: {
-            select: {
-              id: true,
-              startupName: true,
-              industry: true,
-              stage: true,
-              status: true,
-              submittedAt: true,
-              call: {
-                select: {
-                  id: true,
-                  title: true,
-                }
-              }
-            }
-          }
-        },
-        orderBy: [
-          { status: 'asc' },
-          { dueDate: 'asc' }
-        ],
-      })
-    );
+      prisma.$queryRawUnsafe(assignmentsQuery, session.user.id)
+    ) as any[];
 
-    // Check for overdue assignments and update their status
+    // Process assignments and update overdue status
     const now = new Date();
-    const updatedAssignments = await Promise.all(
-      assignments.map(async (assignment) => {
-        if (
-          assignment.status !== 'COMPLETED' && 
-          assignment.dueDate && 
-          new Date(assignment.dueDate) < now
-        ) {
-          // Update the assignment status to OVERDUE
-          const updatedAssignment = await withPrisma(() =>
-            prisma.applicationReview.update({
-              where: { id: assignment.id },
-              data: { status: 'OVERDUE' },
-              select: {
-                id: true,
-                status: true,
-                assignedAt: true,
-                dueDate: true,
-                completedAt: true,
-                application: {
-                  select: {
-                    id: true,
-                    startupName: true,
-                    industry: true,
-                    stage: true,
-                    status: true,
-                    submittedAt: true,
-                    call: {
-                      select: {
-                        id: true,
-                        title: true,
-                      }
-                    }
-                  }
-                }
-              }
-            })
-          );
-          return updatedAssignment;
-        }
-        return assignment;
-      })
-    );
+    const processedAssignments = await Promise.all(assignments.map(async (assignment) => {
+      let status = assignment.status;
+      const dueDate = assignment.dueDate ? new Date(assignment.dueDate) : null;
+      
+      // Set status to OVERDUE if past due date and not completed
+      if (dueDate && dueDate < now && status !== 'COMPLETED' && status !== 'OVERDUE') {
+        status = 'OVERDUE';
+        // Update the status in the database
+        await withPrisma(() => 
+          prisma.$executeRawUnsafe(
+            `UPDATE "ApplicationReview" SET status = 'OVERDUE' WHERE id = $1`,
+            assignment.id
+          )
+        );
+      }
 
-    return res.status(200).json(updatedAssignments);
+      // Format the output to match the expected client structure
+      return {
+        id: assignment.id,
+        status: status,
+        assignedAt: assignment.assignedAt,
+        dueDate: assignment.dueDate,
+        completedAt: assignment.completedAt,
+        application: {
+          id: assignment.applicationId,
+          startupName: assignment.startupName,
+          industry: assignment.industry,
+          stage: assignment.stage,
+          status: assignment.applicationStatus,
+          submittedAt: assignment.submittedAt,
+          call: {
+            id: assignment.callId,
+            title: assignment.callTitle
+          }
+        }
+      };
+    }));
+
+    return res.status(200).json(processedAssignments);
     
   } catch (error) {
     console.error('Error fetching review assignments:', error);

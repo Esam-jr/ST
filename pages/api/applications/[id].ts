@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth/next';
 import { authOptions } from '../auth/[...nextauth]';
 import prisma from '@/lib/prisma';
 import { StartupCallApplicationStatus } from '@prisma/client';
+import withPrisma from '@/lib/prisma-wrapper';
 
 // Type definitions
 type ApplicationStatus = StartupCallApplicationStatus;
@@ -67,34 +68,94 @@ export default async function handler(
       return res.status(401).json({ message: 'Unauthorized' });
     }
 
-    // Check if user is an entrepreneur
-    if (session.user.role !== 'ENTREPRENEUR') {
-      return res.status(403).json({ message: 'Forbidden - Only entrepreneurs can view their applications' });
+    // Determine if the user is a reviewer assigned to this application
+    let isAssignedReviewer = false;
+    if (session.user.role === 'REVIEWER') {
+      const assignmentQuery = `
+        SELECT id FROM "ApplicationReview"
+        WHERE "applicationId" = $1 AND "reviewerId" = $2
+        LIMIT 1
+      `;
+      
+      const reviewAssignments = await withPrisma(() =>
+        prisma.$queryRawUnsafe(assignmentQuery, id, session.user.id)
+      ) as any[];
+      
+      isAssignedReviewer = reviewAssignments && reviewAssignments.length > 0;
     }
 
-    // Fetch the application from the database
-    const application = await prisma.startupCallApplication.findUnique({
-      where: {
-        id: id,
-        userId: session.user.id // Ensure the application belongs to the current user
-      },
-      include: {
-        call: {
-          select: {
-            id: true,
-            title: true,
-            description: true,
-            applicationDeadline: true,
-            industry: true,
-            location: true,
-            fundingAmount: true
+    // Check permissions - user must be either the entrepreneur who owns the application,
+    // an admin, or a reviewer assigned to review this application
+    let application;
+    if (session.user.role === 'ADMIN') {
+      // Admins can view any application
+      application = await prisma.startupCallApplication.findUnique({
+        where: {
+          id
+        },
+        include: {
+          call: {
+            select: {
+              id: true,
+              title: true,
+              description: true,
+              applicationDeadline: true,
+              industry: true,
+              location: true,
+              fundingAmount: true
+            }
           }
         }
-      }
-    });
+      });
+    } else if (session.user.role === 'ENTREPRENEUR') {
+      // Entrepreneurs can only view their own applications
+      application = await prisma.startupCallApplication.findUnique({
+        where: {
+          id,
+          userId: session.user.id // Ensure the application belongs to the current user
+        },
+        include: {
+          call: {
+            select: {
+              id: true,
+              title: true,
+              description: true,
+              applicationDeadline: true,
+              industry: true,
+              location: true,
+              fundingAmount: true
+            }
+          }
+        }
+      });
+    } else if (isAssignedReviewer) {
+      // Reviewers can view applications they're assigned to
+      application = await prisma.startupCallApplication.findUnique({
+        where: {
+          id
+        },
+        include: {
+          call: {
+            select: {
+              id: true,
+              title: true,
+              description: true,
+              applicationDeadline: true,
+              industry: true,
+              location: true,
+              fundingAmount: true
+            }
+          }
+        }
+      });
+    }
 
     if (!application) {
-      return res.status(404).json({ message: 'Application not found' });
+      return res.status(404).json({ 
+        message: isAssignedReviewer ? 
+          'Application not found' : 
+          'Application not found or you do not have permission to view it'
+      });
     }
 
     // Format the response to match the expected structure

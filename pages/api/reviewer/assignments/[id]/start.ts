@@ -8,7 +8,7 @@ export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
-  // Only allow POST requests
+  // Only allow POST requests for this endpoint
   if (req.method !== 'POST') {
     return res.status(405).json({ message: 'Method not allowed' });
   }
@@ -21,74 +21,52 @@ export default async function handler(
       return res.status(401).json({ message: 'Not authenticated' });
     }
 
-    // Check if user is a reviewer
-    const user = await withPrisma(() => 
+    // Check if the user is a reviewer
+    const user = await withPrisma(() =>
       prisma.user.findUnique({
         where: { id: session.user.id },
-        select: { role: true }
+        select: { id: true, role: true }
       })
     );
 
     if (!user || user.role !== 'REVIEWER') {
-      return res.status(403).json({ message: 'Not authorized to perform this action' });
+      return res.status(403).json({ message: 'Only reviewers can start reviews' });
     }
 
     // Get assignment ID from route
     const { id } = req.query;
     const assignmentId = Array.isArray(id) ? id[0] : id;
 
-    // Check if the assignment exists and belongs to the reviewer
-    const assignment = await withPrisma(() => 
-      prisma.applicationReview.findFirst({
-        where: {
-          id: assignmentId,
-          reviewerId: session.user.id,
-        },
-        select: {
-          id: true,
-          status: true,
-          application: {
-            select: {
-              id: true,
-              startupName: true,
-            }
-          }
-        }
-      })
-    );
+    // Check if the review assignment exists and belongs to this reviewer
+    const reviewAssignment = await withPrisma(() =>
+      prisma.$queryRaw`
+        SELECT id, status FROM "ApplicationReview"
+        WHERE id = ${assignmentId} AND "reviewerId" = ${user.id}
+      `
+    ) as any[];
 
-    if (!assignment) {
-      return res.status(404).json({ message: 'Review assignment not found or not assigned to you' });
+    if (!reviewAssignment || reviewAssignment.length === 0) {
+      return res.status(404).json({ message: 'Review assignment not found' });
     }
 
     // Check if the review is already completed
-    if (assignment.status === 'COMPLETED') {
-      return res.status(400).json({ message: 'This review is already completed' });
+    if (reviewAssignment[0].status === 'COMPLETED') {
+      return res.status(400).json({ message: 'This review has already been completed' });
     }
 
-    // Update the assignment status to IN_PROGRESS
-    const updatedAssignment = await withPrisma(() => 
-      prisma.applicationReview.update({
-        where: { id: assignmentId },
-        data: { status: 'IN_PROGRESS' },
-        select: {
-          id: true,
-          status: true,
-          assignedAt: true,
-          dueDate: true,
-          application: {
-            select: {
-              id: true,
-              startupName: true,
-            }
-          }
-        }
-      })
-    );
+    // Update the review status to IN_PROGRESS
+    const updatedReview = await withPrisma(() =>
+      prisma.$queryRaw`
+        UPDATE "ApplicationReview"
+        SET status = 'IN_PROGRESS'
+        WHERE id = ${assignmentId}
+        RETURNING id, status
+      `
+    ) as any[];
 
     return res.status(200).json({
       message: 'Review started successfully',
-      assignment: updatedAssignment
+      review: updatedReview[0]
     });
     
   } catch (error) {

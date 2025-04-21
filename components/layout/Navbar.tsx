@@ -35,8 +35,10 @@ export default function Navbar() {
         return '/entrepreneur-dashboard';
       } else if (session?.user?.role === 'SPONSOR') {
         return '/sponsor-dashboard';
+      } else if (session?.user?.role === 'REVIEWER') {
+        return '/reviewer-dashboard'; 
       } else {
-        return '/'; 
+        return '/';
       }
     };
 
