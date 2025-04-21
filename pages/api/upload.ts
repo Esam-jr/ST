@@ -1,49 +1,74 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from './auth/[...nextauth]';
-import { IncomingForm } from 'formidable';
-import fs from 'fs';
+import formidable from 'formidable';
 import path from 'path';
-import { Fields, Files, File } from 'formidable';
+import fs from 'fs';
 
+// Disable the default body parser as we'll use formidable
 export const config = {
   api: {
-    bodyParser: false, // Disabling built-in bodyParser to use formidable
+    bodyParser: false,
   },
 };
 
+// Define allowed file types for security
 const allowedFileTypes = [
-  'application/pdf',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  'application/vnd.ms-excel',
+  'application/pdf', // PDF files
+  'application/vnd.ms-excel', // .xls
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+  'application/msword', // .doc
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
+  // Add these MIME types for better compatibility with browser-reported types
+  'application/octet-stream', // Generic binary file
+  'binary/octet-stream',
 ];
+
+// File extensions allowed - additional check
+const allowedExtensions = ['.pdf', '.xls', '.xlsx', '.doc', '.docx'];
 
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
-  // Ensure user is authenticated
+  if (req.method !== 'POST') {
+    return res.status(405).json({ message: 'Method not allowed' });
+  }
+
+  // Check authentication
   const session = await getServerSession(req, res, authOptions);
   if (!session) {
     return res.status(401).json({ message: 'Not authenticated' });
   }
 
-  // Only allow POST requests
-  if (req.method !== 'POST') {
-    return res.status(405).json({ message: 'Method not allowed' });
-  }
-
-  // Parse the form data
-  const form = new IncomingForm({
-    uploadDir: path.join(process.cwd(), 'public/uploads'),
-    keepExtensions: true,
-    maxFileSize: 10 * 1024 * 1024, // 10MB
-  });
+  console.log('Upload request received');
+  console.log('Headers:', req.headers);
 
   try {
-    const [fields, files] = await new Promise<[Fields, Files]>((resolve, reject) => {
+    // Create uploads directory if it doesn't exist
+    const uploadDir = path.join(process.cwd(), 'public/uploads');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+      console.log('Created uploads directory:', uploadDir);
+    }
+
+    // Configure formidable to save files to the uploads directory
+    const form = formidable({
+      uploadDir,
+      keepExtensions: true,
+      maxFileSize: 10 * 1024 * 1024, // 10MB limit
+      // Allow all file types initially, we'll check later
+      filter: part => {
+        // Always return true here, we'll validate mime types after parsing
+        return true;
+      }
+    });
+
+    // Parse the form
+    const [fields, files] = await new Promise<[formidable.Fields, formidable.Files]>((resolve, reject) => {
       form.parse(req, (err, fields, files) => {
         if (err) {
+          console.error('Formidable parsing error:', err);
           reject(err);
           return;
         }
@@ -51,41 +76,84 @@ export default async function handler(
       });
     });
 
+    // Check if a file was provided
     const file = files.file;
     if (!file) {
-      return res.status(400).json({ message: 'No file uploaded' });
+      console.error('No file found in the request. Available fields:', Object.keys(files));
+      return res.status(400).json({ 
+        message: 'No file uploaded', 
+        availableFields: Object.keys(files),
+        requestHeaders: req.headers['content-type']
+      });
     }
 
-    // In case of multiple files, handle the first one
+    // Access the file information
     const uploadedFile = Array.isArray(file) ? file[0] : file;
     
-    // Validate file type
-    if (!allowedFileTypes.includes(uploadedFile.mimetype || '')) {
-      // Remove the invalid file
-      fs.unlinkSync(uploadedFile.filepath);
-      return res.status(400).json({ message: 'Invalid file type. Only PDF and Excel files are allowed.' });
+    // Ensure we have all the necessary file properties
+    if (!uploadedFile || !uploadedFile.filepath) {
+      console.error('Invalid file object received:', uploadedFile);
+      return res.status(400).json({ 
+        message: 'Invalid file object received',
+        error: 'missing_file_data' 
+      });
     }
 
-    // Create a unique filename with user ID to avoid collisions
+    console.log('Uploaded file:', {
+      name: uploadedFile.originalFilename,
+      type: uploadedFile.mimetype,
+      size: uploadedFile.size,
+      path: uploadedFile.filepath
+    });
+
+    // Check file extension
     const originalFilename = uploadedFile.originalFilename || 'unnamed-file';
-    const fileExtension = path.extname(originalFilename);
-    const timestamp = Date.now();
-    const newFilename = `${session.user.id}_${timestamp}${fileExtension}`;
-    const newPath = path.join(process.cwd(), 'public/uploads', newFilename);
+    const extension = path.extname(originalFilename).toLowerCase();
+    
+    // More permissive file extension check (case insensitive)
+    if (!allowedExtensions.some(ext => extension.toLowerCase() === ext.toLowerCase())) {
+      // If file extension is not allowed, delete the file and return an error
+      try {
+        if (fs.existsSync(uploadedFile.filepath)) {
+          fs.unlinkSync(uploadedFile.filepath);
+        }
+      } catch (unlinkError) {
+        console.error('Error deleting invalid file:', unlinkError);
+      }
+      
+      console.error(`File extension not allowed: ${extension}`);
+      return res.status(400).json({ 
+        message: `File type not allowed. Allowed extensions: ${allowedExtensions.join(', ')}`,
+        error: 'invalid_extension',
+        providedExtension: extension
+      });
+    }
 
-    // Rename the file (move to final location with proper name)
+    // Check MIME type (more permissive now)
+    if (uploadedFile.mimetype && !allowedFileTypes.includes(uploadedFile.mimetype)) {
+      console.warn(`Warning: Unknown MIME type ${uploadedFile.mimetype} for file with extension ${extension}. Proceeding anyway due to valid extension.`);
+    }
+
+    // Generate a unique filename to prevent overrides
+    const newFilename = `${Date.now()}-${Math.random().toString(36).substring(2, 15)}${extension}`;
+    
+    // Rename the file to its final name
+    const newPath = path.join(uploadDir, newFilename);
     fs.renameSync(uploadedFile.filepath, newPath);
-
-    // Generate the URL for the file
+    
+    // Return the URL to the uploaded file
     const fileUrl = `/uploads/${newFilename}`;
-
+    
     return res.status(200).json({
+      message: 'File uploaded successfully',
       url: fileUrl,
       filename: originalFilename,
     });
-    
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error processing file upload:', error);
-    return res.status(500).json({ message: 'Error processing file upload' });
+    return res.status(500).json({ 
+      message: 'Error processing file upload',
+      error: error.message || 'Unknown error'
+    });
   }
 } 

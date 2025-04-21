@@ -56,6 +56,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { useRouter } from 'next/navigation';
 
 // Define types
 type StartupCallStatus = 'DRAFT' | 'PUBLISHED' | 'CLOSED' | 'ARCHIVED';
@@ -85,6 +86,7 @@ interface StartupCall {
 interface Application {
   id: string;
   callId: string;
+  callTitle?: string;
   startupName: string;
   status: ApplicationStatus;
   submittedAt: Date | string;
@@ -94,6 +96,7 @@ interface Application {
   };
   reviewsCompleted: number;
   reviewsTotal: number;
+  pitchDeckUrl?: string;
 }
 
 const AdminStartupCalls = () => {
@@ -113,6 +116,8 @@ const AdminStartupCalls = () => {
   // Delete confirmation dialog
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [callToDelete, setCallToDelete] = useState<string | null>(null);
+
+  const router = useRouter();
 
   // Fetch startup calls
   const fetchStartupCalls = async () => {
@@ -217,15 +222,38 @@ const AdminStartupCalls = () => {
   useEffect(() => {
     if (activeTab === 'applications') {
       const loadApplications = async () => {
-        const allApplications: Application[] = [];
-        
-        // For each call, fetch its applications
-        for (const call of startupCalls) {
-          const callApplications = await fetchApplications(call.id);
-          allApplications.push(...callApplications);
+        setLoading(true);
+        try {
+          const allApplications: Application[] = [];
+          
+          // For each call, fetch its applications
+          for (const call of startupCalls) {
+            try {
+              const callApplications = await fetchApplications(call.id);
+              if (callApplications && callApplications.length > 0) {
+                // Add the call title to each application for easy reference
+                const applicationsWithCallTitle = callApplications.map(app => ({
+                  ...app,
+                  callTitle: call.title
+                }));
+                allApplications.push(...applicationsWithCallTitle);
+              }
+            } catch (err) {
+              console.error(`Error fetching applications for call ${call.id}:`, err);
+            }
+          }
+          
+          setApplications(allApplications);
+        } catch (err) {
+          console.error('Error loading applications:', err);
+          toast({
+            title: 'Error',
+            description: 'Failed to load applications',
+            variant: 'destructive',
+          });
+        } finally {
+          setLoading(false);
         }
-        
-        setApplications(allApplications);
       };
       
       loadApplications();
@@ -651,45 +679,51 @@ const AdminStartupCalls = () => {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredApplications.map((app) => {
-                    const callTitle = startupCalls.find(call => call.id === app.callId)?.title || 'Unknown Call';
-                    
-                    return (
-                      <TableRow key={app.id}>
-                        <TableCell>
-                          <div className="font-medium">{app.startupName}</div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="font-medium">{callTitle}</div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="font-medium">{app.user.name}</div>
-                          <div className="text-xs text-muted-foreground">{app.user.email}</div>
-                        </TableCell>
-                        <TableCell>{getStatusBadge(app.status)}</TableCell>
-                        <TableCell>
-                          <div className="font-medium">{formatDate(app.submittedAt)}</div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="text-sm">
-                            {app.reviewsCompleted}/{app.reviewsTotal}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end space-x-1">
-                            <Button variant="ghost" size="icon">
-                              <Eye className="h-4 w-4" />
-                              <span className="sr-only">View</span>
-                            </Button>
-                            <Button variant="ghost" size="icon">
+                  filteredApplications.map((app) => (
+                    <TableRow key={app.id}>
+                      <TableCell>
+                        <div className="font-medium">{app.startupName}</div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="font-medium">{app.callTitle || 'Unknown Call'}</div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="font-medium">{app.user.name}</div>
+                        <div className="text-xs text-muted-foreground">{app.user.email}</div>
+                      </TableCell>
+                      <TableCell>{getStatusBadge(app.status)}</TableCell>
+                      <TableCell>
+                        <div className="font-medium">{formatDate(app.submittedAt)}</div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="text-sm">
+                          {app.reviewsCompleted}/{app.reviewsTotal}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end space-x-1">
+                          <Button 
+                            variant="ghost" 
+                            size="icon"
+                            onClick={() => router.push(`/admin/startup-calls/${app.callId}/applications/${app.id}`)}
+                          >
+                            <Eye className="h-4 w-4" />
+                            <span className="sr-only">View</span>
+                          </Button>
+                          {app.pitchDeckUrl && (
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              onClick={() => window.open(app.pitchDeckUrl, '_blank')}
+                            >
                               <Download className="h-4 w-4" />
-                              <span className="sr-only">Download</span>
+                              <span className="sr-only">Download Pitch Deck</span>
                             </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
                 )}
               </TableBody>
             </Table>
