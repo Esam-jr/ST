@@ -2,173 +2,84 @@ import { NextApiRequest, NextApiResponse } from 'next';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '../auth/[...nextauth]';
 import prisma from '@/lib/prisma';
+import { StartupCallStatus, StartupCallApplicationStatus } from '@prisma/client';
 
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
+  // Get the call ID from the URL
   const { id } = req.query;
-  const session = await getServerSession(req, res, authOptions);
 
-  // Check if id is valid
   if (!id || typeof id !== 'string') {
-    return res.status(400).json({ message: 'Invalid startup call ID' });
+    return res.status(400).json({ message: 'Missing or invalid startup call ID' });
   }
 
-  // GET /api/startup-calls/:id - Get a specific startup call
-  if (req.method === 'GET') {
-    try {
-      const startupCall = await prisma.startupCall.findUnique({
-        where: { id }
-      });
+  // Only allow GET requests for now
+  if (req.method !== 'GET') {
+    return res.status(405).json({ message: 'Method not allowed' });
+  }
 
-      if (!startupCall) {
-        return res.status(404).json({ message: 'Startup call not found' });
-      }
+  try {
+    // Get the user's session
+    const session = await getServerSession(req, res, authOptions);
+    const userId = session?.user?.id;
+    const userRole = session?.user?.role;
 
-      // For public access or non-admin users, only published and closed calls are visible
-      if ((!session || session.user.role !== 'ADMIN') && 
-          startupCall.status !== 'PUBLISHED' && 
-          startupCall.status !== 'CLOSED') {
-        return res.status(403).json({ message: 'Not authorized to view this startup call' });
-      }
-
-      // For entrepreneurs, include application status
-      if (session?.user?.role === 'ENTREPRENEUR') {
-        const application = await prisma.startupCallApplication.findFirst({
+    // Fetch the startup call
+    const call = await prisma.startupCall.findUnique({
+      where: {
+        id: id
+      },
+      include: {
+        // Check if the user has applied to this call
+        applications: userId && userRole === 'ENTREPRENEUR' ? {
           where: {
-            callId: id,
-            userId: session.user.id
+            userId: userId
+          },
+          select: {
+            id: true,
+            status: true
           }
-        });
-
-        return res.status(200).json({
-          ...startupCall,
-          applicationStatus: application ? application.status : 'NOT_APPLIED'
-        });
+        } : false
       }
+    });
 
-      return res.status(200).json(startupCall);
-    } catch (error) {
-      console.error('Error fetching startup call:', error);
-      return res.status(500).json({ message: 'Error fetching startup call' });
+    if (!call) {
+      return res.status(404).json({ message: 'Startup call not found' });
     }
+
+    // Check if the entrepreneur has applied to this call
+    let applicationStatus = 'NOT_APPLIED';
+    if (call.applications && call.applications.length > 0) {
+      applicationStatus = call.applications[0].status;
+    }
+
+    // Format the response
+    const formattedCall = {
+      id: call.id,
+      title: call.title,
+      description: call.description,
+      status: call.status,
+      applicationDeadline: call.applicationDeadline.toISOString(),
+      publishedDate: call.publishedDate ? call.publishedDate.toISOString() : null,
+      industry: call.industry,
+      location: call.location,
+      fundingAmount: call.fundingAmount,
+      requirements: call.requirements,
+      eligibilityCriteria: call.eligibilityCriteria,
+      selectionProcess: call.selectionProcess,
+      aboutSponsor: call.aboutSponsor,
+      applicationProcess: call.applicationProcess,
+      applicationStatus: userId && userRole === 'ENTREPRENEUR' ? applicationStatus : undefined
+    };
+
+    return res.status(200).json(formattedCall);
+  } catch (error) {
+    console.error(`Error fetching startup call with ID ${id}:`, error);
+    return res.status(500).json({ 
+      message: 'Error fetching startup call details',
+      error: String(error)
+    });
   }
-
-  // For all other methods, require authentication
-  if (!session) {
-    return res.status(401).json({ message: 'Not authenticated' });
-  }
-
-  // PUT /api/startup-calls/:id - Update a startup call
-  if (req.method === 'PUT') {
-    // Only administrators can update startup calls
-    if (session.user.role !== 'ADMIN') {
-      return res.status(403).json({ message: 'Not authorized to update startup calls' });
-    }
-
-    try {
-      const {
-        title,
-        description,
-        applicationDeadline,
-        industry,
-        location,
-        fundingAmount,
-        requirements,
-        eligibilityCriteria,
-        selectionProcess,
-        aboutSponsor,
-        applicationProcess,
-        status
-      } = req.body;
-
-      // Basic validation
-      if (!title || !description || !applicationDeadline || !industry || !location) {
-        return res.status(400).json({ message: 'Missing required fields' });
-      }
-
-      // Check if the call exists
-      const existingCall = await prisma.startupCall.findUnique({
-        where: { id }
-      });
-
-      if (!existingCall) {
-        return res.status(404).json({ message: 'Startup call not found' });
-      }
-
-      // Update publishedDate if status is changing to PUBLISHED
-      const wasPublished = existingCall.status === 'PUBLISHED';
-      const isBeingPublished = status === 'PUBLISHED' && !wasPublished;
-      
-      // Update startup call
-      const updatedStartupCall = await prisma.startupCall.update({
-        where: { id },
-        data: {
-          title,
-          description,
-          applicationDeadline: new Date(applicationDeadline),
-          publishedDate: isBeingPublished ? new Date() : existingCall.publishedDate,
-          industry,
-          location,
-          fundingAmount,
-          requirements: requirements || [],
-          eligibilityCriteria: eligibilityCriteria || [],
-          selectionProcess: selectionProcess || [],
-          aboutSponsor,
-          applicationProcess,
-          status: status || existingCall.status
-        }
-      });
-
-      return res.status(200).json(updatedStartupCall);
-    } catch (error) {
-      console.error('Error updating startup call:', error);
-      return res.status(500).json({ message: 'Error updating startup call' });
-    }
-  }
-
-  // DELETE /api/startup-calls/:id - Delete a startup call
-  if (req.method === 'DELETE') {
-    // Only administrators can delete startup calls
-    if (session.user.role !== 'ADMIN') {
-      return res.status(403).json({ message: 'Not authorized to delete startup calls' });
-    }
-
-    try {
-      // Check if the call exists
-      const existingCall = await prisma.startupCall.findUnique({
-        where: { id },
-        include: {
-          _count: {
-            select: { applications: true }
-          }
-        }
-      });
-
-      if (!existingCall) {
-        return res.status(404).json({ message: 'Startup call not found' });
-      }
-
-      // If there are applications, don't allow deletion
-      if (existingCall._count.applications > 0) {
-        return res.status(400).json({ 
-          message: 'Cannot delete startup call with existing applications. Archive it instead.' 
-        });
-      }
-
-      // Delete the startup call
-      await prisma.startupCall.delete({
-        where: { id }
-      });
-
-      return res.status(200).json({ message: 'Startup call deleted successfully' });
-    } catch (error) {
-      console.error('Error deleting startup call:', error);
-      return res.status(500).json({ message: 'Error deleting startup call' });
-    }
-  }
-
-  // Return 405 Method Not Allowed for other methods
-  return res.status(405).json({ message: 'Method not allowed' });
 } 

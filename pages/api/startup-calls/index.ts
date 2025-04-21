@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '../auth/[...nextauth]';
 import prisma from '@/lib/prisma';
+import { StartupCallStatus, StartupCallApplicationStatus } from '@prisma/client';
 
 // Define enum for application status
 enum ApplicationStatus {
@@ -48,137 +49,70 @@ export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
-  const session = await getServerSession(req, res, authOptions);
-  
-  // GET - Fetch startup calls
-  if (req.method === 'GET') {
-    try {
-      // Define base query with filtering conditions
-      const queryConditions: any = {
-        where: {},
-        orderBy: { updatedAt: 'desc' }
-      };
-      
-      // Filter based on user role
-      if (session?.user) {
-        // Admin can see all calls
-        if (session.user.role === 'ADMIN') {
-          // No additional filters needed
-        } 
-        // Entrepreneurs can see published and closed calls
-        else if (session.user.role === 'ENTREPRENEUR') {
-          queryConditions.where = {
-            OR: [
-              { status: 'PUBLISHED' },
-              { status: 'CLOSED' }
-            ]
-          };
-        } 
-        // Other authenticated users can see published calls
-        else {
-          queryConditions.where = { status: 'PUBLISHED' };
-        }
-      } 
-      // Unauthenticated users can see published and closed calls
-      else {
-        queryConditions.where = {
-          OR: [
-            { status: 'PUBLISHED' },
-            { status: 'CLOSED' }
-          ]
-        };
-      }
-      
-      // Fetch startup calls from database
-      const startupCalls = await prisma.startupCall.findMany(queryConditions);
-      
-      // For entrepreneurs, include application status for each call
-      if (session?.user?.role === 'ENTREPRENEUR') {
-        // Get all applications for this user
-        const applications = await prisma.startupCallApplication.findMany({
-          where: { userId: session.user.id },
-          select: { callId: true, status: true }
-        });
-        
-        // Create a map of callId to application status
-        const applicationStatusMap = applications.reduce((map: ApplicationStatusMap, app: { callId: string, status: string }) => {
-          map[app.callId] = app.status;
-          return map;
-        }, {} as ApplicationStatusMap);
-        
-        // Add application status to each call
-        const callsWithApplicationStatus = startupCalls.map((call: any) => ({
-          ...call,
-          applicationStatus: applicationStatusMap[call.id] || ApplicationStatus.NOT_APPLIED
-        }));
-        
-        return res.status(200).json(callsWithApplicationStatus);
-      }
-      
-      return res.status(200).json(startupCalls);
-    } catch (error) {
-      console.error('Error fetching startup calls:', error);
-      return res.status(500).json({ message: 'Error fetching startup calls' });
-    }
+  // Only allow GET requests for now
+  if (req.method !== 'GET') {
+    return res.status(405).json({ message: 'Method not allowed' });
   }
-  
-  // POST - Create a new startup call
-  if (req.method === 'POST') {
-    // Only admin can create startup calls
-    if (!session?.user || session.user.role !== 'ADMIN') {
-      return res.status(403).json({ message: 'Unauthorized' });
-    }
-    
-    try {
-      const {
-        title,
-        description,
-        applicationDeadline,
-        industry,
-        location,
-        fundingAmount,
-        requirements,
-        eligibilityCriteria,
-        selectionProcess,
-        aboutSponsor,
-        applicationProcess,
-        status
-      } = req.body;
-      
-      // Basic validation
-      if (!title || !description || !applicationDeadline || !industry || !location) {
-        return res.status(400).json({ message: 'Missing required fields' });
-      }
-      
-      // Create new startup call in database
-      const newStartupCall = await prisma.startupCall.create({
-        data: {
-          title,
-          description,
-          applicationDeadline: new Date(applicationDeadline),
-          publishedDate: status === 'PUBLISHED' ? new Date() : null,
-          industry,
-          location,
-          fundingAmount,
-          requirements: requirements || [],
-          eligibilityCriteria: eligibilityCriteria || [],
-          selectionProcess: selectionProcess || [],
-          aboutSponsor,
-          applicationProcess,
-          status: status || 'DRAFT',
-          createdBy: {
-            connect: { id: session.user.id }
+
+  try {
+    // Get the user's session
+    const session = await getServerSession(req, res, authOptions);
+    const userId = session?.user?.id;
+    const userRole = session?.user?.role;
+
+    // Fetch all startup calls - query params could be used for filtering
+    const calls = await prisma.startupCall.findMany({
+      where: {
+        // You can add additional filters based on query params
+        // Example: status: req.query.status as StartupCallStatus
+      },
+      orderBy: {
+        publishedDate: 'desc'
+      },
+      include: {
+        // For each call, check if the user has applied
+        applications: userId && userRole === 'ENTREPRENEUR' ? {
+          where: {
+            userId: userId
+          },
+          select: {
+            id: true,
+            status: true
           }
-        }
-      });
-      
-      return res.status(201).json(newStartupCall);
-    } catch (error) {
-      console.error('Error creating startup call:', error);
-      return res.status(500).json({ message: 'Error creating startup call' });
-    }
+        } : false
+      }
+    });
+
+    // Transform the data to match the expected format
+    const formattedCalls = calls.map(call => {
+      // Check if the entrepreneur has applied to this call
+      let applicationStatus = 'NOT_APPLIED';
+      if (call.applications && call.applications.length > 0) {
+        applicationStatus = call.applications[0].status;
+      }
+
+      return {
+        id: call.id,
+        title: call.title,
+        description: call.description,
+        status: call.status,
+        applicationDeadline: call.applicationDeadline.toISOString(),
+        publishedDate: call.publishedDate ? call.publishedDate.toISOString() : null,
+        industry: call.industry,
+        location: call.location,
+        fundingAmount: call.fundingAmount,
+        requirements: call.requirements,
+        eligibilityCriteria: call.eligibilityCriteria,
+        selectionProcess: call.selectionProcess,
+        aboutSponsor: call.aboutSponsor,
+        applicationProcess: call.applicationProcess,
+        applicationStatus: userId && userRole === 'ENTREPRENEUR' ? applicationStatus : undefined
+      };
+    });
+
+    return res.status(200).json(formattedCalls);
+  } catch (error) {
+    console.error('Error fetching startup calls:', error);
+    return res.status(500).json({ message: 'Error fetching startup calls', error: String(error) });
   }
-  
-  // For all other HTTP methods
-  return res.status(405).json({ message: 'Method not allowed' });
 } 

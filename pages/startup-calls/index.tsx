@@ -44,20 +44,32 @@ type ApplicationStatus = 'NOT_APPLIED' | 'SUBMITTED' | 'UNDER_REVIEW' | 'APPROVE
 
 interface StartupCall {
   id: string;
-  title: string;
-  description: string;
+  title?: string;
+  description?: string;
   status: CallStatus;
-  applicationDeadline: string;
-  publishedDate: string;
-  industry: string;
-  location: string;
+  applicationDeadline?: string;
+  publishedDate?: string;
+  industry?: string;
+  location?: string;
   fundingAmount?: string;
-  requirements: string[];
-  eligibilityCriteria: string[];
-  selectionProcess: string[];
+  requirements?: string[];
+  eligibilityCriteria?: string[];
+  selectionProcess?: string[];
   aboutSponsor?: string;
-  applicationProcess: string;
+  applicationProcess?: string;
   applicationStatus?: ApplicationStatus;
+  startupName?: string;
+  callId?: string;
+  // Properties from the applications endpoint
+  call?: {
+    id: string;
+    title: string;
+    status: string;
+    applicationDeadline: string;
+    industry: string;
+    location: string;
+    fundingAmount: string;
+  }
 }
 
 export default function StartupCalls() {
@@ -70,13 +82,26 @@ export default function StartupCalls() {
   const [industryFilter, setIndustryFilter] = useState('all');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [activeTab, setActiveTab] = useState('open');
+  const [myApplications, setMyApplications] = useState<StartupCall[]>([]);
 
   // Fetch startup calls from API
   useEffect(() => {
     const fetchStartupCalls = async () => {
       try {
+        setLoading(true);
         const response = await axios.get('/api/startup-calls');
         setStartupCalls(response.data);
+        
+        // If user is an entrepreneur, fetch their applications
+        if (session?.user?.role === 'ENTREPRENEUR') {
+          try {
+            const applicationsResponse = await axios.get('/api/applications/my-applications');
+            setMyApplications(applicationsResponse.data);
+          } catch (error) {
+            console.error('Error fetching applications:', error);
+            // Don't show an error toast here to avoid confusion if only this part fails
+          }
+        }
       } catch (error) {
         console.error('Error fetching startup calls:', error);
         toast({
@@ -90,12 +115,32 @@ export default function StartupCalls() {
     };
 
     fetchStartupCalls();
-  }, [toast]);
+  }, [toast, session]);
+
+  // Set active tab based on URL parameter
+  useEffect(() => {
+    if (router.isReady) {
+      const { tab } = router.query;
+      if (tab === 'myapplications' && session?.user?.role === 'ENTREPRENEUR') {
+        setActiveTab('myapplications');
+      } else if (tab === 'closed') {
+        setActiveTab('closed');
+      } else {
+        setActiveTab('open');
+      }
+    }
+  }, [router.isReady, router.query, session]);
+
+  // Update URL when tab changes
+  const handleTabChange = (value: string) => {
+    setActiveTab(value);
+    router.push(`/startup-calls?tab=${value}`, undefined, { shallow: true });
+  };
 
   // Filter and sort functions
   const filteredCalls = startupCalls.filter(call => {
-    const matchesQuery = call.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                       call.description.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesQuery = call.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                       call.description?.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesIndustry = industryFilter === 'all' || call.industry === industryFilter;
     const matchesStatus = 
       (activeTab === 'open' && call.status === 'PUBLISHED') || 
@@ -104,11 +149,30 @@ export default function StartupCalls() {
     return matchesQuery && matchesIndustry && matchesStatus;
   });
 
+  // Filter applications (already filtered on server, just handle search)
+  const filteredApplications = myApplications.filter(call => {
+    const matchesQuery = 
+      (call.title?.toLowerCase().includes(searchQuery.toLowerCase()) || false) ||
+      (call.description?.toLowerCase().includes(searchQuery.toLowerCase()) || false) ||
+      (call.startupName?.toLowerCase().includes(searchQuery.toLowerCase()) || false);
+    const matchesIndustry = industryFilter === 'all' || call.industry === industryFilter;
+    
+    return matchesQuery && matchesIndustry;
+  });
+
   const sortedCalls = [...filteredCalls].sort((a, b) => {
     if (sortDirection === 'asc') {
-      return new Date(a.publishedDate).getTime() - new Date(b.publishedDate).getTime();
+      return new Date(a.publishedDate || '').getTime() - new Date(b.publishedDate || '').getTime();
     } else {
-      return new Date(b.publishedDate).getTime() - new Date(a.publishedDate).getTime();
+      return new Date(b.publishedDate || '').getTime() - new Date(a.publishedDate || '').getTime();
+    }
+  });
+
+  const sortedApplications = [...filteredApplications].sort((a, b) => {
+    if (sortDirection === 'asc') {
+      return new Date(a.publishedDate || '').getTime() - new Date(b.publishedDate || '').getTime();
+    } else {
+      return new Date(b.publishedDate || '').getTime() - new Date(a.publishedDate || '').getTime();
     }
   });
 
@@ -150,7 +214,7 @@ export default function StartupCalls() {
 
   const getIndustries = () => {
     const industries = new Set<string>();
-    startupCalls.forEach(call => industries.add(call.industry));
+    startupCalls.forEach(call => industries.add(call.industry || ''));
     return Array.from(industries);
   };
 
@@ -226,10 +290,13 @@ export default function StartupCalls() {
             </div>
 
             {/* Tabs for different call types */}
-            <Tabs defaultValue="open" value={activeTab} onValueChange={setActiveTab}>
+            <Tabs defaultValue="open" value={activeTab} onValueChange={handleTabChange}>
               <TabsList className="bg-muted/50 backdrop-blur-sm">
                 <TabsTrigger value="open">Open Calls</TabsTrigger>
                 <TabsTrigger value="closed">Closed Calls</TabsTrigger>
+                {session?.user?.role === 'ENTREPRENEUR' && (
+                  <TabsTrigger value="myapplications">My Applications</TabsTrigger>
+                )}
               </TabsList>
               
               <TabsContent value="open" className="mt-6 space-y-6">
@@ -281,6 +348,39 @@ export default function StartupCalls() {
                   ))
                 )}
               </TabsContent>
+              
+              {session?.user?.role === 'ENTREPRENEUR' && (
+                <TabsContent value="myapplications" className="mt-6 space-y-6">
+                  {sortedApplications.length === 0 ? (
+                    <div className="rounded-lg border border-dashed p-8 text-center">
+                      <h3 className="mb-2 text-lg font-medium">No applications found</h3>
+                      <p className="text-muted-foreground">
+                        You haven't applied to any startup calls yet. Browse open calls to find opportunities.
+                      </p>
+                      <Button 
+                        className="mt-4" 
+                        variant="outline" 
+                        onClick={() => setActiveTab('open')}
+                      >
+                        Browse Open Calls
+                      </Button>
+                    </div>
+                  ) : (
+                    sortedApplications.map((app) => (
+                      <CallCard 
+                        key={app.id} 
+                        call={app} 
+                        onViewDetails={() => router.push(`/startup-calls/${app.call?.id || app.callId || app.id}`)}
+                        showApplicationStatus={true}
+                        onViewApplication={() => router.push(`/applications/${app.id}`)}
+                        formatDate={formatDate}
+                        getDaysLeft={getDaysLeft}
+                        getStatusBadge={getStatusBadge}
+                      />
+                    ))
+                  )}
+                </TabsContent>
+              )}
             </Tabs>
           </div>
         </main>
@@ -310,7 +410,14 @@ function CallCard({
   getDaysLeft,
   getStatusBadge
 }: CallCardProps) {
-  const daysLeft = getDaysLeft(call.applicationDeadline);
+  // Handle data that might be in the nested call object or at the top level
+  const title = call.title || (call.call?.title) || (call.startupName ? `Application for ${call.startupName}` : 'Application');
+  const industry = call.industry || call.call?.industry || '';
+  const location = call.location || call.call?.location || '';
+  const fundingAmount = call.fundingAmount || call.call?.fundingAmount;
+  const deadline = call.applicationDeadline || call.call?.applicationDeadline;
+  
+  const daysLeft = deadline ? getDaysLeft(deadline) : 0;
   const isExpired = daysLeft <= 0;
   
   return (
@@ -319,14 +426,14 @@ function CallCard({
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div>
             <div className="flex items-center gap-2">
-              <CardTitle className="text-xl">{call.title}</CardTitle>
+              <CardTitle className="text-xl">{title}</CardTitle>
               {call.status === 'CLOSED' && (
                 <Badge variant="secondary" className="bg-gray-200 text-gray-700">CLOSED</Badge>
               )}
             </div>
             <CardDescription className="mt-1 max-w-3xl">
-              {call.industry} • {call.location}
-              {call.fundingAmount && ` • Funding: ${call.fundingAmount}`}
+              {industry && `${industry}`}{location && industry ? ` • ${location}` : location}
+              {fundingAmount && (industry || location ? ` • Funding: ${fundingAmount}` : `Funding: ${fundingAmount}`)}
             </CardDescription>
           </div>
           
@@ -340,31 +447,39 @@ function CallCard({
       </CardHeader>
       
       <CardContent>
-        <p className="line-clamp-3 text-sm text-muted-foreground">
-          {call.description}
-        </p>
+        {call.description && (
+          <p className="line-clamp-3 text-sm text-muted-foreground">
+            {call.description}
+          </p>
+        )}
         
         <div className="mt-4 flex flex-wrap gap-2">
-          {call.requirements.map((req, index) => (
+          {call.requirements?.map?.((req, index) => (
             <Badge key={index} variant="outline">{req}</Badge>
           ))}
         </div>
         
         <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-3 text-sm">
-          <div className="flex items-center text-muted-foreground">
-            <Calendar className="mr-1.5 h-4 w-4" />
-            <span>Published: {formatDate(call.publishedDate)}</span>
-          </div>
+          {call.publishedDate && (
+            <div className="flex items-center text-muted-foreground">
+              <Calendar className="mr-1.5 h-4 w-4" />
+              <span>Published: {formatDate(call.publishedDate)}</span>
+            </div>
+          )}
           
-          <div className="flex items-center text-muted-foreground">
-            <Calendar className="mr-1.5 h-4 w-4" />
-            <span>Deadline: {formatDate(call.applicationDeadline)}</span>
-          </div>
+          {deadline && (
+            <div className="flex items-center text-muted-foreground">
+              <Calendar className="mr-1.5 h-4 w-4" />
+              <span>Deadline: {formatDate(deadline)}</span>
+            </div>
+          )}
           
-          <div className={`flex items-center ${isExpired ? 'text-red-500' : 'text-amber-500'}`}>
-            <Clock className="mr-1.5 h-4 w-4" />
-            <span>{isExpired ? 'Expired' : `${daysLeft} days left`}</span>
-          </div>
+          {deadline && (
+            <div className={`flex items-center ${isExpired ? 'text-red-500' : 'text-amber-500'}`}>
+              <Clock className="mr-1.5 h-4 w-4" />
+              <span>{isExpired ? 'Expired' : `${daysLeft} days left`}</span>
+            </div>
+          )}
         </div>
       </CardContent>
       
