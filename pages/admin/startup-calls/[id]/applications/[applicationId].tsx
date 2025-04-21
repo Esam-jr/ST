@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { useSession } from 'next-auth/react';
+import axios from 'axios';
 import Layout from '@/components/layout/Layout';
 import {
   Card,
@@ -29,6 +30,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
+import ReviewerAssignment from '@/components/admin/ReviewerAssignment';
 
 // Application status type
 type ApplicationStatus = 'SUBMITTED' | 'UNDER_REVIEW' | 'APPROVED' | 'REJECTED' | 'WITHDRAWN';
@@ -80,14 +82,40 @@ interface ApplicationData {
   } | null;
 }
 
+// Review status type
+type ReviewStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'OVERDUE';
+
+// Review data type
+interface ReviewData {
+  id: string;
+  status: ReviewStatus;
+  score?: number;
+  innovationScore?: number;
+  marketScore?: number;
+  teamScore?: number;
+  executionScore?: number;
+  feedback?: string;
+  assignedAt: string;
+  dueDate?: string;
+  completedAt?: string;
+  reviewer: {
+    id: string;
+    name: string;
+    image?: string;
+  };
+}
+
 export default function ApplicationDetails() {
   const router = useRouter();
   const { id, applicationId } = router.query;
   const { data: session, status } = useSession();
   const [loading, setLoading] = useState(true);
   const [application, setApplication] = useState<ApplicationData | null>(null);
+  const [reviews, setReviews] = useState<ReviewData[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [updating, setUpdating] = useState(false);
+  const [isAssigningReviewer, setIsAssigningReviewer] = useState(false);
+  const [reviewsLoading, setReviewsLoading] = useState(false);
 
   // Fetch application data
   useEffect(() => {
@@ -122,6 +150,28 @@ export default function ApplicationDetails() {
     
     fetchApplication();
   }, [id, applicationId, router, status]);
+
+  // Fetch reviews for the application
+  const fetchReviews = async () => {
+    if (!applicationId || status !== 'authenticated') return;
+    
+    try {
+      setReviewsLoading(true);
+      const response = await axios.get(`/api/applications/${applicationId}/reviews`);
+      setReviews(response.data);
+    } catch (error) {
+      console.error('Error fetching reviews:', error);
+    } finally {
+      setReviewsLoading(false);
+    }
+  };
+
+  // Fetch reviews when application is loaded
+  useEffect(() => {
+    if (application) {
+      fetchReviews();
+    }
+  }, [application, applicationId]);
 
   // Redirect if not authenticated or not an admin
   useEffect(() => {
@@ -169,6 +219,7 @@ export default function ApplicationDetails() {
 
   // Format date for display
   const formatDate = (dateString: string) => {
+    if (!dateString) return 'Not set';
     return new Date(dateString).toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'long',
@@ -189,6 +240,22 @@ export default function ApplicationDetails() {
         return <Badge variant="outline" className="bg-red-50 text-red-600 hover:bg-red-50">Rejected</Badge>;
       case 'WITHDRAWN':
         return <Badge variant="outline" className="bg-slate-50 text-slate-600 hover:bg-slate-50">Withdrawn</Badge>;
+      default:
+        return <Badge variant="outline">Unknown</Badge>;
+    }
+  };
+
+  // Get review status badge
+  const getReviewStatusBadge = (status: ReviewStatus) => {
+    switch (status) {
+      case 'PENDING':
+        return <Badge variant="outline" className="bg-blue-50 text-blue-600 hover:bg-blue-50">Pending</Badge>;
+      case 'IN_PROGRESS':
+        return <Badge variant="outline" className="bg-amber-50 text-amber-600 hover:bg-amber-50">In Progress</Badge>;
+      case 'COMPLETED':
+        return <Badge variant="outline" className="bg-green-50 text-green-600 hover:bg-green-50">Completed</Badge>;
+      case 'OVERDUE':
+        return <Badge variant="outline" className="bg-red-50 text-red-600 hover:bg-red-50">Overdue</Badge>;
       default:
         return <Badge variant="outline">Unknown</Badge>;
     }
@@ -324,6 +391,7 @@ export default function ApplicationDetails() {
               <TabsTrigger value="details">Application Details</TabsTrigger>
               <TabsTrigger value="documents">Documents</TabsTrigger>
               <TabsTrigger value="founder">Founder Info</TabsTrigger>
+              <TabsTrigger value="reviews">Reviews</TabsTrigger>
             </TabsList>
             
             <TabsContent value="details" className="space-y-6">
@@ -532,9 +600,146 @@ export default function ApplicationDetails() {
                 </CardContent>
               </Card>
             </TabsContent>
+            
+            <TabsContent value="reviews" className="space-y-6">
+              <Card className="shadow-sm border">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <div>
+                    <CardTitle>Reviews & Evaluation</CardTitle>
+                    <CardDescription>Manage review assignments and track evaluation progress</CardDescription>
+                  </div>
+                  <Button onClick={() => setIsAssigningReviewer(true)}>
+                    Assign Reviewer
+                  </Button>
+                </CardHeader>
+                <CardContent className="pt-6">
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between bg-muted/20 p-4 rounded-lg">
+                      <div className="space-y-1">
+                        <h3 className="font-medium">Review Progress</h3>
+                        <div className="text-sm text-muted-foreground">
+                          {application.reviewsCompleted} of {application.reviewsTotal} reviews completed
+                        </div>
+                      </div>
+                      <div className="w-32 h-2 bg-muted rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-blue-500 rounded-full"
+                          style={{ width: `${Math.min(100, (application.reviewsCompleted / application.reviewsTotal) * 100)}%` }}
+                        ></div>
+                      </div>
+                    </div>
+                    
+                    {reviewsLoading ? (
+                      <div className="flex justify-center py-8">
+                        <LoadingSpinner />
+                      </div>
+                    ) : reviews.length === 0 ? (
+                      <div className="text-center py-8 border rounded-lg">
+                        <FileText className="h-12 w-12 mx-auto text-muted-foreground opacity-50" />
+                        <h3 className="mt-4 text-lg font-medium">No Reviews Yet</h3>
+                        <p className="mt-2 text-muted-foreground max-w-md mx-auto">
+                          No reviewers have been assigned to this application yet. Use the "Assign Reviewer" button to add reviewers.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {reviews.map((review) => (
+                          <div key={review.id} className="border rounded-lg p-4">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div className="flex items-center space-x-3">
+                                <div className="flex-shrink-0 h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                                  {review.reviewer.image ? (
+                                    <img 
+                                      src={review.reviewer.image} 
+                                      alt={review.reviewer.name} 
+                                      className="h-10 w-10 rounded-full"
+                                    />
+                                  ) : (
+                                    <User className="h-5 w-5 text-primary" />
+                                  )}
+                                </div>
+                                <div>
+                                  <div className="font-medium">{review.reviewer.name}</div>
+                                  <div className="text-sm text-muted-foreground">
+                                    Assigned: {formatDate(review.assignedAt)}
+                                  </div>
+                                </div>
+                              </div>
+                              
+                              <div className="flex items-center gap-2">
+                                {getReviewStatusBadge(review.status)}
+                                {review.dueDate && (
+                                  <div className="text-xs flex items-center">
+                                    <Clock className="h-3 w-3 mr-1 text-muted-foreground" />
+                                    <span>Due: {formatDate(review.dueDate)}</span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            
+                            {review.status === 'COMPLETED' && (
+                              <div className="mt-4 pt-4 border-t">
+                                <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-4">
+                                  <div className="text-center">
+                                    <div className="text-2xl font-bold">{review.score}</div>
+                                    <div className="text-xs text-muted-foreground">Overall Score</div>
+                                  </div>
+                                  {review.innovationScore !== undefined && (
+                                    <div className="text-center">
+                                      <div className="text-lg font-medium">{review.innovationScore}</div>
+                                      <div className="text-xs text-muted-foreground">Innovation</div>
+                                    </div>
+                                  )}
+                                  {review.marketScore !== undefined && (
+                                    <div className="text-center">
+                                      <div className="text-lg font-medium">{review.marketScore}</div>
+                                      <div className="text-xs text-muted-foreground">Market</div>
+                                    </div>
+                                  )}
+                                  {review.teamScore !== undefined && (
+                                    <div className="text-center">
+                                      <div className="text-lg font-medium">{review.teamScore}</div>
+                                      <div className="text-xs text-muted-foreground">Team</div>
+                                    </div>
+                                  )}
+                                  {review.executionScore !== undefined && (
+                                    <div className="text-center">
+                                      <div className="text-lg font-medium">{review.executionScore}</div>
+                                      <div className="text-xs text-muted-foreground">Execution</div>
+                                    </div>
+                                  )}
+                                </div>
+                                
+                                {review.feedback && (
+                                  <div>
+                                    <h4 className="text-sm font-medium mb-1">Feedback:</h4>
+                                    <p className="text-sm whitespace-pre-line">{review.feedback}</p>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
           </Tabs>
         </div>
       </div>
+
+      {/* Dialog for assigning reviewers */}
+      {application && (
+        <ReviewerAssignment 
+          applicationId={applicationId as string}
+          applicationName={application.startupName}
+          open={isAssigningReviewer}
+          onClose={() => setIsAssigningReviewer(false)}
+          onAssigned={fetchReviews}
+        />
+      )}
     </Layout>
   );
 } 

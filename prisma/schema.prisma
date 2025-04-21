@@ -23,6 +23,7 @@ model User {
   meetings         Meeting[]
   notifications    Notification[]
   reviews          Review[]
+  applicationReviews ApplicationReview[]
   sessions         Session[]
   sponsorships     Sponsorship[]            @relation("SponsorToSponsorship")
   startups         Startup[]                @relation("FounderToStartup")
@@ -266,6 +267,29 @@ model StartupCallApplication {
   call                 StartupCall                  @relation(fields: [callId], references: [id])
   startup              Startup?                     @relation(fields: [startupId], references: [id])
   user                 User                         @relation(fields: [userId], references: [id])
+  reviews              ApplicationReview[]
+}
+
+model ApplicationReview {
+  id              String               @id @default(cuid())
+  applicationId   String
+  reviewerId      String
+  score           Float?
+  innovationScore Float?
+  marketScore     Float?
+  teamScore       Float?
+  executionScore  Float?
+  feedback        String?
+  status          ReviewStatus         @default(PENDING)
+  assignedAt      DateTime             @default(now())
+  dueDate         DateTime?
+  completedAt     DateTime?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  application     StartupCallApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  reviewer        User                 @relation(fields: [reviewerId], references: [id])
+
+  @@unique([applicationId, reviewerId])
 }
 
 model Notification {
@@ -323,4 +347,11 @@ enum StartupCallApplicationStatus {
   APPROVED
   REJECTED
   WITHDRAWN
+}
+
+enum ReviewStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  OVERDUE
 }
