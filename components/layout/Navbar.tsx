@@ -27,6 +27,19 @@ export default function Navbar() {
     setIsMenuOpen(false);
   }, [router.pathname]);
 
+  
+  
+    // Determine the appropriate dashboard link based on the user's role
+    const getDashboardLink = () => {
+      if (session?.user?.role === 'ENTREPRENEUR') {
+        return '/entrepreneur-dashboard';
+      } else if (session?.user?.role === 'SPONSOR') {
+        return '/sponsor-dashboard';
+      } else {
+        return '/'; 
+      }
+    };
+
   return (
     <nav className="sticky top-0 z-40 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -116,7 +129,7 @@ export default function Navbar() {
                     </div>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem asChild>
-                      <Link href="/dashboard">Dashboard</Link>
+                      <Link href={getDashboardLink()}>Dashboard</Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
                       <Link href="/profile">Profile</Link>
@@ -215,7 +228,7 @@ export default function Navbar() {
               <>
                 <div className="my-2 border-t border-border pt-2"></div>
                 <Link
-                  href="/dashboard"
+                  href={getDashboardLink()} 
                   className="block rounded-md px-3 py-2 text-sm font-medium text-foreground/60 hover:bg-accent hover:text-accent-foreground"
                 >
                   Dashboard
