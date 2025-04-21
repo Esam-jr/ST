@@ -55,6 +55,17 @@ export default function AdminDashboard() {
     }
   }, [status, session, router]);
 
+  // Set active section based on query parameter
+  useEffect(() => {
+    if (router.query.section && typeof router.query.section === 'string') {
+      const section = router.query.section;
+      if (['overview', 'startup-calls', 'sponsor-calls', 'users', 'reviews', 
+           'financials', 'notifications', 'reports', 'settings'].includes(section)) {
+        setActiveSection(section);
+      }
+    }
+  }, [router.query.section]);
+
   // Handle responsive sidebar behavior
   useEffect(() => {
     const handleResize = () => {
