@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth/next';
 import { authOptions } from '../../auth/[...nextauth]';
 import prisma from '@/lib/prisma';
 import withPrisma from '@/lib/prisma-wrapper';
+import { sendReviewAssignmentEmail } from '@/lib/email';
 
 export default async function handler(
   req: NextApiRequest,
@@ -123,6 +124,25 @@ export default async function handler(
         },
       })
     );
+
+    // Create a proper review link
+    const reviewLink = `${process.env.NEXTAUTH_URL}/reviewer-dashboard`;
+
+    // Send email notification to reviewer if email sending is enabled
+    if (process.env.EMAIL_SERVER_HOST) {
+      try {
+        await sendReviewAssignmentEmail(
+          reviewer.email,
+          reviewer.name || 'Reviewer',
+          application.startupName,
+          dueDateValue,
+          reviewLink
+        );
+      } catch (emailError) {
+        console.error('Failed to send email notification:', emailError);
+        // We don't want to fail the assignment if just the email fails
+      }
+    }
 
     return res.status(200).json({
       message: 'Reviewer assigned successfully',

@@ -25,10 +25,13 @@ import {
   Globe,
   Users,
   Calendar as CalendarIcon,
+  Save,
 } from 'lucide-react';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import ErrorAlert from '@/components/ui/ErrorAlert';
 import { useToast } from '@/hooks/use-toast';
+import { ConfirmationDialog } from '@/components/ui/confirmation-dialog';
+import { debounce } from 'lodash';
 
 // Define types
 type ApplicationStatus = 'SUBMITTED' | 'UNDER_REVIEW' | 'APPROVED' | 'REJECTED' | 'WITHDRAWN';
@@ -91,6 +94,9 @@ export default function ReviewerReview() {
   const [application, setApplication] = useState<Application | null>(null);
   const [reviewAssignment, setReviewAssignment] = useState<ApplicationReview | null>(null);
   const [error, setError] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   
   // Review form state
   const [innovationScore, setInnovationScore] = useState(5);
@@ -100,6 +106,72 @@ export default function ReviewerReview() {
   const [feedback, setFeedback] = useState('');
   
   const { toast } = useToast();
+
+  // Generate a unique key for localStorage based on the review assignment ID
+  const getStorageKey = () => {
+    return `review_draft_${id}`;
+  };
+
+  // Save draft to localStorage
+  const saveDraft = () => {
+    if (!id || isViewMode || (reviewAssignment && reviewAssignment.status === 'COMPLETED')) return;
+    
+    const draftData = {
+      innovationScore,
+      marketScore,
+      teamScore,
+      executionScore,
+      feedback,
+      timestamp: new Date().toISOString(),
+    };
+    
+    try {
+      localStorage.setItem(getStorageKey(), JSON.stringify(draftData));
+      setLastSaved(new Date());
+      setIsSaving(false);
+    } catch (error) {
+      console.error('Error saving draft:', error);
+    }
+  };
+
+  // Create debounced version of saveDraft
+  const debouncedSaveDraft = debounce(() => {
+    setIsSaving(true);
+    saveDraft();
+  }, 2000);
+
+  // Load draft from localStorage
+  const loadDraft = () => {
+    if (!id || isViewMode || (reviewAssignment && reviewAssignment.status === 'COMPLETED')) return;
+    
+    try {
+      const savedDraft = localStorage.getItem(getStorageKey());
+      if (savedDraft) {
+        const draftData = JSON.parse(savedDraft);
+        
+        // Only load if there's actual data
+        if (draftData.innovationScore) setInnovationScore(draftData.innovationScore);
+        if (draftData.marketScore) setMarketScore(draftData.marketScore);
+        if (draftData.teamScore) setTeamScore(draftData.teamScore);
+        if (draftData.executionScore) setExecutionScore(draftData.executionScore);
+        if (draftData.feedback) setFeedback(draftData.feedback);
+        if (draftData.timestamp) setLastSaved(new Date(draftData.timestamp));
+        
+        toast({
+          title: "Draft loaded",
+          description: "Your previous review draft has been loaded",
+        });
+      }
+    } catch (error) {
+      console.error('Error loading draft:', error);
+    }
+  };
+
+  // Clear draft from localStorage after submission
+  const clearDraft = () => {
+    if (!id) return;
+    localStorage.removeItem(getStorageKey());
+  };
 
   // Redirect if not authenticated or not reviewer
   useEffect(() => {
@@ -149,6 +221,9 @@ export default function ReviewerReview() {
           setTeamScore(reviewData.teamScore || 5);
           setExecutionScore(reviewData.executionScore || 5);
           setFeedback(reviewData.feedback || '');
+        } else {
+          // Otherwise, try to load draft data
+          loadDraft();
         }
       } catch (error: any) {
         console.error('Error fetching review data:', error);
@@ -161,12 +236,31 @@ export default function ReviewerReview() {
     fetchData();
   }, [id, sessionStatus, session, toast]);
 
+  // Auto-save effect
+  useEffect(() => {
+    if (isViewMode || (reviewAssignment && reviewAssignment.status === 'COMPLETED')) return;
+    
+    debouncedSaveDraft();
+    
+    // Clean up the debounce on unmount
+    return () => {
+      debouncedSaveDraft.cancel();
+    };
+  }, [innovationScore, marketScore, teamScore, executionScore, feedback]);
+
   // Helper functions
   const formatDate = (date: string) => {
     return new Date(date).toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'short',
       day: 'numeric'
+    });
+  };
+
+  const formatTime = (date: Date) => {
+    return date.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit'
     });
   };
 
@@ -187,10 +281,14 @@ export default function ReviewerReview() {
     }
   };
   
-  // Handle review submission
-  const handleSubmitReview = async (e: React.FormEvent) => {
+  // Handle review form submission request
+  const handleSubmitRequest = (e: React.FormEvent) => {
     e.preventDefault();
-    
+    setShowConfirmDialog(true);
+  };
+  
+  // Handle review submission after confirmation
+  const handleSubmitReview = async () => {
     if (!reviewAssignment || !application) return;
     
     setError('');
@@ -209,6 +307,9 @@ export default function ReviewerReview() {
         feedback,
       });
       
+      // Clear the draft after successful submission
+      clearDraft();
+      
       toast({
         title: 'Review Submitted',
         description: 'Your review has been submitted successfully',
@@ -220,6 +321,7 @@ export default function ReviewerReview() {
       console.error('Error submitting review:', error);
       setError(error.response?.data?.message || 'Failed to submit review');
       setSubmitting(false);
+      setShowConfirmDialog(false);
     }
   };
 
@@ -448,11 +550,19 @@ export default function ReviewerReview() {
                     Please evaluate this application based on the criteria below
                   </CardDescription>
                 )}
+                {!isViewMode && reviewAssignment.status !== 'COMPLETED' && lastSaved && (
+                  <div className="flex items-center text-sm text-muted-foreground mt-2">
+                    <Save className="h-3.5 w-3.5 mr-1" />
+                    <span>
+                      {isSaving ? 'Saving...' : `Draft saved at ${formatTime(lastSaved)}`}
+                    </span>
+                  </div>
+                )}
               </CardHeader>
               <CardContent>
                 {error && <ErrorAlert message={error} />}
                 
-                <form onSubmit={handleSubmitReview} className="space-y-6">
+                <form onSubmit={handleSubmitRequest} className="space-y-6">
                   <div className="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-2">
                     {/* Innovation Score */}
                     <div>
@@ -618,6 +728,17 @@ export default function ReviewerReview() {
           </div>
         </main>
       </div>
+
+      {/* Confirmation Dialog */}
+      <ConfirmationDialog
+        isOpen={showConfirmDialog}
+        onClose={() => setShowConfirmDialog(false)}
+        onConfirm={handleSubmitReview}
+        title="Submit Review"
+        description="Are you sure you want to submit this review? Once submitted, it cannot be edited."
+        confirmText="Submit Review"
+        cancelText="Cancel"
+      />
     </Layout>
   );
 } 

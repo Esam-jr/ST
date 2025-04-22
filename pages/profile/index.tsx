@@ -16,6 +16,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
+import NotificationsTab from '@/components/profile/NotificationsTab';
 
 // Define extended session user type
 interface ExtendedUser {
@@ -322,18 +323,7 @@ export default function Profile() {
             </TabsContent>
             
             <TabsContent value="notifications" className="space-y-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Notification Preferences</CardTitle>
-                  <CardDescription>Manage how you receive notifications</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-muted-foreground">This section will allow you to configure email, browser, and mobile notification preferences.</p>
-                  <div className="mt-4 rounded-md bg-primary/5 p-4">
-                    <p className="text-sm">This feature is coming soon.</p>
-                  </div>
-                </CardContent>
-              </Card>
+              <NotificationsTab />
             </TabsContent>
           </Tabs>
         </main>

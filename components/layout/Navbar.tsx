@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
+import NotificationDropdown from '@/components/ui/NotificationDropdown';
 
 export default function Navbar() {
   const { data: session } = useSession();
@@ -108,44 +109,47 @@ export default function Navbar() {
             <ThemeToggle />
             
             {session ? (
-              <div className="hidden sm:block">
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" className="relative h-8 w-8 rounded-full">
-                      <Avatar className="h-8 w-8">
-                        <AvatarImage src={session.user?.image || undefined} alt={session.user?.name || 'User'} />
-                        <AvatarFallback>{session.user?.name?.charAt(0) || 'U'}</AvatarFallback>
-                      </Avatar>
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-56">
-                    <div className="flex items-center justify-start gap-2 p-2">
-                      <div className="flex flex-col space-y-1 leading-none">
-                        {session.user?.name && <p className="font-medium">{session.user.name}</p>}
-                        {session.user?.email && (
-                          <p className="w-[200px] truncate text-sm text-muted-foreground">
-                            {session.user.email}
-                          </p>
-                        )}
+              <>
+                <NotificationDropdown />
+                <div className="hidden sm:block">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon" className="relative h-8 w-8 rounded-full">
+                        <Avatar className="h-8 w-8">
+                          <AvatarImage src={session.user?.image || undefined} alt={session.user?.name || 'User'} />
+                          <AvatarFallback>{session.user?.name?.charAt(0) || 'U'}</AvatarFallback>
+                        </Avatar>
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-56">
+                      <div className="flex items-center justify-start gap-2 p-2">
+                        <div className="flex flex-col space-y-1 leading-none">
+                          {session.user?.name && <p className="font-medium">{session.user.name}</p>}
+                          {session.user?.email && (
+                            <p className="w-[200px] truncate text-sm text-muted-foreground">
+                              {session.user.email}
+                            </p>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem asChild>
-                      <Link href={getDashboardLink()}>Dashboard</Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                      <Link href="/profile">Profile</Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem 
-                      onClick={() => signOut({ callbackUrl: '/' })}
-                      className="cursor-pointer"
-                    >
-                      Sign out
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem asChild>
+                        <Link href={getDashboardLink()}>Dashboard</Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild>
+                        <Link href="/profile">Profile</Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem 
+                        onClick={() => signOut({ callbackUrl: '/' })}
+                        className="cursor-pointer"
+                      >
+                        Sign out
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              </>
             ) : (
               <div className="hidden space-x-2 sm:flex">
                 <Button variant="outline" asChild>
