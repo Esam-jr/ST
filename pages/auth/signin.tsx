@@ -24,6 +24,16 @@ export default function SignIn() {
     }
   }, [registered]);
 
+  const redirectToDashboard = (role: string) => {
+    const routes: Record<string, string> = {
+      ADMIN: '/admin',
+      SPONSOR: '/sponsor-dashboard',
+      ENTREPRENEUR: '/startup-calls',
+      REVIEWER: '/reviewer-dashboard',
+    };
+    return routes[role] || '/profile';
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -43,16 +53,7 @@ export default function SignIn() {
       } else {
         const session = await getSession();
         const role = session?.user?.role;
-  
-        if (role === 'ADMIN') {
-          router.push('/admin');
-        } else if (role === 'SPONSOR') {
-          router.push('/sponsor-dashboard');
-        } else if (role === 'ENTREPRENEUR') {
-          router.push('/startup-calls');
-        } else {
-          router.push('/profile');
-        }
+        router.push(redirectToDashboard(role || ''));
       }
     } catch (err) {
       console.error(err);
@@ -176,16 +177,7 @@ export default function SignIn() {
                           setTimeout(async () => {
                             const session = await getSession();
                             const role = session?.user?.role;
-                            
-                            if (role === 'ADMIN') {
-                              router.push('/admin');
-                            } else if (role === 'SPONSOR') {
-                              router.push('/sponsor-dashboard');
-                            } else if (role === 'ENTREPRENEUR') {
-                              router.push('/startup-calls');
-                            } else {
-                              router.push('/profile');
-                            }
+                            router.push(redirectToDashboard(role || 'USER'));
                           }, 500);
                         } else {
                           setError(`Authentication error: ${result.error}`);
@@ -220,16 +212,7 @@ export default function SignIn() {
                           setTimeout(async () => {
                             const session = await getSession();
                             const role = session?.user?.role;
-                            
-                            if (role === 'ADMIN') {
-                              router.push('/admin');
-                            } else if (role === 'SPONSOR') {
-                              router.push('/sponsor-dashboard');
-                            } else if (role === 'ENTREPRENEUR') {
-                              router.push('/startup-calls');
-                            } else {
-                              router.push('/profile');
-                            }
+                            router.push(redirectToDashboard(role || 'USER'));
                           }, 500);
                         } else {
                           setError(`Authentication error: ${result.error}`);
