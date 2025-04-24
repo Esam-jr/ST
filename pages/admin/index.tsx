@@ -244,13 +244,13 @@ export default function AdminDashboard() {
                 </h1>
               </div>
               <div className="flex items-center space-x-2">
-                <Button variant="outline" size="sm">
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => setActiveSection('notifications')}
+                >
                   <Bell className="h-4 w-4 mr-1" />
                   <span className="sr-only sm:not-sr-only">Notifications</span>
-                </Button>
-                <Button size="sm">
-                  <PlusCircle className="h-4 w-4 mr-1" />
-                  <span className="sr-only sm:not-sr-only">New Item</span>
                 </Button>
               </div>
             </div>
