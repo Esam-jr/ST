@@ -25,3 +25,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Temporary scripts and files
+checkSponsorship.js
+query-db.js
+temp-schema.prisma
