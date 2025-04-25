@@ -7,7 +7,9 @@ import {
   FileUp, 
   Settings, 
   BarChart3, 
-  Bell 
+  Bell,
+  Calendar,
+  FileText
 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 
@@ -16,6 +18,14 @@ const AdminQuickActions: React.FC = () => {
   
   const navigateToNotifications = () => {
     router.push('/admin?section=notifications');
+  };
+  
+  const navigateToAdvertisements = () => {
+    router.push('/admin?section=advertisements');
+  };
+  
+  const navigateToEvents = () => {
+    router.push('/admin?section=events');
   };
   
   const showComingSoon = () => {
@@ -34,17 +44,21 @@ const AdminQuickActions: React.FC = () => {
             <UserPlus className="h-8 w-8 mb-2" />
             <span>Add User</span>
           </Button>
-          <Button variant="outline" className="h-24 flex flex-col items-center justify-center" onClick={showComingSoon}>
-            <FileUp className="h-8 w-8 mb-2" />
-            <span>Upload Files</span>
+          <Button variant="outline" className="h-24 flex flex-col items-center justify-center" onClick={navigateToAdvertisements}>
+            <FileText className="h-8 w-8 mb-2" />
+            <span>Advertisements</span>
           </Button>
-          <Button variant="outline" className="h-24 flex flex-col items-center justify-center" onClick={showComingSoon}>
-            <BarChart3 className="h-8 w-8 mb-2" />
-            <span>Generate Report</span>
+          <Button variant="outline" className="h-24 flex flex-col items-center justify-center" onClick={navigateToEvents}>
+            <Calendar className="h-8 w-8 mb-2" />
+            <span>Event Calendar</span>
           </Button>
           <Button variant="outline" className="h-24 flex flex-col items-center justify-center" onClick={navigateToNotifications}>
             <Bell className="h-8 w-8 mb-2" />
             <span>Notifications</span>
+          </Button>
+          <Button variant="outline" className="h-24 flex flex-col items-center justify-center" onClick={showComingSoon}>
+            <BarChart3 className="h-8 w-8 mb-2" />
+            <span>Generate Report</span>
           </Button>
           <Button variant="outline" className="h-24 flex flex-col items-center justify-center" onClick={showComingSoon}>
             <Settings className="h-8 w-8 mb-2" />
