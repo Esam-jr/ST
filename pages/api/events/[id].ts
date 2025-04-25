@@ -11,6 +11,12 @@ export default async function handler(
   const session = await getServerSession(req, res, authOptions);
   const { id } = req.query;
 
+  if (!id || typeof id !== 'string') {
+    return res.status(400).json({
+      message: 'Invalid event ID.',
+    });
+  }
+
   // Check if user is authenticated
   if (!session) {
     return res.status(401).json({
@@ -18,14 +24,7 @@ export default async function handler(
     });
   }
 
-  // Ensure id is a string
-  if (!id || typeof id !== 'string') {
-    return res.status(400).json({
-      message: 'Invalid event ID.',
-    });
-  }
-
-  // GET - Fetch a single event
+  // GET - Retrieve a specific event
   if (req.method === 'GET') {
     try {
       const event = await prisma.event.findUnique({
@@ -47,10 +46,10 @@ export default async function handler(
     }
   }
 
-  // Check admin or manager permissions for write operations
+  // Check if user has admin or manager role for write operations
   if (session.user.role !== 'ADMIN' && session.user.role !== 'MANAGER') {
     return res.status(403).json({
-      message: 'You do not have permission to modify this resource.',
+      message: 'You do not have permission to modify events.',
     });
   }
 
@@ -63,8 +62,10 @@ export default async function handler(
         startDate,
         endDate,
         location,
-        eventUrl,
-        isPublic,
+        type,
+        isVirtual,
+        virtualLink,
+        startupCallId
       } = req.body;
 
       const updatedEvent = await prisma.event.update({
@@ -75,8 +76,10 @@ export default async function handler(
           startDate: startDate ? new Date(startDate) : undefined,
           endDate: endDate ? new Date(endDate) : undefined,
           location,
-          eventUrl,
-          isPublic,
+          type,
+          isVirtual,
+          virtualLink,
+          startupCallId: startupCallId || null
         },
       });
 

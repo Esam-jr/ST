@@ -47,8 +47,10 @@ type Event = {
   startDate: string;
   endDate: string;
   location?: string;
-  eventUrl?: string;
-  isPublic: boolean;
+  isVirtual?: boolean;
+  virtualLink?: string;
+  type: string;
+  startupCallId?: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -79,8 +81,10 @@ export default function EventCalendar({ view = 'list', showAddButton = true }: E
     endDate: '',
     endTime: '',
     location: '',
-    eventUrl: '',
-    isPublic: true,
+    isVirtual: false,
+    virtualLink: '',
+    type: 'ANNOUNCEMENT', // Default type
+    startupCallId: '',
   });
   
   // Fetch events
@@ -112,113 +116,68 @@ export default function EventCalendar({ view = 'list', showAddButton = true }: E
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
   
-  // Handle switch changes
-  const handleSwitchChange = (checked: boolean) => {
-    setFormData((prev) => ({ ...prev, isPublic: checked }));
-  };
-  
-  // Reset form
-  const resetForm = () => {
-    const today = new Date();
-    const formattedDate = today.toISOString().split('T')[0];
-    
-    setFormData({
-      title: '',
-      description: '',
-      startDate: formattedDate,
-      startTime: '09:00',
-      endDate: formattedDate,
-      endTime: '10:00',
-      location: '',
-      eventUrl: '',
-      isPublic: true,
-    });
-    setCurrentEvent(null);
-  };
-  
-  // Open dialog for new event
-  const handleNewEvent = () => {
-    resetForm();
-    setIsDialogOpen(true);
-  };
-  
-  // Open dialog for editing
-  const handleEditEvent = (event: Event) => {
-    setCurrentEvent(event);
-    
-    // Format dates for form
-    const startDate = new Date(event.startDate);
-    const endDate = new Date(event.endDate);
-    
-    const formatDate = (date: Date) => date.toISOString().split('T')[0];
-    const formatTime = (date: Date) => {
-      const hours = date.getHours().toString().padStart(2, '0');
-      const minutes = date.getMinutes().toString().padStart(2, '0');
-      return `${hours}:${minutes}`;
-    };
-    
-    setFormData({
-      title: event.title,
-      description: event.description || '',
-      startDate: formatDate(startDate),
-      startTime: formatTime(startDate),
-      endDate: formatDate(endDate),
-      endTime: formatTime(endDate),
-      location: event.location || '',
-      eventUrl: event.eventUrl || '',
-      isPublic: event.isPublic,
-    });
-    setIsDialogOpen(true);
-  };
-  
-  // Open delete confirmation dialog
-  const handleDeleteConfirmation = (event: Event) => {
-    setCurrentEvent(event);
-    setIsDeleteDialogOpen(true);
-  };
-  
-  // Submit form to create or update event
+  // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     try {
-      // Combine date and time
-      const startDateTime = new Date(`${formData.startDate}T${formData.startTime}`);
-      const endDateTime = new Date(`${formData.endDate}T${formData.endTime}`);
+      // Format date and time
+      const startDateTime = new Date(`${formData.startDate}T${formData.startTime || '00:00'}`);
+      const endDateTime = new Date(`${formData.endDate}T${formData.endTime || '00:00'}`);
       
-      const payload = {
+      if (isNaN(startDateTime.getTime()) || isNaN(endDateTime.getTime())) {
+        toast({
+          title: 'Error',
+          description: 'Invalid date or time format',
+          variant: 'destructive',
+        });
+        return;
+      }
+      
+      // Create object with required fields
+      const eventData = {
         title: formData.title,
         description: formData.description,
         startDate: startDateTime.toISOString(),
         endDate: endDateTime.toISOString(),
         location: formData.location,
-        eventUrl: formData.eventUrl,
-        isPublic: formData.isPublic,
+        isVirtual: formData.isVirtual,
+        virtualLink: formData.virtualLink,
+        type: formData.type,
+        startupCallId: formData.startupCallId || undefined,
       };
       
+      // Create or update event
+      let response;
       if (currentEvent) {
-        // Update existing event
-        await axios.put(`/api/events/${currentEvent.id}`, payload);
+        // Update
+        response = await axios.put(`/api/events/${currentEvent.id}`, eventData);
+        
+        // Update in state
+        setEvents(prev => prev.map(event => 
+          event.id === currentEvent.id ? response.data : event
+        ));
+        
         toast({
           title: 'Success',
           description: 'Event updated successfully',
         });
       } else {
-        // Create new event
-        await axios.post('/api/events', payload);
+        // Create
+        response = await axios.post('/api/events', eventData);
+        
+        // Add to state
+        setEvents(prev => [...prev, response.data]);
+        
         toast({
           title: 'Success',
           description: 'Event created successfully',
         });
       }
       
-      // Refresh events list
-      const response = await axios.get('/api/events');
-      setEvents(response.data);
-      
-      // Close dialog and reset form
-      setIsDialogOpen(false);
+      // Reset form and close dialog
       resetForm();
+      setIsDialogOpen(false);
     } catch (error) {
       console.error('Error saving event:', error);
       toast({
@@ -227,6 +186,47 @@ export default function EventCalendar({ view = 'list', showAddButton = true }: E
         variant: 'destructive',
       });
     }
+  };
+  
+  // Reset form
+  const resetForm = () => {
+    setFormData({
+      title: '',
+      description: '',
+      startDate: '',
+      startTime: '',
+      endDate: '',
+      endTime: '',
+      location: '',
+      isVirtual: false,
+      virtualLink: '',
+      type: 'ANNOUNCEMENT',
+      startupCallId: '',
+    });
+    setCurrentEvent(null);
+  };
+  
+  // Open edit dialog with event data
+  const handleEdit = (event: Event) => {
+    const startDate = new Date(event.startDate);
+    const endDate = new Date(event.endDate);
+    
+    setFormData({
+      title: event.title,
+      description: event.description || '',
+      startDate: startDate.toISOString().split('T')[0],
+      startTime: startDate.toISOString().split('T')[1].substring(0, 5),
+      endDate: endDate.toISOString().split('T')[0],
+      endTime: endDate.toISOString().split('T')[1].substring(0, 5),
+      location: event.location || '',
+      isVirtual: event.isVirtual || false,
+      virtualLink: event.virtualLink || '',
+      type: event.type,
+      startupCallId: event.startupCallId || '',
+    });
+    
+    setCurrentEvent(event);
+    setIsDialogOpen(true);
   };
   
   // Delete event
@@ -300,10 +300,12 @@ export default function EventCalendar({ view = 'list', showAddButton = true }: E
           <p className="text-muted-foreground">Manage and view upcoming events and deadlines</p>
         </div>
         {showAddButton && (
-          <Button onClick={handleNewEvent}>
-            <Plus className="mr-2 h-4 w-4" />
-            Add Event
-          </Button>
+          <div className="mb-6 flex justify-end">
+            <Button onClick={() => { resetForm(); setIsDialogOpen(true); }}>
+              <Plus className="mr-2 h-4 w-4" />
+              Add Event
+            </Button>
+          </div>
         )}
       </div>
       
@@ -350,17 +352,26 @@ export default function EventCalendar({ view = 'list', showAddButton = true }: E
                           )}
                           <p className="text-sm">{event.description}</p>
                         </CardContent>
-                        <CardFooter className="flex justify-end gap-2 pt-2">
-                          {session?.user?.role === 'ADMIN' || session?.user?.role === 'MANAGER' ? (
-                            <>
-                              <Button variant="ghost" size="sm" onClick={() => handleEditEvent(event)}>
-                                <Pencil className="h-4 w-4" />
-                              </Button>
-                              <Button variant="ghost" size="sm" onClick={() => handleDeleteConfirmation(event)}>
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </>
-                          ) : null}
+                        <CardFooter className="border-t pt-2 flex justify-end gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleEdit(event)}
+                          >
+                            <Pencil className="h-4 w-4" />
+                            <span className="sr-only">Edit</span>
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setCurrentEvent(event);
+                              setIsDeleteDialogOpen(true);
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            <span className="sr-only">Delete</span>
+                          </Button>
                         </CardFooter>
                       </Card>
                     ))}
@@ -390,7 +401,7 @@ export default function EventCalendar({ view = 'list', showAddButton = true }: E
                 <p className="mt-2 text-sm text-muted-foreground">
                   Add your first event to get started.
                 </p>
-                <Button onClick={handleNewEvent} className="mt-4">
+                <Button onClick={() => { resetForm(); setIsDialogOpen(true); }} className="mt-4">
                   <Plus className="mr-2 h-4 w-4" />
                   Add Event
                 </Button>
@@ -402,7 +413,7 @@ export default function EventCalendar({ view = 'list', showAddButton = true }: E
                     <TableHead>Event</TableHead>
                     <TableHead>Date & Time</TableHead>
                     <TableHead>Location</TableHead>
-                    <TableHead>Visibility</TableHead>
+                    <TableHead>Type</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -425,29 +436,49 @@ export default function EventCalendar({ view = 'list', showAddButton = true }: E
                             <MapPin className="mr-1 h-4 w-4" />
                             {event.location}
                           </div>
-                        ) : event.eventUrl ? (
+                        ) : event.isVirtual ? (
                           <div className="flex items-center">
                             <Globe className="mr-1 h-4 w-4" />
-                            Virtual
+                            <span>
+                            {event.virtualLink ? (
+                              <a 
+                                href={event.virtualLink} 
+                                target="_blank" 
+                                rel="noopener noreferrer"
+                                className="text-primary hover:underline"
+                              >
+                                Virtual Event
+                              </a>
+                            ) : 'Virtual Event'}
+                            </span>
                           </div>
                         ) : (
                           <span className="text-muted-foreground">Not specified</span>
                         )}
                       </TableCell>
                       <TableCell>
-                        {event.isPublic ? (
-                          <Badge>Public</Badge>
-                        ) : (
-                          <Badge variant="outline">Private</Badge>
-                        )}
+                        <Badge variant="outline">{event.type}</Badge>
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
-                          <Button variant="ghost" size="icon" onClick={() => handleEditEvent(event)}>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleEdit(event)}
+                          >
                             <Pencil className="h-4 w-4" />
+                            <span className="sr-only">Edit</span>
                           </Button>
-                          <Button variant="ghost" size="icon" onClick={() => handleDeleteConfirmation(event)}>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setCurrentEvent(event);
+                              setIsDeleteDialogOpen(true);
+                            }}
+                          >
                             <Trash2 className="h-4 w-4" />
+                            <span className="sr-only">Delete</span>
                           </Button>
                         </div>
                       </TableCell>
@@ -460,126 +491,151 @@ export default function EventCalendar({ view = 'list', showAddButton = true }: E
         </Card>
       )}
       
-      {/* Create/Edit Dialog */}
+      {/* Event Form Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="sm:max-w-[550px]">
           <DialogHeader>
-            <DialogTitle>{currentEvent ? 'Edit Event' : 'Create Event'}</DialogTitle>
+            <DialogTitle>{currentEvent ? 'Edit Event' : 'Add New Event'}</DialogTitle>
             <DialogDescription>
-              {currentEvent
-                ? 'Update the details of this event'
-                : 'Fill in the details to create a new event'}
+              {currentEvent ? 'Update the event details' : 'Create a new event for the calendar'}
             </DialogDescription>
           </DialogHeader>
+          
           <form onSubmit={handleSubmit}>
             <div className="grid gap-4 py-4">
-              <div className="grid gap-4">
-                <div>
-                  <Label htmlFor="title">Event Title</Label>
+              <div className="grid w-full items-center gap-2">
+                <Label htmlFor="title">Title</Label>
+                <Input
+                  id="title"
+                  name="title"
+                  value={formData.title}
+                  onChange={handleInputChange}
+                  required
+                />
+              </div>
+              
+              <div className="grid w-full items-center gap-2">
+                <Label htmlFor="description">Description</Label>
+                <Textarea
+                  id="description"
+                  name="description"
+                  value={formData.description}
+                  onChange={handleInputChange}
+                  className="min-h-[100px]"
+                />
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid w-full items-center gap-2">
+                  <Label htmlFor="startDate">Start Date</Label>
                   <Input
-                    id="title"
-                    name="title"
-                    value={formData.title}
+                    id="startDate"
+                    name="startDate"
+                    type="date"
+                    value={formData.startDate}
                     onChange={handleInputChange}
                     required
                   />
                 </div>
                 
-                <div>
-                  <Label htmlFor="description">Description</Label>
-                  <Textarea
-                    id="description"
-                    name="description"
-                    value={formData.description}
-                    onChange={handleInputChange}
-                    rows={3}
-                  />
-                </div>
-                
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="startDate">Start Date</Label>
-                    <Input
-                      id="startDate"
-                      name="startDate"
-                      type="date"
-                      value={formData.startDate}
-                      onChange={handleInputChange}
-                      required
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="startTime">Start Time</Label>
-                    <Input
-                      id="startTime"
-                      name="startTime"
-                      type="time"
-                      value={formData.startTime}
-                      onChange={handleInputChange}
-                      required
-                    />
-                  </div>
-                </div>
-                
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="endDate">End Date</Label>
-                    <Input
-                      id="endDate"
-                      name="endDate"
-                      type="date"
-                      value={formData.endDate}
-                      onChange={handleInputChange}
-                      required
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="endTime">End Time</Label>
-                    <Input
-                      id="endTime"
-                      name="endTime"
-                      type="time"
-                      value={formData.endTime}
-                      onChange={handleInputChange}
-                      required
-                    />
-                  </div>
-                </div>
-                
-                <div>
-                  <Label htmlFor="location">Location</Label>
+                <div className="grid w-full items-center gap-2">
+                  <Label htmlFor="startTime">Start Time</Label>
                   <Input
-                    id="location"
-                    name="location"
-                    value={formData.location}
+                    id="startTime"
+                    name="startTime"
+                    type="time"
+                    value={formData.startTime}
                     onChange={handleInputChange}
-                    placeholder="Physical location or leave blank for virtual events"
                   />
-                </div>
-                
-                <div>
-                  <Label htmlFor="eventUrl">Event URL</Label>
-                  <Input
-                    id="eventUrl"
-                    name="eventUrl"
-                    value={formData.eventUrl}
-                    onChange={handleInputChange}
-                    placeholder="Link to virtual meeting or event page"
-                  />
-                </div>
-                
-                <div className="flex items-center gap-2">
-                  <Switch
-                    checked={formData.isPublic}
-                    onCheckedChange={handleSwitchChange}
-                    id="isPublic"
-                  />
-                  <Label htmlFor="isPublic">Make this event public</Label>
                 </div>
               </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid w-full items-center gap-2">
+                  <Label htmlFor="endDate">End Date</Label>
+                  <Input
+                    id="endDate"
+                    name="endDate"
+                    type="date"
+                    value={formData.endDate}
+                    onChange={handleInputChange}
+                    required
+                  />
+                </div>
+                
+                <div className="grid w-full items-center gap-2">
+                  <Label htmlFor="endTime">End Time</Label>
+                  <Input
+                    id="endTime"
+                    name="endTime"
+                    type="time"
+                    value={formData.endTime}
+                    onChange={handleInputChange}
+                  />
+                </div>
+              </div>
+              
+              <div className="grid w-full items-center gap-2">
+                <Label htmlFor="location">Location</Label>
+                <Input
+                  id="location"
+                  name="location"
+                  value={formData.location}
+                  onChange={handleInputChange}
+                  placeholder="Optional"
+                />
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid w-full items-center gap-2">
+                  <Label htmlFor="isVirtual">Virtual Event?</Label>
+                  <div className="flex items-center space-x-2">
+                    <Switch
+                      id="isVirtual"
+                      checked={formData.isVirtual}
+                      onCheckedChange={(checked) => setFormData(prev => ({ ...prev, isVirtual: checked }))}
+                    />
+                    <Label htmlFor="isVirtual">
+                      {formData.isVirtual ? 'Yes' : 'No'}
+                    </Label>
+                  </div>
+                </div>
+                
+                {formData.isVirtual && (
+                  <div className="grid w-full items-center gap-2">
+                    <Label htmlFor="virtualLink">Virtual Link</Label>
+                    <Input
+                      id="virtualLink"
+                      name="virtualLink"
+                      value={formData.virtualLink}
+                      onChange={handleInputChange}
+                      placeholder="https://"
+                    />
+                  </div>
+                )}
+              </div>
+              
+              <div className="grid w-full items-center gap-2">
+                <Label htmlFor="type">Event Type</Label>
+                <select
+                  id="type"
+                  name="type"
+                  value={formData.type}
+                  onChange={(e) => setFormData(prev => ({ ...prev, type: e.target.value }))}
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <option value="WORKSHOP">Workshop</option>
+                  <option value="WEBINAR">Webinar</option>
+                  <option value="DEADLINE">Deadline</option>
+                  <option value="ANNOUNCEMENT">Announcement</option>
+                  <option value="NETWORKING">Networking</option>
+                  <option value="OTHER">Other</option>
+                </select>
+              </div>
             </div>
+            
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
+              <Button variant="outline" type="button" onClick={() => setIsDialogOpen(false)}>
                 Cancel
               </Button>
               <Button type="submit">
@@ -594,7 +650,7 @@ export default function EventCalendar({ view = 'list', showAddButton = true }: E
       <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete Event</DialogTitle>
+            <DialogTitle>Confirm Deletion</DialogTitle>
             <DialogDescription>
               Are you sure you want to delete this event? This action cannot be undone.
             </DialogDescription>

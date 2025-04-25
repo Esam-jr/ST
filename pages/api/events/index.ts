@@ -73,14 +73,16 @@ export default async function handler(
         startDate,
         endDate,
         location,
-        eventUrl,
-        isPublic,
+        type,
+        isVirtual,
+        virtualLink,
+        startupCallId
       } = req.body;
       
       // Validate required fields
-      if (!title || !startDate || !endDate) {
+      if (!title || !startDate || !endDate || !type) {
         return res.status(400).json({
-          message: 'Missing required fields.',
+          message: 'Missing required fields: title, startDate, endDate, and type are required.',
         });
       }
       
@@ -88,12 +90,14 @@ export default async function handler(
       const event = await prisma.event.create({
         data: {
           title,
-          description,
+          description: description || "",
           startDate: new Date(startDate),
           endDate: new Date(endDate),
           location,
-          eventUrl,
-          isPublic: isPublic !== false, // Default to true if not specified
+          type,
+          isVirtual: isVirtual || false,
+          virtualLink,
+          startupCallId
         },
       });
       
