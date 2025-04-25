@@ -30,7 +30,7 @@ export default function Home() {
               </p>
               <div className="mt-8 flex flex-col space-y-4 sm:flex-row sm:space-x-4 sm:space-y-0">
                 <Button asChild size="lg">
-                  <Link href="/submit">Submit Your Idea</Link>
+                  <Link href="/Startup-calls">Submit Your Idea</Link>
                 </Button>
                 <Button asChild variant="outline" size="lg">
                   <Link href="/startups">Browse Startups</Link>
@@ -38,10 +38,9 @@ export default function Home() {
               </div>
             </div>
             <div className="flex items-center justify-center">
-              <div className="relative h-[400px] w-full overflow-hidden rounded-xl shadow-xl lg:h-[500px]">
-                <div className="absolute inset-0 bg-gradient-to-br from-primary/20 to-secondary/20"></div>
-                <div className="relative flex h-full w-full items-center justify-center bg-muted/50">
-                  <LucideRocket className="h-24 w-24 text-primary/40" />
+              <div className="relative h-[400px] w-full overflow-hidden rounded-xl  lg:h-[500px]">
+                <div className="relative flex h-full w-full items-center justify-center">
+                  <Image src="/images/im2.png" alt="Startup Call" fill className="object-contain" />
                 </div>
               </div>
             </div>
