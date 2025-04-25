@@ -9,16 +9,7 @@ export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
-  const session = await getServerSession(req, res, authOptions);
-
-  // Check if user is authenticated
-  if (!session) {
-    return res.status(401).json({
-      message: 'You must be signed in to access this endpoint.',
-    });
-  }
-
-  // Handle GET request - public event listing doesn't require special permissions
+  // Handle GET request - public event listing doesn't require authentication
   if (req.method === 'GET') {
     try {
       // Get query parameters
@@ -55,6 +46,16 @@ export default async function handler(
         message: 'An error occurred while fetching events.',
       });
     }
+  }
+
+  // For non-GET requests, require authentication
+  const session = await getServerSession(req, res, authOptions);
+
+  // Check if user is authenticated
+  if (!session) {
+    return res.status(401).json({
+      message: 'You must be signed in to access this endpoint.',
+    });
   }
   
   // Check if user has admin or manager role for write operations

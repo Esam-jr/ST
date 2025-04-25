@@ -8,19 +8,11 @@ export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
-  const session = await getServerSession(req, res, authOptions);
   const { id } = req.query;
 
   if (!id || typeof id !== 'string') {
     return res.status(400).json({
       message: 'Invalid event ID.',
-    });
-  }
-
-  // Check if user is authenticated
-  if (!session) {
-    return res.status(401).json({
-      message: 'You must be signed in to access this endpoint.',
     });
   }
 
@@ -44,6 +36,16 @@ export default async function handler(
         message: 'An error occurred while fetching the event.',
       });
     }
+  }
+
+  // For non-GET requests, require authentication
+  const session = await getServerSession(req, res, authOptions);
+
+  // Check if user is authenticated
+  if (!session) {
+    return res.status(401).json({
+      message: 'You must be signed in to access this endpoint.',
+    });
   }
 
   // Check if user has admin or manager role for write operations

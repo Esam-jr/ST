@@ -493,7 +493,7 @@ export default function EventCalendar({ view = 'list', showAddButton = true }: E
       
       {/* Event Form Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="sm:max-w-[550px]">
+        <DialogContent className="sm:max-w-[550px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{currentEvent ? 'Edit Event' : 'Add New Event'}</DialogTitle>
             <DialogDescription>
@@ -634,7 +634,7 @@ export default function EventCalendar({ view = 'list', showAddButton = true }: E
               </div>
             </div>
             
-            <DialogFooter>
+            <DialogFooter className="mt-4">
               <Button variant="outline" type="button" onClick={() => setIsDialogOpen(false)}>
                 Cancel
               </Button>
