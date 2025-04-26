@@ -13,7 +13,7 @@ export default async function handler(
   if (req.method === 'GET') {
     try {
       // Get query parameters
-      const { from, to } = req.query;
+      const { from, to, limit } = req.query;
       
       // Build filter conditions
       const filter: any = {};
@@ -36,6 +36,15 @@ export default async function handler(
         where: filter,
         orderBy: {
           startDate: 'asc',
+        },
+        take: limit ? parseInt(limit as string) : undefined,
+        include: {
+          startupCall: {
+            select: {
+              id: true,
+              title: true,
+            },
+          },
         },
       });
       
@@ -77,6 +86,7 @@ export default async function handler(
         type,
         isVirtual,
         virtualLink,
+        imageUrl,
         startupCallId
       } = req.body;
       
@@ -98,6 +108,7 @@ export default async function handler(
           type,
           isVirtual: isVirtual || false,
           virtualLink,
+          imageUrl,
           startupCallId
         },
       });

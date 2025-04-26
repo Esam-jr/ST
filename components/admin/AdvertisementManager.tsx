@@ -49,8 +49,10 @@ type Advertisement = {
   description: string;
   content: string;
   mediaUrl?: string;
+  imageUrl?: string;
   platforms: string[];
-  startupCallId: string;
+  startupCallId?: string;
+  sponsorCallId?: string;
   status: string;
   publishedDate?: string;
   expiryDate?: string;
@@ -82,6 +84,7 @@ export default function AdvertisementManager({ startupCallId, sponsorCallId, typ
     description: '',
     content: '',
     mediaUrl: '',
+    imageUrl: '',
     platforms: ['website'],
     status: 'DRAFT',
     publishedDate: '',
@@ -158,6 +161,7 @@ export default function AdvertisementManager({ startupCallId, sponsorCallId, typ
       description: '',
       content: '',
       mediaUrl: '',
+      imageUrl: '',
       platforms: ['website'],
       status: 'DRAFT',
       publishedDate: '',
@@ -176,6 +180,7 @@ export default function AdvertisementManager({ startupCallId, sponsorCallId, typ
       description: ad.description,
       content: ad.content,
       mediaUrl: ad.mediaUrl || '',
+      imageUrl: ad.imageUrl || '',
       platforms: ad.platforms,
       status: ad.status,
       publishedDate: ad.publishedDate ? new Date(ad.publishedDate).toISOString().split('T')[0] : '',
@@ -229,39 +234,37 @@ export default function AdvertisementManager({ startupCallId, sponsorCallId, typ
       };
       
       // Remove empty fields
-      if (!adData.startupCallId) delete adData.startupCallId;
-      if (!adData.sponsorCallId) delete adData.sponsorCallId;
+      const finalData = { ...adData };
+      if (!finalData.startupCallId) {
+        finalData.startupCallId = undefined;
+      }
+      if (!finalData.sponsorCallId) {
+        finalData.sponsorCallId = undefined;
+      }
       
-      let response;
+      let response: { data: Advertisement };
       if (currentAd) {
         // Update
-        response = await axios.put(`/api/advertisements/${currentAd.id}`, adData);
+        response = await axios.put<Advertisement>(`/api/advertisements/${currentAd.id}`, finalData);
         
         // Update in state
         setAdvertisements(prev => prev.map(ad => 
           ad.id === currentAd.id ? response.data : ad
         ));
-        
-        toast({
-          title: 'Success',
-          description: 'Advertisement updated successfully',
-        });
       } else {
         // Create
-        response = await axios.post('/api/advertisements', adData);
+        response = await axios.post<Advertisement>('/api/advertisements', finalData);
         
         // Add to state
         setAdvertisements(prev => [...prev, response.data]);
-        
-        toast({
-          title: 'Success',
-          description: 'Advertisement created successfully',
-        });
       }
       
-      // Reset form and close dialog
       resetForm();
       setIsDialogOpen(false);
+      toast({
+        title: `Advertisement ${currentAd ? 'updated' : 'created'} successfully!`,
+        description: '',
+      });
     } catch (error) {
       console.error('Error saving advertisement:', error);
       toast({
@@ -447,6 +450,18 @@ export default function AdvertisementManager({ startupCallId, sponsorCallId, typ
               </div>
               
               <div className="grid grid-cols-1 gap-2">
+                <Label htmlFor="imageUrl">Image URL (Optional)</Label>
+                <Input
+                  id="imageUrl"
+                  name="imageUrl"
+                  value={formData.imageUrl}
+                  onChange={handleInputChange}
+                  placeholder="https://example.com/image.jpg"
+                />
+                <p className="text-xs text-muted-foreground">URL to the image that will be displayed with this advertisement</p>
+              </div>
+              
+              <div className="grid grid-cols-1 gap-2">
                 <Label>Platforms</Label>
                 <div className="grid grid-cols-2 gap-2">
                   <div className="flex items-center space-x-2">
@@ -562,14 +577,14 @@ export default function AdvertisementManager({ startupCallId, sponsorCallId, typ
                   <Label htmlFor="startupCallId">Startup Call</Label>
                   {startupCalls.length > 0 ? (
                     <Select
-                      value={formData.startupCallId}
-                      onValueChange={(value) => setFormData(prev => ({ ...prev, startupCallId: value }))}
+                      value={formData.startupCallId || "none"}
+                      onValueChange={(value) => setFormData(prev => ({ ...prev, startupCallId: value === "none" ? "" : value }))}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Select startup call" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">None</SelectItem>
+                        <SelectItem value="none">None</SelectItem>
                         {startupCalls.map(call => (
                           <SelectItem key={call.id} value={call.id}>
                             {call.title}

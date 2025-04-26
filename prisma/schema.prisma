@@ -320,6 +320,7 @@ model Event {
   location       String?
   isVirtual      Boolean  @default(false)
   virtualLink    String?
+  imageUrl       String?
   startupCallId  String?
   type           EventType
   createdAt      DateTime @default(now())
@@ -333,6 +334,7 @@ model Advertisement {
   description    String
   content        String   @db.Text
   mediaUrl       String?
+  imageUrl       String?
   platforms      String[] // Social media, newsletter, etc.
   startupCallId  String
   status         String   // DRAFT, PUBLISHED, ARCHIVED

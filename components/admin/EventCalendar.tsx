@@ -49,6 +49,7 @@ type Event = {
   location?: string;
   isVirtual?: boolean;
   virtualLink?: string;
+  imageUrl?: string;
   type: string;
   startupCallId?: string;
   createdAt: string;
@@ -83,6 +84,7 @@ export default function EventCalendar({ view = 'list', showAddButton = true }: E
     location: '',
     isVirtual: false,
     virtualLink: '',
+    imageUrl: '',
     type: 'ANNOUNCEMENT', // Default type
     startupCallId: '',
   });
@@ -143,6 +145,7 @@ export default function EventCalendar({ view = 'list', showAddButton = true }: E
         location: formData.location,
         isVirtual: formData.isVirtual,
         virtualLink: formData.virtualLink,
+        imageUrl: formData.imageUrl,
         type: formData.type,
         startupCallId: formData.startupCallId || undefined,
       };
@@ -200,6 +203,7 @@ export default function EventCalendar({ view = 'list', showAddButton = true }: E
       location: '',
       isVirtual: false,
       virtualLink: '',
+      imageUrl: '',
       type: 'ANNOUNCEMENT',
       startupCallId: '',
     });
@@ -221,6 +225,7 @@ export default function EventCalendar({ view = 'list', showAddButton = true }: E
       location: event.location || '',
       isVirtual: event.isVirtual || false,
       virtualLink: event.virtualLink || '',
+      imageUrl: event.imageUrl || '',
       type: event.type,
       startupCallId: event.startupCallId || '',
     });
@@ -613,6 +618,18 @@ export default function EventCalendar({ view = 'list', showAddButton = true }: E
                     />
                   </div>
                 )}
+              </div>
+              
+              <div className="grid w-full items-center gap-2">
+                <Label htmlFor="imageUrl">Image URL (Optional)</Label>
+                <Input
+                  id="imageUrl"
+                  name="imageUrl"
+                  value={formData.imageUrl}
+                  onChange={handleInputChange}
+                  placeholder="https://example.com/image.jpg"
+                />
+                <p className="text-xs text-muted-foreground">URL to the image that will be displayed with this event</p>
               </div>
               
               <div className="grid w-full items-center gap-2">

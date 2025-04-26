@@ -12,7 +12,7 @@ export default async function handler(
   if (req.method === 'GET') {
     try {
       // Get query parameters
-      const { status, startupCallId } = req.query;
+      const { status, startupCallId, limit } = req.query;
       
       // Build filter conditions
       const filter: any = {};
@@ -32,6 +32,15 @@ export default async function handler(
         where: filter,
         orderBy: {
           createdAt: 'desc',
+        },
+        take: limit ? parseInt(limit as string) : undefined,
+        include: {
+          startupCall: {
+            select: {
+              id: true,
+              title: true,
+            },
+          },
         },
       });
       
@@ -69,6 +78,7 @@ export default async function handler(
         description,
         content,
         mediaUrl,
+        imageUrl,
         platforms,
         startupCallId,
         status,
@@ -90,6 +100,7 @@ export default async function handler(
           description,
           content,
           mediaUrl,
+          imageUrl,
           platforms: Array.isArray(platforms) ? platforms : [],
           startupCallId,
           status,

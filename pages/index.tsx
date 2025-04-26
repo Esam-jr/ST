@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { ArrowRight, CheckCircle, LineChart, LucideRocket, Users, Wallet } from 'lucide-react';
+import AdvertisementsList from '@/components/home/AdvertisementsList';
+import UpcomingEvents from '@/components/home/UpcomingEvents';
 
 export default function Home() {
   const [email, setEmail] = useState('');
@@ -45,6 +47,34 @@ export default function Home() {
               </div>
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* Advertisements Section */}
+      <section className="bg-background py-16">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="mb-12 text-center">
+            <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Latest Announcements</h2>
+            <p className="mx-auto mt-4 max-w-2xl text-lg text-muted-foreground">
+              Stay updated with the latest startup call opportunities and announcements
+            </p>
+          </div>
+          
+          <AdvertisementsList limit={3} showFeatured={true} />
+        </div>
+      </section>
+      
+      {/* Upcoming Events Section */}
+      <section className="bg-muted/50 py-16">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="mb-12 text-center">
+            <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Upcoming Events</h2>
+            <p className="mx-auto mt-4 max-w-2xl text-lg text-muted-foreground">
+              Don't miss these upcoming workshops, webinars, and networking opportunities
+            </p>
+          </div>
+          
+          <UpcomingEvents limit={4} showFeatured={true} />
         </div>
       </section>
 
