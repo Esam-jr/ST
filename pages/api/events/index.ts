@@ -38,14 +38,6 @@ export default async function handler(
           startDate: 'asc',
         },
         take: limit ? parseInt(limit as string) : undefined,
-        include: {
-          startupCall: {
-            select: {
-              id: true,
-              title: true,
-            },
-          },
-        },
       });
       
       return res.status(200).json(events);

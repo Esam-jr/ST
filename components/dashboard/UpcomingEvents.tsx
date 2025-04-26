@@ -14,8 +14,9 @@ const mockEvents = [
     startDate: '2025-04-25T13:00:00Z',
     endDate: '2025-04-25T17:00:00Z',
     location: 'Innovation Hub, San Francisco',
-    eventUrl: 'https://example.com/events/pitch-competition',
-    isPublic: true,
+    virtualLink: 'https://example.com/events/pitch-competition',
+    isVirtual: false,
+    type: 'NETWORKING'
   },
   {
     id: '2',
@@ -24,8 +25,9 @@ const mockEvents = [
     startDate: '2025-05-10T18:00:00Z',
     endDate: '2025-05-10T21:00:00Z',
     location: 'Tech Lounge, New York',
-    eventUrl: 'https://example.com/events/investor-mixer',
-    isPublic: true,
+    virtualLink: 'https://example.com/events/investor-mixer',
+    isVirtual: false,
+    type: 'NETWORKING'
   },
   {
     id: '3',
@@ -34,8 +36,9 @@ const mockEvents = [
     startDate: '2025-05-15T10:00:00Z',
     endDate: '2025-05-15T16:00:00Z',
     location: 'Online Webinar',
-    eventUrl: 'https://example.com/events/funding-workshop',
-    isPublic: true,
+    virtualLink: 'https://example.com/events/funding-workshop',
+    isVirtual: true,
+    type: 'WORKSHOP'
   },
   {
     id: '4',
@@ -44,8 +47,9 @@ const mockEvents = [
     startDate: '2025-06-05T09:00:00Z',
     endDate: '2025-06-05T17:00:00Z',
     location: 'Convention Center, Austin',
-    eventUrl: 'https://example.com/events/demo-day',
-    isPublic: true,
+    virtualLink: 'https://example.com/events/demo-day',
+    isVirtual: false,
+    type: 'WORKSHOP'
   },
   {
     id: '5',
@@ -54,8 +58,9 @@ const mockEvents = [
     startDate: '2025-06-30T23:59:59Z',
     endDate: '2025-06-30T23:59:59Z',
     location: 'Online Submission',
-    eventUrl: 'https://example.com/submit',
-    isPublic: true,
+    virtualLink: 'https://example.com/submit',
+    isVirtual: true,
+    type: 'DEADLINE'
   },
 ];
 
@@ -180,7 +185,7 @@ export default function UpcomingEvents() {
           {events.map((event) => (
             <Link 
               key={event.id} 
-              href={event.eventUrl} 
+              href={event.virtualLink || "#"} 
               className="block px-6 py-4 transition-colors hover:bg-muted/50"
             >
               <div className="flex items-center justify-between">

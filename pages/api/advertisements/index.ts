@@ -34,14 +34,6 @@ export default async function handler(
           createdAt: 'desc',
         },
         take: limit ? parseInt(limit as string) : undefined,
-        include: {
-          startupCall: {
-            select: {
-              id: true,
-              title: true,
-            },
-          },
-        },
       });
       
       return res.status(200).json(advertisements);
