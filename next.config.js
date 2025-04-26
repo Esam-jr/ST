@@ -4,12 +4,16 @@ const nextConfig = {
   swcMinify: true,
   images: {
     domains: ['localhost', 'vercel.app'],
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: '**',
+      },
+    ],
   },
   experimental: {
     serverComponentsExternalPackages: ['@prisma/client', 'bcrypt'],
-    serverActions: {
-      bodySizeLimit: '2mb',
-    },
+    serverActions: true,
   },
   webpack: (config, { isServer }) => {
     if (isServer) {
