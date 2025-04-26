@@ -29,10 +29,6 @@ type Event = {
   startupCallId?: string;
   createdAt: string;
   updatedAt: string;
-  startupCall?: {
-    id: string;
-    title: string;
-  };
 };
 
 export default function EventsPage() {
@@ -40,15 +36,21 @@ export default function EventsPage() {
   const { toast } = useToast();
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('upcoming');
   
   const now = new Date();
   const oneMonthFromNow = addDays(now, 30);
   
   useEffect(() => {
+    let isMounted = true;
+    const controller = new AbortController();
+    
     const fetchEvents = async () => {
       try {
+        if (!isMounted) return;
         setLoading(true);
+        setError(null);
         
         // Build query parameters based on active tab
         const params = new URLSearchParams();
@@ -60,21 +62,55 @@ export default function EventsPage() {
           params.append('to', oneMonthFromNow.toISOString());
         }
         
-        const response = await axios.get(`/api/events?${params.toString()}`);
-        setEvents(response.data);
-      } catch (error) {
+        const response = await axios.get(`/api/events?${params.toString()}`, {
+          signal: controller.signal,
+          timeout: 10000 // 10 second timeout
+        });
+        
+        if (!isMounted) return;
+        
+        if (response.status !== 200) {
+          throw new Error(`Server responded with status code ${response.status}`);
+        }
+        
+        setEvents(response.data || []);
+      } catch (error: any) {
+        if (!isMounted) return;
+        
         console.error('Error fetching events:', error);
+        
+        if (axios.isCancel(error)) {
+          console.log('Request was cancelled');
+          return;
+        }
+        
+        // Set appropriate error message
+        const errorMessage = 
+          error.response?.data?.message || 
+          error.message || 
+          'Failed to load events';
+          
+        setError(errorMessage);
+        
         toast({
           title: 'Error',
-          description: 'Failed to load events',
+          description: errorMessage,
           variant: 'destructive',
         });
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     };
     
     fetchEvents();
+    
+    // Clean up on unmount or when dependencies change
+    return () => {
+      isMounted = false;
+      controller.abort();
+    };
   }, [toast, activeTab, now, oneMonthFromNow]);
   
   // Group events by date for the calendar view
@@ -87,16 +123,6 @@ export default function EventsPage() {
     }
     eventsByDate[date].push(event);
   });
-  
-  if (loading) {
-    return (
-      <Layout title="Events">
-        <div className="flex h-screen items-center justify-center">
-          <LoadingSpinner />
-        </div>
-      </Layout>
-    );
-  }
   
   return (
     <Layout 
@@ -117,13 +143,27 @@ export default function EventsPage() {
           <TabsList className="grid w-full max-w-md mx-auto grid-cols-2">
             <TabsTrigger value="upcoming">All Upcoming</TabsTrigger>
             <TabsTrigger value="month">Next 30 Days</TabsTrigger>
-              </TabsList>
+          </TabsList>
         </Tabs>
         
         {loading ? (
           <div className="flex justify-center py-12">
-            <LoadingSpinner />
-                  </div>
+            <LoadingSpinner size={40} />
+          </div>
+        ) : error ? (
+          <div className="text-center py-16">
+            <h3 className="text-xl font-semibold text-destructive">Error Loading Events</h3>
+            <p className="mt-2 text-lg text-muted-foreground">
+              {error}. Please try again later.
+            </p>
+            <Button 
+              variant="outline" 
+              className="mt-4"
+              onClick={() => window.location.reload()}
+            >
+              Retry
+            </Button>
+          </div>
         ) : events.length === 0 ? (
           <div className="text-center py-16">
             <CalendarIcon className="mx-auto h-16 w-16 text-muted-foreground" />

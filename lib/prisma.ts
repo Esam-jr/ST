@@ -3,8 +3,8 @@ import { PrismaClient, Prisma } from '@prisma/client';
 /**
  * PrismaClient Singleton Implementation for Next.js with Supabase
  * 
- * This solution addresses the critical "prepared statement does not exist" error
- * by completely disabling prepared statements and implementing proper connection management
+ * This solution addresses performance issues and the "prepared statement does not exist" error
+ * by optimizing connection pooling and disabling prepared statements when necessary
  */
 
 // For singleton pattern
@@ -13,51 +13,50 @@ declare global {
   var prismaClient: PrismaClient | undefined;
 }
 
-// Create a client with all necessary fixes for the prepared statement issue
+// Create a client with optimized connection settings
 function createPrismaClient() {
-  // First, enable direct SQL queries instead of prepared statements
-  // This is set before client initialization to ensure it's applied
+  // Enable direct SQL queries instead of prepared statements to prevent errors
   process.env.PRISMA_DISABLE_PREPARED_STATEMENTS = "true";
   
-  // Create with basic logging options
+  // Create with optimized logging options
   const client = new PrismaClient({
     log: process.env.NODE_ENV === 'development' 
       ? ['error', 'warn'] as Prisma.LogLevel[]
       : ['error'] as Prisma.LogLevel[],
     
-    // Add the pgBouncer flag directly in the connection URL
+    // Optimize connection URL with better connection pooling settings
     datasources: {
       db: {
-        url: `${process.env.DATABASE_URL}${process.env.DATABASE_URL?.includes('?') ? '&' : '?'}pgbouncer=true&connection_limit=1&pool_timeout=0`
+        url: `${process.env.DATABASE_URL}${process.env.DATABASE_URL?.includes('?') ? '&' : '?'}pgbouncer=true&connection_limit=5&pool_timeout=10`
       }
     }
   });
   
-  // Access internal configs to enforce disabling prepared statements at all levels
+  // Access internal configs to optimize performance
   const prismaAny = client as any;
   if (prismaAny._engineConfig) {
-    // Modify internal engine configuration to force disable prepared statements
+    // Keep necessary preview features
     prismaAny._engineConfig.previewFeatures = [
       ...(prismaAny._engineConfig.previewFeatures || []),
       'nativeTypes'
     ];
     
-    // Also override datasource URL to include pgBouncer flag
+    // Optimize datasource settings
     prismaAny._engineConfig.datasourceOverrides = {
       db: {
-        url: `${process.env.DATABASE_URL}${process.env.DATABASE_URL?.includes('?') ? '&' : '?'}pgbouncer=true&connection_limit=1&pool_timeout=0`
+        url: `${process.env.DATABASE_URL}${process.env.DATABASE_URL?.includes('?') ? '&' : '?'}pgbouncer=true&connection_limit=5&pool_timeout=10`
       }
     };
     
-    // Set transaction options to disable prepared statements
+    // Optimize transaction options for better performance
     prismaAny._engineConfig.transactionOptions = {
       isolationLevel: 'ReadCommitted',
-      maxWait: 5000,
-      timeout: 10000,
+      maxWait: 2000,     // Reduced from 5000
+      timeout: 5000,     // Reduced from 10000
       usePreparedStatements: false
     };
     
-    // For Prisma 4+, add this if available
+    // For Prisma 4+, optimize native bindings
     if (prismaAny._baseDmmf) {
       prismaAny._baseDmmf.featuresEnvVars = {
         ...prismaAny._baseDmmf.featuresEnvVars,
@@ -69,32 +68,25 @@ function createPrismaClient() {
   return client;
 }
 
-// Function to force-reconnect when issues are detected
+// Optimized function to reset connection when issues are detected
 async function resetConnection(client: PrismaClient) {
   try {
     // Forcibly disconnect
     await client.$disconnect();
-    
-    // For more aggressive reset (optional - uncomment if needed)
-    // const prismaAny = client as any;
-    // if (prismaAny._engine?.disconnect) {
-    //   await prismaAny._engine.disconnect();
-    // }
-    
     console.log('Prisma connection reset successfully');
   } catch (e) {
     console.error('Error resetting Prisma connection:', e);
   }
 }
 
-// Use cached client or create new one
+// Use cached client or create new one with optimized settings
 const prisma = global.prismaClient || createPrismaClient();
 
-// Set up proper connection management
+// Set up proper connection management for development
 if (process.env.NODE_ENV !== 'production') {
   global.prismaClient = prisma;
   
-  // Register connection management handlers
+  // Register optimized connection management handlers
   if (typeof window === 'undefined') {
     if (!(global as any).__prismaListenerInitialized) {
       (global as any).__prismaListenerInitialized = true;
@@ -104,7 +96,7 @@ if (process.env.NODE_ENV !== 'production') {
         await prisma.$disconnect();
       });
       
-      // Handle various process termination signals
+      // Handle termination signals efficiently
       ['SIGINT', 'SIGTERM', 'SIGQUIT'].forEach(signal => {
         process.on(signal, async () => {
           console.log(`${signal} received, cleaning up Prisma connections`);
@@ -119,10 +111,14 @@ if (process.env.NODE_ENV !== 'production') {
         await resetConnection(prisma);
       });
       
-      // Additionally, handle uncaught errors that might be due to connection issues
+      // Handle connection errors
       process.on('uncaughtException', async (err) => {
-        if (err.message && err.message.includes('prepared statement')) {
-          console.log('Uncaught Prisma prepared statement error, resetting connection');
+        if (err.message && (
+          err.message.includes('prepared statement') ||
+          err.message.includes('connection') ||
+          err.message.includes('timeout')
+        )) {
+          console.log('Uncaught Prisma error, resetting connection:', err.message);
           await resetConnection(prisma);
         }
       });

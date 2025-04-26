@@ -1,24 +1,44 @@
-import React from "react";
+import React, { memo } from "react";
 
 interface LoadingSpinnerProps {
-  size?: "sm" | "md" | "lg";
+  size?: number | "sm" | "md" | "lg";
   className?: string;
+  color?: string;
 }
 
-const LoadingSpinner = ({ size = "md", className = "" }: LoadingSpinnerProps) => {
-  const sizeClasses = {
-    sm: "h-4 w-4",
-    md: "h-8 w-8",
-    lg: "h-12 w-12",
-  };
+const LoadingSpinner = memo(({ 
+  size = "md", 
+  className = "",
+  color = "text-primary" 
+}: LoadingSpinnerProps) => {
+  // Handle size values
+  let sizeClass = "";
+  
+  if (typeof size === "number") {
+    sizeClass = `h-[${size}px] w-[${size}px]`;
+  } else {
+    const sizeClasses = {
+      sm: "h-4 w-4",
+      md: "h-8 w-8",
+      lg: "h-12 w-12",
+    };
+    sizeClass = sizeClasses[size];
+  }
+  
+  // Inline style for precise control when using numeric sizes
+  const svgStyle = typeof size === "number" 
+    ? { height: `${size}px`, width: `${size}px` } 
+    : undefined;
 
   return (
     <div className={`flex items-center justify-center ${className}`}>
       <svg
-        className={`animate-spin text-primary ${sizeClasses[size]}`}
+        className={`animate-spin ${color} ${sizeClass}`}
+        style={svgStyle}
         xmlns="http://www.w3.org/2000/svg"
         fill="none"
         viewBox="0 0 24 24"
+        aria-hidden="true"
       >
         <circle
           className="opacity-25"
@@ -36,6 +56,8 @@ const LoadingSpinner = ({ size = "md", className = "" }: LoadingSpinnerProps) =>
       </svg>
     </div>
   );
-};
+});
+
+LoadingSpinner.displayName = "LoadingSpinner";
 
 export default LoadingSpinner;

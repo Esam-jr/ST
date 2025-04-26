@@ -79,8 +79,9 @@ export default function EventCard({
             <Image 
               src={imageUrl} 
               alt={title}
-              layout="fill"
-              objectFit="cover"
+              fill
+              sizes="(max-width: 768px) 100vw, 33vw"
+              className="object-cover"
               priority
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent"></div>
@@ -126,8 +127,9 @@ export default function EventCard({
               <Image 
                 src={imageUrl}
                 alt={title}
-                layout="fill"
-                objectFit="cover"
+                fill
+                sizes="128px"
+                className="object-cover"
               />
             </div>
           ) : (
@@ -165,8 +167,9 @@ export default function EventCard({
           <Image 
             src={imageUrl}
             alt={title}
-            layout="fill"
-            objectFit="cover"
+            fill
+            sizes="(max-width: 768px) 100vw, 33vw"
+            className="object-cover"
           />
         </div>
       )}
