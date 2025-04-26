@@ -53,10 +53,19 @@ export default function UpcomingEvents({
         // Build query parameters
         const params = new URLSearchParams();
         params.append('from', fromDate);
-        params.append('limit', limit.toString());
+        params.append('pageSize', limit.toString());
+        params.append('page', '1');
         
         const response = await axios.get(`/api/events?${params.toString()}`);
-        setEvents(response.data);
+        
+        // Handle the new API response format with pagination info
+        if (response.data && typeof response.data === 'object' && response.data.data) {
+          // New format with pagination
+          setEvents(response.data.data);
+        } else {
+          // Fallback for old format (just in case)
+          setEvents(Array.isArray(response.data) ? response.data : []);
+        }
       } catch (error) {
         console.error('Error fetching events:', error);
         toast({
@@ -88,6 +97,10 @@ export default function UpcomingEvents({
     );
   }
   
+  // Calculate how many events to show after the featured one
+  const remainingCount = Math.min(limit - (showFeatured ? 1 : 0), events.length - (showFeatured ? 1 : 0));
+  const remainingEvents = events.slice(showFeatured ? 1 : 0, showFeatured ? 1 + remainingCount : remainingCount);
+  
   return (
     <div className={`space-y-6 ${className}`}>
       {showFeatured && events.length > 0 && (
@@ -95,12 +108,13 @@ export default function UpcomingEvents({
           <EventCard 
             event={events[0]} 
             variant="featured"
+            priority={true}
           />
         </div>
       )}
       
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {events.slice(showFeatured ? 1 : 0, limit).map((event) => (
+        {remainingEvents.map((event) => (
           <EventCard 
             key={event.id} 
             event={event}

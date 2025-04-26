@@ -92,11 +92,20 @@ export default function EventCalendar({ view = 'list', showAddButton = true }: E
   // Fetch events
   useEffect(() => {
     const fetchEvents = async () => {
+      setLoading(true);
       try {
-        setLoading(true);
-        
         const response = await axios.get('/api/events');
-        setEvents(response.data);
+        
+        // Handle the new API response format with pagination info
+        if (response.data && typeof response.data === 'object' && response.data.data) {
+          // New format with pagination
+          setEvents(response.data.data);
+        } else {
+          // Fallback for old format (just in case)
+          setEvents(Array.isArray(response.data) ? response.data : []);
+        }
+        
+        setLoading(false);
       } catch (error) {
         console.error('Error fetching events:', error);
         toast({
@@ -104,7 +113,6 @@ export default function EventCalendar({ view = 'list', showAddButton = true }: E
           description: 'Failed to load events',
           variant: 'destructive',
         });
-      } finally {
         setLoading(false);
       }
     };

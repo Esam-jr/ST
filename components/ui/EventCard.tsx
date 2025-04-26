@@ -1,11 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { format } from 'date-fns';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Calendar, Clock, MapPin, Globe, Link2 } from 'lucide-react';
+import { Calendar, Clock, MapPin, Globe, Link2, ImageOff } from 'lucide-react';
 
 type Event = {
   id: string;
@@ -31,12 +31,14 @@ interface EventCardProps {
   event: Event;
   variant?: 'default' | 'compact' | 'featured';
   className?: string;
+  priority?: boolean; // Add priority prop for important images
 }
 
 export default function EventCard({ 
   event, 
   variant = 'default',
-  className = '' 
+  className = '',
+  priority = false
 }: EventCardProps) {
   const { 
     id, 
@@ -51,6 +53,10 @@ export default function EventCard({
     type,
     startupCall 
   } = event;
+
+  // State to track image loading
+  const [isImageLoaded, setIsImageLoaded] = useState(false);
+  const [isImageError, setIsImageError] = useState(false);
 
   // Format date and time
   const formattedDate = format(new Date(startDate), 'MMMM d, yyyy');
@@ -69,25 +75,63 @@ export default function EventCard({
       default: return 'outline';
     }
   };
+
+  // Handle image success
+  const onImageLoad = () => {
+    setIsImageLoaded(true);
+  };
+
+  // Handle image error fallback
+  const onImageError = () => {
+    setIsImageError(true);
+  };
+
+  const getImageUrl = (url?: string) => {
+    if (!url) return '';
+    
+    // Optimize external images
+    if (url.startsWith('http')) {
+      // Check if it's already using an image optimization service
+      if (url.includes('imagedelivery.net') || url.includes('cloudinary.com')) {
+        return url;
+      }
+      return url;
+    }
+    
+    // For relative paths, prepend with /
+    if (!url.startsWith('/')) {
+      return `/${url}`;
+    }
+    
+    return url;
+  };
   
   // Featured variant
   if (variant === 'featured') {
     return (
       <div className={`relative rounded-lg overflow-hidden shadow-lg ${className}`}>
-        {imageUrl ? (
+        {imageUrl && !isImageError ? (
           <div className="relative h-60 w-full">
             <Image 
-              src={imageUrl} 
+              src={getImageUrl(imageUrl)}
               alt={title}
               fill
               sizes="(max-width: 768px) 100vw, 33vw"
-              className="object-cover"
-              priority
+              className={`object-cover transition-opacity duration-300 ${isImageLoaded ? 'opacity-100' : 'opacity-0'}`}
+              onLoad={onImageLoad}
+              onError={onImageError}
+              loading={priority ? 'eager' : 'lazy'}
+              priority={priority}
             />
+            {!isImageLoaded && (
+              <div className="absolute inset-0 bg-muted animate-pulse"></div>
+            )}
             <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent"></div>
           </div>
         ) : (
-          <div className="h-60 w-full bg-gradient-to-br from-primary/80 to-primary/40"></div>
+          <div className="h-60 w-full bg-gradient-to-br from-primary/80 to-primary/40 flex items-center justify-center">
+            <Calendar className="h-10 w-10 text-white/70" />
+          </div>
         )}
         
         <div className="absolute bottom-0 left-0 right-0 p-6 text-white">
@@ -122,15 +166,21 @@ export default function EventCard({
     return (
       <Card className={`overflow-hidden ${className}`}>
         <div className="flex">
-          {imageUrl ? (
+          {imageUrl && !isImageError ? (
             <div className="relative h-32 w-32 flex-shrink-0">
               <Image 
-                src={imageUrl}
+                src={getImageUrl(imageUrl)}
                 alt={title}
                 fill
                 sizes="128px"
-                className="object-cover"
+                className={`object-cover transition-opacity duration-300 ${isImageLoaded ? 'opacity-100' : 'opacity-0'}`}
+                onLoad={onImageLoad}
+                onError={onImageError}
+                loading="lazy"
               />
+              {!isImageLoaded && (
+                <div className="absolute inset-0 bg-muted animate-pulse"></div>
+              )}
             </div>
           ) : (
             <div className="h-32 w-32 flex-shrink-0 bg-muted flex items-center justify-center">
@@ -162,16 +212,28 @@ export default function EventCard({
   // Default variant
   return (
     <Card className={className}>
-      {imageUrl && (
+      {imageUrl && !isImageError ? (
         <div className="relative h-48 w-full rounded-t-lg overflow-hidden">
           <Image 
-            src={imageUrl}
+            src={getImageUrl(imageUrl)}
             alt={title}
             fill
             sizes="(max-width: 768px) 100vw, 33vw"
-            className="object-cover"
+            className={`object-cover transition-opacity duration-300 ${isImageLoaded ? 'opacity-100' : 'opacity-0'}`}
+            onLoad={onImageLoad}
+            onError={onImageError}
+            loading="lazy"
           />
+          {!isImageLoaded && (
+            <div className="absolute inset-0 bg-muted animate-pulse"></div>
+          )}
         </div>
+      ) : (
+        imageUrl && isImageError && (
+          <div className="h-48 w-full bg-muted flex items-center justify-center">
+            <Calendar className="h-10 w-10 text-muted-foreground" />
+          </div>
+        )
       )}
       
       <CardHeader className="pb-2">

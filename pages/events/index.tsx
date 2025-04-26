@@ -1,16 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import Link from 'next/link';
 import axios from 'axios';
-import { format, isSameDay, parseISO, isAfter, isBefore, addMonths, addDays } from 'date-fns';
+import { format, addDays } from 'date-fns';
 import Layout from '@/components/layout/Layout';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
-import { Calendar as CalendarIcon, Clock, MapPin, Globe } from 'lucide-react';
-import { Calendar } from '@/components/ui/calendar';
+import { CalendarIcon, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import EventCard from '@/components/ui/EventCard';
 
@@ -32,86 +29,154 @@ type Event = {
 };
 
 export default function EventsPage() {
-  const { data: session, status } = useSession();
+  const { data: session } = useSession();
   const { toast } = useToast();
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('upcoming');
   
+  // Add pagination state
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(10);
+  const [totalEvents, setTotalEvents] = useState(0);
+  
+  // Create memoized date values to prevent unnecessary re-renders
   const now = new Date();
   const oneMonthFromNow = addDays(now, 30);
-  
-  useEffect(() => {
+
+  // Build query parameters function
+  const buildParams = useCallback(() => {
+    const params = new URLSearchParams();
+    
+    if (activeTab === 'upcoming') {
+      params.append('from', now.toISOString());
+    } else if (activeTab === 'month') {
+      params.append('from', now.toISOString());
+      params.append('to', oneMonthFromNow.toISOString());
+    }
+    
+    // Add pagination parameters
+    params.append('page', page.toString());
+    params.append('pageSize', pageSize.toString());
+    
+    // Add cache buster to prevent caching issues
+    params.append('_t', Date.now().toString());
+    
+    return params;
+  }, [activeTab, now, oneMonthFromNow, page, pageSize]);
+
+  // Memoized fetch function to prevent recreation on each render
+  const fetchEvents = useCallback(async (tab: string) => {
     let isMounted = true;
     const controller = new AbortController();
     
-    const fetchEvents = async () => {
-      try {
-        if (!isMounted) return;
-        setLoading(true);
-        setError(null);
-        
-        // Build query parameters based on active tab
-        const params = new URLSearchParams();
-        
-        if (activeTab === 'upcoming') {
-          params.append('from', now.toISOString());
-        } else if (activeTab === 'month') {
-          params.append('from', now.toISOString());
-          params.append('to', oneMonthFromNow.toISOString());
-        }
-        
-        const response = await axios.get(`/api/events?${params.toString()}`, {
-          signal: controller.signal,
-          timeout: 10000 // 10 second timeout
-        });
-        
-        if (!isMounted) return;
-        
-        if (response.status !== 200) {
-          throw new Error(`Server responded with status code ${response.status}`);
-        }
-        
-        setEvents(response.data || []);
-      } catch (error: any) {
-        if (!isMounted) return;
-        
-        console.error('Error fetching events:', error);
-        
-        if (axios.isCancel(error)) {
-          console.log('Request was cancelled');
-          return;
-        }
-        
-        // Set appropriate error message
-        const errorMessage = 
+    try {
+      if (!isMounted) return;
+      setLoading(true);
+      setError(null);
+      
+      // Build query parameters based on active tab
+      const params = buildParams();
+      
+      console.log('Fetching events with params:', params.toString());
+      
+      // Increase timeout to prevent quick timeouts
+      const response = await axios.get(`/api/events?${params.toString()}`, {
+        signal: controller.signal,
+        timeout: 20000 // 20 second timeout (increased from 8s)
+      });
+      
+      if (!isMounted) return;
+      
+      if (response.status !== 200) {
+        throw new Error(`Server responded with status code ${response.status}`);
+      }
+      
+      console.log('Events response:', response.data);
+      
+      // Check for the new response structure with pagination info
+      if (response.data && typeof response.data === 'object' && 'data' in response.data) {
+        const { data: eventsData, total } = response.data;
+        setEvents(Array.isArray(eventsData) ? eventsData : []);
+        setTotalEvents(total || eventsData.length);
+      } else {
+        // Fallback for old API response format
+        const eventsData = Array.isArray(response.data) ? response.data : [];
+        setEvents(eventsData);
+        setTotalEvents(eventsData.length);
+      }
+    } catch (error: any) {
+      if (!isMounted) return;
+      
+      console.error('Error fetching events:', error);
+      
+      if (axios.isCancel(error)) {
+        console.log('Request was cancelled');
+        return;
+      }
+      
+      // Improved error handling with specific messages for timeouts
+      let errorMessage;
+      
+      if (error.code === 'ECONNABORTED') {
+        errorMessage = 'Request timed out. The server took too long to respond.';
+      } else {
+        errorMessage = 
           error.response?.data?.message || 
           error.message || 
           'Failed to load events';
-          
-        setError(errorMessage);
-        
-        toast({
-          title: 'Error',
-          description: errorMessage,
-          variant: 'destructive',
-        });
-      } finally {
-        if (isMounted) {
-          setLoading(false);
-        }
       }
-    };
+        
+      setError(errorMessage);
+      
+      toast({
+        title: 'Error',
+        description: errorMessage,
+        variant: 'destructive',
+      });
+    } finally {
+      if (isMounted) {
+        setLoading(false);
+      }
+    }
     
-    fetchEvents();
-    
-    // Clean up on unmount or when dependencies change
     return () => {
       isMounted = false;
       controller.abort();
     };
-  }, [toast, activeTab, now, oneMonthFromNow]);
+  }, [buildParams, toast]);
+  
+  // Handle tab change
+  const handleTabChange = (value: string) => {
+    setActiveTab(value);
+    setPage(1); // Reset to first page on tab change
+    setLoading(true);
+    fetchEvents(value);
+  };
+  
+  // Handle pagination
+  const handleNextPage = () => {
+    if (page < Math.ceil(totalEvents / pageSize)) {
+      setPage(page + 1);
+    }
+  };
+  
+  const handlePrevPage = () => {
+    if (page > 1) {
+      setPage(page - 1);
+    }
+  };
+  
+  // Initial data fetch
+  useEffect(() => {
+    const cleanup = fetchEvents(activeTab);
+    return () => {
+      if (typeof cleanup === 'function') {
+        cleanup();
+      }
+    };
+  }, [fetchEvents, activeTab, page]); // Added page dependency
   
   // Group events by date for the calendar view
   const eventsByDate: Record<string, Event[]> = {};
@@ -139,7 +204,7 @@ export default function EventsPage() {
           </p>
         </div>
         
-        <Tabs defaultValue="upcoming" onValueChange={setActiveTab} className="mb-8">
+        <Tabs defaultValue="upcoming" onValueChange={handleTabChange} className="mb-8">
           <TabsList className="grid w-full max-w-md mx-auto grid-cols-2">
             <TabsTrigger value="upcoming">All Upcoming</TabsTrigger>
             <TabsTrigger value="month">Next 30 Days</TabsTrigger>
@@ -159,7 +224,7 @@ export default function EventsPage() {
             <Button 
               variant="outline" 
               className="mt-4"
-              onClick={() => window.location.reload()}
+              onClick={() => fetchEvents(activeTab)}
             >
               Retry
             </Button>
@@ -173,11 +238,42 @@ export default function EventsPage() {
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-3">
-            {events.map((event) => (
-              <EventCard key={event.id} event={event} />
-            ))}
-          </div>
+          <>
+            <div className="grid grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-3">
+              {events.map((event) => (
+                <EventCard key={event.id} event={event} />
+              ))}
+            </div>
+            
+            {/* Pagination controls */}
+            {totalEvents > pageSize && (
+              <div className="flex justify-center items-center mt-8 gap-4">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={handlePrevPage}
+                  disabled={page === 1}
+                >
+                  <ChevronLeft className="h-4 w-4 mr-1" />
+                  Previous
+                </Button>
+                
+                <span className="text-sm text-muted-foreground">
+                  Page {page} of {Math.ceil(totalEvents / pageSize)}
+                </span>
+                
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={handleNextPage}
+                  disabled={page >= Math.ceil(totalEvents / pageSize)}
+                >
+                  Next
+                  <ChevronRight className="h-4 w-4 ml-1" />
+                </Button>
+              </div>
+            )}
+          </>
         )}
       </div>
     </Layout>
