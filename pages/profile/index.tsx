@@ -5,7 +5,7 @@ import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/router';
 import { z } from 'zod';
 import axios from 'axios';
-import { toast } from 'react-hot-toast';
+import { useToast } from '@/hooks/use-toast';
 import { User } from '@prisma/client';
 import Layout from '../../components/layout/Layout';
 import { Button } from '@/components/ui/button';
@@ -36,6 +36,7 @@ interface ExtendedUser {
 export default function Profile() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const { toast } = useToast();
   const [activeTab, setActiveTab] = useState('profile');
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);

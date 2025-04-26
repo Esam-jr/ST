@@ -11,10 +11,11 @@ import {
   Calendar,
   FileText
 } from 'lucide-react';
-import { toast } from 'react-hot-toast';
+import { useToast } from '@/hooks/use-toast';
 
 const AdminQuickActions: React.FC = () => {
   const router = useRouter();
+  const { toast } = useToast();
   
   const navigateToNotifications = () => {
     router.push('/admin?section=notifications');
@@ -29,7 +30,10 @@ const AdminQuickActions: React.FC = () => {
   };
   
   const showComingSoon = () => {
-    toast.success('This feature is coming soon!');
+    toast({
+      title: "Coming Soon",
+      description: "This feature is coming soon!"
+    });
   };
   
   return (

@@ -32,7 +32,7 @@ import {
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Loader2, Bell, Check, AlertCircle } from 'lucide-react';
-import { toast } from 'react-hot-toast';
+import { useToast } from '@/hooks/use-toast';
 
 type Notification = {
   id: string;
@@ -62,6 +62,9 @@ type NotificationChannel = {
 };
 
 const AdminNotificationManagement = () => {
+  // Add toast hook
+  const { toast } = useToast();
+
   // State for existing notification templates & channels
   const [templates, setTemplates] = useState<NotificationTemplate[]>([
     {
@@ -178,7 +181,10 @@ const AdminNotificationManagement = () => {
         t.id === selectedTemplate.id ? selectedTemplate : t
       ));
       setEditMode(false);
-      toast.success('Template saved successfully');
+      toast({
+        title: "Success",
+        description: "Template saved successfully"
+      });
     }
   };
 
@@ -240,7 +246,10 @@ const AdminNotificationManagement = () => {
   const sendTestNotification = () => {
     if (!selectedTemplate) return;
     
-    toast.success(`Test notification sent using template: ${selectedTemplate.name}`);
+    toast({
+      title: "Test Sent",
+      description: `Test notification sent using template: ${selectedTemplate.name}`
+    });
   };
 
   return (
