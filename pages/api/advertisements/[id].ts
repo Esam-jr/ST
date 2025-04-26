@@ -8,36 +8,19 @@ export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
-  const session = await getServerSession(req, res, authOptions);
   const { id } = req.query;
 
-  // Check if user is authenticated
-  if (!session) {
-    return res.status(401).json({
-      message: 'You must be signed in to access this endpoint.',
-    });
-  }
-
-  // Ensure id is a string
   if (!id || typeof id !== 'string') {
     return res.status(400).json({
       message: 'Invalid advertisement ID.',
     });
   }
 
-  // GET - Fetch a single advertisement
+  // GET - Retrieve a specific advertisement (public endpoint)
   if (req.method === 'GET') {
     try {
       const advertisement = await prisma.advertisement.findUnique({
         where: { id },
-        include: {
-          startupCall: {
-            select: {
-              title: true,
-              status: true,
-            },
-          },
-        },
       });
 
       if (!advertisement) {
@@ -55,10 +38,20 @@ export default async function handler(
     }
   }
 
-  // Check admin or manager permissions for write operations
-  if (session.user.role !== 'ADMIN' && session.user.role !== 'MANAGER') {
+  // For non-GET requests, require authentication
+  const session = await getServerSession(req, res, authOptions);
+
+  // Check if user is authenticated
+  if (!session) {
+    return res.status(401).json({
+      message: 'You must be signed in to access this endpoint.',
+    });
+  }
+
+  // Check if user has admin or sponsor role for write operations
+  if (session.user.role !== 'ADMIN' && session.user.role !== 'SPONSOR') {
     return res.status(403).json({
-      message: 'You do not have permission to modify this resource.',
+      message: 'You do not have permission to modify advertisements.',
     });
   }
 
@@ -71,6 +64,7 @@ export default async function handler(
         content,
         mediaUrl,
         platforms,
+        startupCallId,
         status,
         publishedDate,
         expiryDate,
@@ -83,7 +77,8 @@ export default async function handler(
           description,
           content,
           mediaUrl,
-          platforms,
+          platforms: Array.isArray(platforms) ? platforms : [],
+          startupCallId,
           status,
           publishedDate: publishedDate ? new Date(publishedDate) : null,
           expiryDate: expiryDate ? new Date(expiryDate) : null,

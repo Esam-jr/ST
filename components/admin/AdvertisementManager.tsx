@@ -60,9 +60,11 @@ type Advertisement = {
 
 interface AdvertisementManagerProps {
   startupCallId?: string;
+  sponsorCallId?: string;
+  type?: 'startup' | 'sponsor';
 }
 
-export default function AdvertisementManager({ startupCallId }: AdvertisementManagerProps) {
+export default function AdvertisementManager({ startupCallId, sponsorCallId, type = 'startup' }: AdvertisementManagerProps) {
   const { data: session } = useSession();
   const router = useRouter();
   const { toast } = useToast();
@@ -72,6 +74,7 @@ export default function AdvertisementManager({ startupCallId }: AdvertisementMan
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [currentAd, setCurrentAd] = useState<Advertisement | null>(null);
+  const [startupCalls, setStartupCalls] = useState<{id: string, title: string}[]>([]);
   
   // Form state
   const [formData, setFormData] = useState({
@@ -84,6 +87,8 @@ export default function AdvertisementManager({ startupCallId }: AdvertisementMan
     publishedDate: '',
     expiryDate: '',
     startupCallId: startupCallId || '',
+    sponsorCallId: sponsorCallId || '',
+    type: type
   });
   
   // Fetch advertisements
@@ -92,8 +97,22 @@ export default function AdvertisementManager({ startupCallId }: AdvertisementMan
       try {
         setLoading(true);
         
-        const response = await axios.get('/api/advertisements');
+        // Build query parameters
+        const params = new URLSearchParams();
+        if (type === 'startup' && startupCallId) {
+          params.append('startupCallId', startupCallId);
+        } else if (type === 'sponsor' && sponsorCallId) {
+          params.append('sponsorCallId', sponsorCallId);
+        }
+        
+        const response = await axios.get(`/api/advertisements?${params.toString()}`);
         setAdvertisements(response.data);
+        
+        // Also fetch startup calls for dropdown if needed
+        if (session?.user?.role === 'ADMIN' && !startupCallId && !sponsorCallId) {
+          const callsResponse = await axios.get('/api/startup-calls?status=PUBLISHED');
+          setStartupCalls(callsResponse.data);
+        }
       } catch (error) {
         console.error('Error fetching advertisements:', error);
         toast({
@@ -107,7 +126,7 @@ export default function AdvertisementManager({ startupCallId }: AdvertisementMan
     };
     
     fetchAdvertisements();
-  }, [toast, startupCallId]);
+  }, [toast, startupCallId, sponsorCallId, type, session]);
   
   // Handle form input changes
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -144,6 +163,8 @@ export default function AdvertisementManager({ startupCallId }: AdvertisementMan
       publishedDate: '',
       expiryDate: '',
       startupCallId: startupCallId || '',
+      sponsorCallId: sponsorCallId || '',
+      type: type
     });
     setCurrentAd(null);
   };
@@ -159,7 +180,9 @@ export default function AdvertisementManager({ startupCallId }: AdvertisementMan
       status: ad.status,
       publishedDate: ad.publishedDate ? new Date(ad.publishedDate).toISOString().split('T')[0] : '',
       expiryDate: ad.expiryDate ? new Date(ad.expiryDate).toISOString().split('T')[0] : '',
-      startupCallId: ad.startupCallId,
+      startupCallId: ad.startupCallId || '',
+      sponsorCallId: ad.sponsorCallId || '',
+      type: type
     });
     
     setCurrentAd(ad);
@@ -198,12 +221,16 @@ export default function AdvertisementManager({ startupCallId }: AdvertisementMan
     e.preventDefault();
     
     try {
-      // Parse dates
+      // Parse dates and prepare data
       const adData = {
         ...formData,
         publishedDate: formData.publishedDate ? new Date(formData.publishedDate).toISOString() : undefined,
         expiryDate: formData.expiryDate ? new Date(formData.expiryDate).toISOString() : undefined,
       };
+      
+      // Remove empty fields
+      if (!adData.startupCallId) delete adData.startupCallId;
+      if (!adData.sponsorCallId) delete adData.sponsorCallId;
       
       let response;
       if (currentAd) {
@@ -264,7 +291,11 @@ export default function AdvertisementManager({ startupCallId }: AdvertisementMan
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-2xl font-bold tracking-tight">Advertisement Management</h2>
-          <p className="text-muted-foreground">Create and manage advertising materials for startup calls</p>
+          <p className="text-muted-foreground">
+            {type === 'startup' 
+              ? 'Create and manage advertising materials for startup calls' 
+              : 'Create and manage advertising materials for sponsor opportunities'}
+          </p>
         </div>
         <Button onClick={() => { resetForm(); setIsDialogOpen(true); }}>
           <Plus className="mr-2 h-4 w-4" />
@@ -508,15 +539,65 @@ export default function AdvertisementManager({ startupCallId }: AdvertisementMan
                 />
               </div>
               
-              {startupCallId === undefined && (
+              {!startupCallId && !sponsorCallId && (
                 <div className="grid grid-cols-1 gap-2">
-                  <Label htmlFor="startupCallId">Startup Call ID</Label>
+                  <Label htmlFor="callType">Advertisement Type</Label>
+                  <Select
+                    value={formData.type}
+                    onValueChange={(value) => setFormData(prev => ({ ...prev, type: value as 'startup' | 'sponsor' }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="startup">Startup Call</SelectItem>
+                      <SelectItem value="sponsor">Sponsor Opportunity</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              
+              {formData.type === 'startup' && !startupCallId && (
+                <div className="grid grid-cols-1 gap-2">
+                  <Label htmlFor="startupCallId">Startup Call</Label>
+                  {startupCalls.length > 0 ? (
+                    <Select
+                      value={formData.startupCallId}
+                      onValueChange={(value) => setFormData(prev => ({ ...prev, startupCallId: value }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select startup call" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">None</SelectItem>
+                        {startupCalls.map(call => (
+                          <SelectItem key={call.id} value={call.id}>
+                            {call.title}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Input
+                      id="startupCallId"
+                      name="startupCallId"
+                      value={formData.startupCallId}
+                      onChange={handleInputChange}
+                      placeholder="Enter startup call ID"
+                    />
+                  )}
+                </div>
+              )}
+              
+              {formData.type === 'sponsor' && !sponsorCallId && (
+                <div className="grid grid-cols-1 gap-2">
+                  <Label htmlFor="sponsorCallId">Sponsor Opportunity ID</Label>
                   <Input
-                    id="startupCallId"
-                    name="startupCallId"
-                    value={formData.startupCallId}
+                    id="sponsorCallId"
+                    name="sponsorCallId"
+                    value={formData.sponsorCallId}
                     onChange={handleInputChange}
-                    required
+                    placeholder="Enter sponsor opportunity ID"
                   />
                 </div>
               )}

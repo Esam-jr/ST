@@ -8,49 +8,28 @@ export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
-  const session = await getServerSession(req, res, authOptions);
-
-  // Check if user is authenticated
-  if (!session) {
-    return res.status(401).json({
-      message: 'You must be signed in to access this endpoint.',
-    });
-  }
-
-  // Check if user has admin or manager role
-  if (session.user.role !== 'ADMIN' && session.user.role !== 'MANAGER') {
-    return res.status(403).json({
-      message: 'You do not have permission to access this resource.',
-    });
-  }
-
-  // Handle GET request - list advertisements
+  // GET - Fetch all advertisements (public endpoint)
   if (req.method === 'GET') {
     try {
       // Get query parameters
-      const { startupCallId, status } = req.query;
+      const { status, startupCallId } = req.query;
       
       // Build filter conditions
       const filter: any = {};
       
-      if (startupCallId) {
-        filter.startupCallId = startupCallId as string;
+      // Filter by status
+      if (status) {
+        filter.status = status;
       }
       
-      if (status) {
-        filter.status = status as string;
+      // Filter by startupCallId
+      if (startupCallId) {
+        filter.startupCallId = startupCallId as string;
       }
       
       // Fetch advertisements based on filters
       const advertisements = await prisma.advertisement.findMany({
         where: filter,
-        include: {
-          startupCall: {
-            select: {
-              title: true,
-            },
-          },
-        },
         orderBy: {
           createdAt: 'desc',
         },
@@ -64,8 +43,25 @@ export default async function handler(
       });
     }
   }
+
+  // For non-GET requests, require authentication
+  const session = await getServerSession(req, res, authOptions);
+
+  // Check if user is authenticated
+  if (!session) {
+    return res.status(401).json({
+      message: 'You must be signed in to access this endpoint.',
+    });
+  }
   
-  // Handle POST request - create advertisement
+  // Check if user has admin role for write operations
+  if (session.user.role !== 'ADMIN' && session.user.role !== 'SPONSOR') {
+    return res.status(403).json({
+      message: 'You do not have permission to modify advertisements.',
+    });
+  }
+  
+  // POST - Create advertisement
   if (req.method === 'POST') {
     try {
       const {
@@ -81,9 +77,9 @@ export default async function handler(
       } = req.body;
       
       // Validate required fields
-      if (!title || !description || !content || !startupCallId || !platforms || !status) {
+      if (!title || !content || !status) {
         return res.status(400).json({
-          message: 'Missing required fields.',
+          message: 'Missing required fields: title, content, and status are required.',
         });
       }
       
@@ -94,7 +90,7 @@ export default async function handler(
           description,
           content,
           mediaUrl,
-          platforms,
+          platforms: Array.isArray(platforms) ? platforms : [],
           startupCallId,
           status,
           publishedDate: publishedDate ? new Date(publishedDate) : null,
@@ -107,12 +103,10 @@ export default async function handler(
       console.error('Error creating advertisement:', error);
       
       if (error instanceof PrismaClientKnownRequestError) {
-        // P2003: Foreign key constraint failed
-        if (error.code === 'P2003') {
-          return res.status(400).json({
-            message: 'The specified startup call does not exist.',
-          });
-        }
+        // Handle specific Prisma errors
+        return res.status(400).json({
+          message: `Error: ${error.message}`,
+        });
       }
       
       return res.status(500).json({
