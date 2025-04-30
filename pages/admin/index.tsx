@@ -3,8 +3,8 @@
 import { useState, useEffect } from 'react';
 import { useSession, signOut } from 'next-auth/react';
 import { useRouter } from 'next/router';
-import Layout from '../../components/layout/Layout';
-import { Card, CardContent } from '@/components/ui/card';
+import Layout from '@/components/layout/Layout';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { 
@@ -25,7 +25,8 @@ import {
   Home,
   Menu,
   X,
-  LogOut
+  LogOut,
+  ArrowRight
 } from 'lucide-react';
 import AdminSystemOverview from '@/components/admin/AdminSystemOverview';
 import AdminQuickActions from '@/components/admin/AdminQuickActions';
@@ -40,8 +41,6 @@ import AdminReports from '@/components/admin/AdminReports';
 import AdminNotificationManagement from '@/components/admin/AdminNotificationManagement';
 import AdminReviewerManagement from '@/components/admin/AdminReviewerManagement';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
-import AdvertisementManager from '@/components/admin/AdvertisementManager';
-import EventCalendar from '@/components/admin/EventCalendar';
 
 export default function AdminDashboard() {
   const { data: session, status } = useSession();
@@ -63,8 +62,7 @@ export default function AdminDashboard() {
     if (router.query.section && typeof router.query.section === 'string') {
       const section = router.query.section;
       if (['overview', 'startup-calls', 'sponsor-calls', 'users', 'reviews', 
-           'financials', 'notifications', 'reports', 'settings', 'reviewer-management',
-           'advertisements', 'events'].includes(section)) {
+           'financials', 'notifications', 'reports', 'settings', 'reviewer-management'].includes(section)) {
         setActiveSection(section);
       }
     }
@@ -106,8 +104,8 @@ export default function AdminDashboard() {
     { id: 'overview', label: 'Overview', icon: <Home className="h-5 w-5" /> },
     { id: 'startup-calls', label: 'Startup Calls', icon: <Briefcase className="h-5 w-5" /> },
     { id: 'sponsor-calls', label: 'Sponsor Calls', icon: <Award className="h-5 w-5" /> },
-    { id: 'advertisements', label: 'Advertisements', icon: <FileText className="h-5 w-5" /> },
-    { id: 'events', label: 'Event Calendar', icon: <Calendar className="h-5 w-5" /> },
+    { id: 'events', label: 'Events', icon: <Calendar className="h-5 w-5" /> },
+    { id: 'event-announcer', label: 'Event Announcer', icon: <Bell className="h-5 w-5" /> },
     { id: 'users', label: 'Users & Roles', icon: <Users className="h-5 w-5" /> },
     { id: 'reviewer-management', label: 'Reviewer Management', icon: <ClipboardList className="h-5 w-5" /> },
     { id: 'reviews', label: 'Reviews', icon: <ClipboardList className="h-5 w-5" /> },
@@ -140,10 +138,12 @@ export default function AdminDashboard() {
         return <AdminStartupCalls />;
       case 'sponsor-calls':
         return <AdminSponsorCalls />;
-      case 'advertisements':
-        return <AdvertisementManager />;
       case 'events':
-        return <EventCalendar />;
+        return <iframe src="/admin/events" className="w-full h-full border-none" />;
+      case 'event-announcer':
+        return <iframe src="/admin/event-announcer" className="w-full h-full border-none" />;
+      case 'advertisements':
+        return <iframe src="/admin/advertisements" className="w-full h-full border-none" />;
       case 'users':
         return <AdminUserManagement />;
       case 'reviewer-management':

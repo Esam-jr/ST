@@ -9,29 +9,29 @@ datasource db {
 }
 
 model User {
-  id                 String                   @id @default(cuid())
-  name               String?
-  email              String                   @unique
-  emailVerified      DateTime?
-  image              String?
-  password           String?
-  role               Role                     @default(USER)
-  createdAt          DateTime                 @default(now())
-  updatedAt          DateTime                 @updatedAt
-  accounts           Account[]
-  applicationReviews ApplicationReview[]
-  comments           Comment[]
-  meetings           Meeting[]
-  notifications      Notification[]
-  reviews            Review[]
-  sessions           Session[]
-  sponsorships       Sponsorship[]            @relation("SponsorToSponsorship")
-  startups           Startup[]                @relation("FounderToStartup")
-  startupCalls       StartupCall[]
-  callApplications   StartupCallApplication[]
-  tasks              Task[]                   @relation("AssigneeToTask")
-  createdTasks       Task[]                   @relation("CreatorToTask")
+  id                      String                   @id @default(cuid())
+  name                    String?
+  email                   String                   @unique
+  emailVerified           DateTime?
+  image                   String?
+  password                String?
+  role                    Role                     @default(USER)
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+  accounts                Account[]
+  applicationReviews      ApplicationReview[]
+  comments                Comment[]
+  meetings                Meeting[]
+  notifications           Notification[]
+  reviews                 Review[]
+  sessions                Session[]
+  sponsorships            Sponsorship[]            @relation("SponsorToSponsorship")
   sponsorshipApplications SponsorshipApplication[]
+  startups                Startup[]                @relation("FounderToStartup")
+  startupCalls            StartupCall[]
+  callApplications        StartupCallApplication[]
+  tasks                   Task[]                   @relation("AssigneeToTask")
+  createdTasks            Task[]                   @relation("CreatorToTask")
 }
 
 model Account {
@@ -162,11 +162,11 @@ model Sponsorship {
   amount      Float
   currency    String
   description String?
-  status      String
   startDate   DateTime
   endDate     DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+  status      String
   sponsor     User      @relation("SponsorToSponsorship", fields: [sponsorId], references: [id])
   startup     Startup   @relation(fields: [startupId], references: [id])
 }
@@ -217,30 +217,29 @@ model Comment {
 }
 
 model StartupCall {
-  id                  String                   @id @default(cuid())
-  title               String
-  description         String
-  status              StartupCallStatus        @default(DRAFT)
-  applicationDeadline DateTime
-  publishedDate       DateTime?
-  industry            String
-  location            String
-  fundingAmount       String?
-  requirements        String[]
-  eligibilityCriteria String[]
-  selectionProcess    String[]
-  aboutSponsor        String?
-  applicationProcess  String
-  createdById         String
-  createdAt           DateTime                 @default(now())
-  updatedAt           DateTime                 @updatedAt
-  createdBy           User                     @relation(fields: [createdById], references: [id])
-  applications        StartupCallApplication[]
-  advertisements      Advertisement[]
-  events              Event[]
-  budgets             Budget[]
+  id                       String                   @id @default(cuid())
+  title                    String
+  description              String
+  status                   StartupCallStatus        @default(DRAFT)
+  applicationDeadline      DateTime
+  publishedDate            DateTime?
+  industry                 String
+  location                 String
+  fundingAmount            String?
+  requirements             String[]
+  eligibilityCriteria      String[]
+  selectionProcess         String[]
+  aboutSponsor             String?
+  applicationProcess       String
+  createdById              String
+  createdAt                DateTime                 @default(now())
+  updatedAt                DateTime                 @updatedAt
+  budgets                  Budget[]
+  Event                    Event[]
+  reviewCriteria           ReviewCriteria[]
   sponsorshipOpportunities SponsorshipOpportunity[]
-  reviewCriteria      ReviewCriteria[]
+  createdBy                User                     @relation(fields: [createdById], references: [id])
+  applications             StartupCallApplication[]
 }
 
 model StartupCallApplication {
@@ -311,139 +310,134 @@ model Notification {
   user      User     @relation(fields: [userId], references: [id])
 }
 
-model Event {
-  id             String   @id @default(cuid())
-  title          String
-  description    String
-  startDate      DateTime
-  endDate        DateTime
-  location       String?
-  isVirtual      Boolean  @default(false)
-  virtualLink    String?
-  imageUrl       String?
-  startupCallId  String?
-  type           EventType
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-  startupCall    StartupCall? @relation(fields: [startupCallId], references: [id])
-}
-
-model Advertisement {
-  id             String   @id @default(cuid())
-  title          String
-  description    String
-  content        String   @db.Text
-  mediaUrl       String?
-  imageUrl       String?
-  platforms      String[] // Social media, newsletter, etc.
-  startupCallId  String
-  status         String   // DRAFT, PUBLISHED, ARCHIVED
-  publishedDate  DateTime?
-  expiryDate     DateTime?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-  startupCall    StartupCall @relation(fields: [startupCallId], references: [id])
-}
-
 model Budget {
-  id             String   @id @default(cuid())
-  startupCallId  String
-  title          String
-  description    String?
-  totalAmount    Float
-  currency       String
-  fiscalYear     String
-  status         String   // DRAFT, APPROVED, CLOSED
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-  startupCall    StartupCall @relation(fields: [startupCallId], references: [id])
-  expenses       Expense[]
-  categories     BudgetCategory[]
+  id            String           @id @default(cuid())
+  startupCallId String
+  title         String
+  description   String?
+  totalAmount   Float
+  currency      String
+  fiscalYear    String
+  status        String
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  startupCall   StartupCall      @relation(fields: [startupCallId], references: [id])
+  categories    BudgetCategory[]
+  expenses      Expense[]
 }
 
 model BudgetCategory {
-  id             String   @id @default(cuid())
-  budgetId       String
-  name           String
-  description    String?
+  id              String    @id @default(cuid())
+  budgetId        String
+  name            String
+  description     String?
   allocatedAmount Float
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-  budget         Budget   @relation(fields: [budgetId], references: [id])
-  expenses       Expense[]
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  budget          Budget    @relation(fields: [budgetId], references: [id])
+  expenses        Expense[]
 }
 
 model Expense {
-  id             String   @id @default(cuid())
-  budgetId       String
-  categoryId     String?
-  title          String
-  description    String?
-  amount         Float
-  currency       String
-  date           DateTime
-  receipt        String?
-  status         String   // PENDING, APPROVED, REJECTED
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-  budget         Budget   @relation(fields: [budgetId], references: [id])
-  category       BudgetCategory? @relation(fields: [categoryId], references: [id])
+  id          String          @id @default(cuid())
+  budgetId    String
+  categoryId  String?
+  title       String
+  description String?
+  amount      Float
+  currency    String
+  date        DateTime
+  receipt     String?
+  status      String
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  budget      Budget          @relation(fields: [budgetId], references: [id])
+  category    BudgetCategory? @relation(fields: [categoryId], references: [id])
 }
 
 model SponsorshipOpportunity {
-  id             String   @id @default(cuid())
-  startupCallId  String
-  title          String
-  description    String
-  benefits       String[]
-  minAmount      Float
-  maxAmount      Float
-  currency       String
-  status         String   // ACTIVE, INACTIVE
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-  startupCall    StartupCall @relation(fields: [startupCallId], references: [id])
-  applications   SponsorshipApplication[]
+  id            String                   @id @default(cuid())
+  startupCallId String
+  title         String
+  description   String
+  benefits      String[]
+  minAmount     Float
+  maxAmount     Float
+  currency      String
+  status        String
+  createdAt     DateTime                 @default(now())
+  updatedAt     DateTime                 @updatedAt
+  applications  SponsorshipApplication[]
+  startupCall   StartupCall              @relation(fields: [startupCallId], references: [id])
 }
 
 model SponsorshipApplication {
-  id             String   @id @default(cuid())
-  opportunityId  String
-  sponsorId      String
-  amount         Float
-  currency       String
-  message        String?
-  status         String   // PENDING, APPROVED, REJECTED
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-  opportunity    SponsorshipOpportunity @relation(fields: [opportunityId], references: [id])
-  sponsor        User    @relation(fields: [sponsorId], references: [id])
+  id            String                 @id @default(cuid())
+  opportunityId String
+  sponsorId     String
+  amount        Float
+  currency      String
+  message       String?
+  status        String
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+  opportunity   SponsorshipOpportunity @relation(fields: [opportunityId], references: [id])
+  sponsor       User                   @relation(fields: [sponsorId], references: [id])
 }
 
 model ReviewCriteria {
-  id             String   @id @default(cuid())
-  startupCallId  String
-  name           String
-  description    String
-  weight         Float    // Percentage weight in the overall score
-  minimumScore   Float
-  maximumScore   Float
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-  startupCall    StartupCall @relation(fields: [startupCallId], references: [id])
+  id              String           @id @default(cuid())
+  startupCallId   String
+  name            String
+  description     String
+  weight          Float
+  minimumScore    Float
+  maximumScore    Float
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
   criteriaReviews CriteriaReview[]
+  startupCall     StartupCall      @relation(fields: [startupCallId], references: [id])
 }
 
 model CriteriaReview {
-  id             String   @id @default(cuid())
-  criteriaId     String
-  reviewId       String
-  score          Float
-  comment        String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-  criteria       ReviewCriteria @relation(fields: [criteriaId], references: [id])
-  review         ApplicationReview @relation(fields: [reviewId], references: [id])
+  id         String            @id @default(cuid())
+  criteriaId String
+  reviewId   String
+  score      Float
+  comment    String?
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+  criteria   ReviewCriteria    @relation(fields: [criteriaId], references: [id])
+  review     ApplicationReview @relation(fields: [reviewId], references: [id])
+}
+
+model Advertisement {
+  id            String   @id @default(cuid())
+  title         String
+  content       String
+  imageUrl      String?
+  scheduledDate DateTime
+  platforms     String[] @default([])
+  status        String   @default("draft")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Event {
+  id            String       @id @default(cuid())
+  title         String
+  description   String
+  startDate     DateTime
+  endDate       DateTime
+  location      String?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  isVirtual     Boolean      @default(false)
+  startupCallId String?
+  type          EventType
+  virtualLink   String?
+  imageUrl      String?
+  StartupCall   StartupCall? @relation(fields: [startupCallId], references: [id])
 }
 
 enum Role {
@@ -482,7 +476,8 @@ enum ReviewStatus {
   PENDING
   IN_PROGRESS
   COMPLETED
-  OVERDUE
+  REJECTED
+  WITHDRAWN
 }
 
 enum EventType {

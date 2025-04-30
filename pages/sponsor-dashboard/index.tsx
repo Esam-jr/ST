@@ -4,14 +4,16 @@ import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
-import Layout from '../../components/layout/Layout';
+import Layout from '@/components/layout/Layout';
 import DashboardStats from '../../components/dashboard/DashboardStats';
 import StartupList from '../../components/dashboard/StartupList';
 import TasksList from '../../components/dashboard/TasksList';
-import UpcomingEvents from '../../components/dashboard/UpcomingEvents';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { PlusCircle } from 'lucide-react';
+import LoadingSpinner from '@/components/ui/LoadingSpinner';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { ArrowRight } from 'lucide-react';
 
 // Define extended session user type
 interface ExtendedUser {
@@ -83,7 +85,6 @@ export default function Dashboard() {
               {userRole === 'REVIEWER' && (
                 <TabsTrigger value="reviews">Review Assignments</TabsTrigger>
               )}
-              <TabsTrigger value="events">Events</TabsTrigger>
             </TabsList>
             
             <TabsContent value="overview" className="space-y-4">
@@ -96,10 +97,6 @@ export default function Dashboard() {
             
             <TabsContent value="tasks" className="space-y-4">
               <TasksList userId={user?.id} />
-            </TabsContent>
-            
-            <TabsContent value="events" className="space-y-4">
-              <UpcomingEvents />
             </TabsContent>
             
             {userRole === 'SPONSOR' && (

@@ -26,7 +26,7 @@ const AdminQuickActions: React.FC = () => {
   };
   
   const navigateToEvents = () => {
-    router.push('/admin?section=events');
+    router.push('/admin/events');
   };
   
   const showComingSoon = () => {
