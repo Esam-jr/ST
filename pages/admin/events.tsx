@@ -30,7 +30,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from '@/hooks/use-toast';
-import { Calendar, Edit, MoreVertical, Plus, Search, Share2, Trash2, FileText } from 'lucide-react';
+import { Calendar, Edit, MoreVertical, Plus, Search, Share2, Trash2, FileText, Megaphone } from 'lucide-react';
 import Layout from '@/components/layout/Layout';
 import EventAnnouncement from '@/components/admin/EventAnnouncement';
 import axios from 'axios';
@@ -66,6 +66,7 @@ export default function AdminEventsPage() {
   const [eventToDelete, setEventToDelete] = useState<string | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [selectedTab, setSelectedTab] = useState<string>('upcoming');
+  const [activeSection, setActiveSection] = useState<string>(router.query.section as string || 'manage');
 
   // Fetch events
   const fetchEvents = async () => {
@@ -88,6 +89,12 @@ export default function AdminEventsPage() {
   useEffect(() => {
     fetchEvents();
   }, []);
+
+  useEffect(() => {
+    if (router.query.section) {
+      setActiveSection(router.query.section as string);
+    }
+  }, [router.query.section]);
 
   // Filter events based on search query and tab
   const filteredEvents = events
@@ -182,25 +189,9 @@ export default function AdminEventsPage() {
     setSelectedEvent(event);
   };
 
-  return (
-    <Layout title="Event Management | Admin">
-      <div className="container mx-auto py-6 space-y-6">
-        {/* Admin Navigation Tabs */}
-        <div className="flex border-b">
-          <Link href="/admin/events" className="mr-4 px-4 py-2 text-primary font-medium border-b-2 border-primary">
-            <div className="flex items-center">
-              <Calendar className="mr-2 h-5 w-5" />
-              Events
-            </div>
-          </Link>
-          <Link href="/admin/advertisements" className="mr-4 px-4 py-2 text-gray-600 hover:text-gray-900">
-            <div className="flex items-center">
-              <FileText className="mr-2 h-5 w-5" />
-              Advertisements
-            </div>
-          </Link>
-        </div>
-
+  const renderEventList = () => {
+    return (
+      <>
         <div className="flex items-center justify-between">
           <h1 className="text-3xl font-bold">Event Management</h1>
           <Button onClick={() => router.push('/admin/events/create')}>
@@ -251,56 +242,58 @@ export default function AdminEventsPage() {
                   <TableBody>
                     {isLoading ? (
                       <TableRow>
-                        <TableCell colSpan={5} className="text-center py-4">
-                          Loading events...
+                        <TableCell colSpan={5} className="text-center py-10">
+                          <div className="flex justify-center">
+                            <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"></div>
+                          </div>
                         </TableCell>
                       </TableRow>
-                    ) : filteredEvents.length > 0 ? (
+                    ) : filteredEvents.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center py-10">
+                          No events found.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
                       filteredEvents.map((event) => (
-                        <TableRow key={event.id} onClick={() => handleSelectEvent(event)} className="cursor-pointer">
-                          <TableCell className="font-medium">{event.title}</TableCell>
+                        <TableRow key={event.id} className="cursor-pointer hover:bg-muted/50">
                           <TableCell>
-                            <Badge className={getEventTypeColor(event.type)}>{event.type}</Badge>
+                            <div className="font-medium max-w-[250px] truncate">{event.title}</div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge className={getEventTypeColor(event.type)}>
+                              {event.type}
+                            </Badge>
                           </TableCell>
                           <TableCell>{formatEventDate(event.startDate)}</TableCell>
-                          <TableCell>{event.location}</TableCell>
+                          <TableCell>
+                            <div className="max-w-[150px] truncate">
+                              {event.isVirtual ? 'Virtual Event' : event.location}
+                            </div>
+                          </TableCell>
                           <TableCell className="text-right">
-                            <div className="flex justify-end space-x-1">
+                            <div className="flex justify-end items-center space-x-2">
                               <Button 
                                 variant="ghost" 
-                                size="icon" 
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleEditEvent(event);
-                                }}
+                                size="sm"
+                                onClick={() => handleSelectEvent(event)}
+                                title="View details"
                               >
-                                <Edit className="h-4 w-4" />
-                                <span className="sr-only">Edit</span>
+                                View
                               </Button>
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
-                                  <Button 
-                                    variant="ghost" 
-                                    size="icon"
-                                    onClick={(e) => e.stopPropagation()}
-                                  >
+                                  <Button variant="ghost" size="sm">
                                     <MoreVertical className="h-4 w-4" />
-                                    <span className="sr-only">More</span>
                                   </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
-                                  <DropdownMenuItem
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setSelectedEvent(event);
-                                    }}
-                                  >
-                                    <Share2 className="mr-2 h-4 w-4" />
-                                    Announce Event
+                                  <DropdownMenuItem onClick={() => handleEditEvent(event)}>
+                                    <Edit className="mr-2 h-4 w-4" />
+                                    Edit
                                   </DropdownMenuItem>
                                   <DropdownMenuItem
-                                    onClick={(e) => {
-                                      e.stopPropagation();
+                                    onClick={() => {
                                       setEventToDelete(event.id);
                                       setIsDeleteDialogOpen(true);
                                     }}
@@ -309,18 +302,21 @@ export default function AdminEventsPage() {
                                     <Trash2 className="mr-2 h-4 w-4" />
                                     Delete
                                   </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setSelectedEvent(event);
+                                      setActiveSection('announce');
+                                    }}
+                                  >
+                                    <Share2 className="mr-2 h-4 w-4" />
+                                    Announce
+                                  </DropdownMenuItem>
                                 </DropdownMenuContent>
                               </DropdownMenu>
                             </div>
                           </TableCell>
                         </TableRow>
                       ))
-                    ) : (
-                      <TableRow>
-                        <TableCell colSpan={5} className="text-center py-4">
-                          No events found
-                        </TableCell>
-                      </TableRow>
                     )}
                   </TableBody>
                 </Table>
@@ -340,54 +336,72 @@ export default function AdminEventsPage() {
                   <TableBody>
                     {isLoading ? (
                       <TableRow>
-                        <TableCell colSpan={5} className="text-center py-4">
-                          Loading events...
+                        <TableCell colSpan={5} className="text-center py-10">
+                          <div className="flex justify-center">
+                            <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"></div>
+                          </div>
                         </TableCell>
                       </TableRow>
-                    ) : filteredEvents.length > 0 ? (
+                    ) : filteredEvents.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center py-10">
+                          No events found.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
                       filteredEvents.map((event) => (
-                        <TableRow key={event.id} onClick={() => handleSelectEvent(event)} className="cursor-pointer">
-                          <TableCell className="font-medium">{event.title}</TableCell>
+                        <TableRow key={event.id} className="cursor-pointer hover:bg-muted/50">
                           <TableCell>
-                            <Badge className={getEventTypeColor(event.type)}>{event.type}</Badge>
+                            <div className="font-medium max-w-[250px] truncate">{event.title}</div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge className={getEventTypeColor(event.type)}>
+                              {event.type}
+                            </Badge>
                           </TableCell>
                           <TableCell>{formatEventDate(event.startDate)}</TableCell>
-                          <TableCell>{event.location}</TableCell>
+                          <TableCell>
+                            <div className="max-w-[150px] truncate">
+                              {event.isVirtual ? 'Virtual Event' : event.location}
+                            </div>
+                          </TableCell>
                           <TableCell className="text-right">
-                            <div className="flex justify-end space-x-1">
+                            <div className="flex justify-end items-center space-x-2">
                               <Button 
                                 variant="ghost" 
-                                size="icon" 
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleEditEvent(event);
-                                }}
+                                size="sm"
+                                onClick={() => handleSelectEvent(event)}
+                                title="View details"
                               >
-                                <Edit className="h-4 w-4" />
-                                <span className="sr-only">Edit</span>
+                                View
                               </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setEventToDelete(event.id);
-                                  setIsDeleteDialogOpen(true);
-                                }}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                                <span className="sr-only">Delete</span>
-                              </Button>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="sm">
+                                    <MoreVertical className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem onClick={() => handleEditEvent(event)}>
+                                    <Edit className="mr-2 h-4 w-4" />
+                                    Edit
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setEventToDelete(event.id);
+                                      setIsDeleteDialogOpen(true);
+                                    }}
+                                    className="text-red-600"
+                                  >
+                                    <Trash2 className="mr-2 h-4 w-4" />
+                                    Delete
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
                             </div>
                           </TableCell>
                         </TableRow>
                       ))
-                    ) : (
-                      <TableRow>
-                        <TableCell colSpan={5} className="text-center py-4">
-                          No events found
-                        </TableCell>
-                      </TableRow>
                     )}
                   </TableBody>
                 </Table>
@@ -407,54 +421,72 @@ export default function AdminEventsPage() {
                   <TableBody>
                     {isLoading ? (
                       <TableRow>
-                        <TableCell colSpan={5} className="text-center py-4">
-                          Loading events...
+                        <TableCell colSpan={5} className="text-center py-10">
+                          <div className="flex justify-center">
+                            <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"></div>
+                          </div>
                         </TableCell>
                       </TableRow>
-                    ) : filteredEvents.length > 0 ? (
+                    ) : filteredEvents.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-center py-10">
+                          No events found.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
                       filteredEvents.map((event) => (
-                        <TableRow key={event.id} onClick={() => handleSelectEvent(event)} className="cursor-pointer">
-                          <TableCell className="font-medium">{event.title}</TableCell>
+                        <TableRow key={event.id} className="cursor-pointer hover:bg-muted/50">
                           <TableCell>
-                            <Badge className={getEventTypeColor(event.type)}>{event.type}</Badge>
+                            <div className="font-medium max-w-[250px] truncate">{event.title}</div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge className={getEventTypeColor(event.type)}>
+                              {event.type}
+                            </Badge>
                           </TableCell>
                           <TableCell>{formatEventDate(event.startDate)}</TableCell>
-                          <TableCell>{event.location}</TableCell>
+                          <TableCell>
+                            <div className="max-w-[150px] truncate">
+                              {event.isVirtual ? 'Virtual Event' : event.location}
+                            </div>
+                          </TableCell>
                           <TableCell className="text-right">
-                            <div className="flex justify-end space-x-1">
+                            <div className="flex justify-end items-center space-x-2">
                               <Button 
                                 variant="ghost" 
-                                size="icon" 
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleEditEvent(event);
-                                }}
+                                size="sm"
+                                onClick={() => handleSelectEvent(event)}
+                                title="View details"
                               >
-                                <Edit className="h-4 w-4" />
-                                <span className="sr-only">Edit</span>
+                                View
                               </Button>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setEventToDelete(event.id);
-                                  setIsDeleteDialogOpen(true);
-                                }}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                                <span className="sr-only">Delete</span>
-                              </Button>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="sm">
+                                    <MoreVertical className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem onClick={() => handleEditEvent(event)}>
+                                    <Edit className="mr-2 h-4 w-4" />
+                                    Edit
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      setEventToDelete(event.id);
+                                      setIsDeleteDialogOpen(true);
+                                    }}
+                                    className="text-red-600"
+                                  >
+                                    <Trash2 className="mr-2 h-4 w-4" />
+                                    Delete
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
                             </div>
                           </TableCell>
                         </TableRow>
                       ))
-                    ) : (
-                      <TableRow>
-                        <TableCell colSpan={5} className="text-center py-4">
-                          No events found
-                        </TableCell>
-                      </TableRow>
                     )}
                   </TableBody>
                 </Table>
@@ -462,48 +494,227 @@ export default function AdminEventsPage() {
             </Tabs>
           </CardContent>
         </Card>
-      </div>
 
-      {/* Event announcement dialog */}
-      <Dialog open={!!selectedEvent} onOpenChange={(open) => !open && setSelectedEvent(null)}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Announce Event</DialogTitle>
-          </DialogHeader>
-          {selectedEvent && (
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <h3 className="font-medium">{selectedEvent.title}</h3>
-                <div className="flex items-center text-sm text-muted-foreground">
-                  <Calendar className="mr-1.5 h-4 w-4 flex-shrink-0" />
-                  {formatEventDate(selectedEvent.startDate)}
+        {/* Event Details Dialog */}
+        <Dialog open={!!selectedEvent && activeSection !== 'announce'} onOpenChange={(open) => !open && setSelectedEvent(null)}>
+          <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>{selectedEvent?.title}</DialogTitle>
+            </DialogHeader>
+            {selectedEvent && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-500">Date & Time</h3>
+                    <p className="mt-1">{formatEventDate(selectedEvent.startDate)}</p>
+                    {selectedEvent.endDate && (
+                      <p className="mt-1">
+                        End: {formatEventDate(selectedEvent.endDate)}
+                      </p>
+                    )}
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-500">Location</h3>
+                    <p className="mt-1">
+                      {selectedEvent.isVirtual ? 'Virtual Event' : selectedEvent.location}
+                      {selectedEvent.isVirtual && selectedEvent.virtualLink && (
+                        <div className="mt-1">
+                          <a
+                            href={selectedEvent.virtualLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-primary hover:underline"
+                          >
+                            Join Link
+                          </a>
+                        </div>
+                      )}
+                    </p>
+                  </div>
+                </div>
+                
+                <div>
+                  <h3 className="text-sm font-medium text-gray-500">Description</h3>
+                  <div className="mt-1 prose max-w-none">
+                    <p>{selectedEvent.description}</p>
+                  </div>
+                </div>
+
+                {selectedEvent.imageUrl && (
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-500">Image</h3>
+                    <img
+                      src={selectedEvent.imageUrl}
+                      alt={selectedEvent.title}
+                      className="mt-1 rounded-md object-cover w-full max-h-64"
+                    />
+                  </div>
+                )}
+
+                {selectedEvent.StartupCall && (
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-500">Related Startup Call</h3>
+                    <p className="mt-1">{selectedEvent.StartupCall.title}</p>
+                  </div>
+                )}
+                
+                <div className="flex justify-end space-x-2 pt-4">
+                  <Button 
+                    variant="outline" 
+                    onClick={() => setSelectedEvent(null)}
+                  >
+                    Close
+                  </Button>
+                  <Button 
+                    onClick={() => handleEditEvent(selectedEvent)}
+                  >
+                    Edit Event
+                  </Button>
+                  <Button 
+                    variant="destructive"
+                    onClick={() => {
+                      setEventToDelete(selectedEvent.id);
+                      setSelectedEvent(null);
+                      setIsDeleteDialogOpen(true);
+                    }}
+                  >
+                    Delete
+                  </Button>
+                  <Button
+                    onClick={() => setActiveSection('announce')}
+                  >
+                    <Share2 className="mr-2 h-4 w-4" />
+                    Announce
+                  </Button>
                 </div>
               </div>
-              <EventAnnouncement eventId={selectedEvent.id} />
+            )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Confirmation Dialog */}
+        <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Delete Event</DialogTitle>
+            </DialogHeader>
+            <div className="py-4">
+              <p>Are you sure you want to delete this event? This action cannot be undone.</p>
             </div>
-          )}
-        </DialogContent>
-      </Dialog>
-      
-      {/* Delete confirmation dialog */}
-      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Delete Event</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <p>Are you sure you want to delete this event? This action cannot be undone.</p>
             <div className="flex justify-end space-x-2">
-              <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>
+              <Button 
+                variant="outline" 
+                onClick={() => setIsDeleteDialogOpen(false)}
+              >
                 Cancel
               </Button>
-              <Button variant="destructive" onClick={handleDeleteEvent}>
+              <Button 
+                variant="destructive"
+                onClick={handleDeleteEvent}
+              >
                 Delete
               </Button>
             </div>
+          </DialogContent>
+        </Dialog>
+      </>
+    );
+  };
+
+  const renderAnnounceSection = () => {
+    return (
+      <>
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center">
+            <Button 
+              variant="outline" 
+              className="mr-4"
+              onClick={() => {
+                setActiveSection('manage');
+                if (selectedEvent) setSelectedEvent(null);
+              }}
+            >
+              ← Back to Events
+            </Button>
+            <h1 className="text-3xl font-bold">
+              {selectedEvent ? `Announce: ${selectedEvent.title}` : 'Event Announcer'}
+            </h1>
           </div>
-        </DialogContent>
-      </Dialog>
+        </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              {selectedEvent ? 'Announce Selected Event' : 'Announce Events'}
+            </CardTitle>
+            <CardDescription>
+              Announce events to social media platforms and email subscribers using Pipedream integration.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {selectedEvent ? (
+              <div className="space-y-4">
+                <div className="p-4 border rounded-md bg-muted/30">
+                  <h3 className="font-medium">{selectedEvent.title}</h3>
+                  <p className="text-sm text-gray-500">
+                    {formatEventDate(selectedEvent.startDate)}
+                  </p>
+                  <p className="mt-2 text-sm">{selectedEvent.description.substring(0, 150)}...</p>
+                </div>
+                <EventAnnouncement eventId={selectedEvent.id} />
+              </div>
+            ) : (
+              <EventAnnouncement showList={true} />
+            )}
+          </CardContent>
+        </Card>
+      </>
+    );
+  };
+
+  return (
+    <Layout title="Event Management | Admin">
+      <div className="container mx-auto py-6 space-y-6">
+        {/* Admin Navigation Tabs */}
+        <div className="flex border-b">
+          <Link href="/admin/events" className="mr-4 px-4 py-2 text-primary font-medium border-b-2 border-primary">
+            <div className="flex items-center">
+              <Calendar className="mr-2 h-5 w-5" />
+              Events
+            </div>
+          </Link>
+          <Link href="/admin/advertisements" className="mr-4 px-4 py-2 text-gray-600 hover:text-gray-900">
+            <div className="flex items-center">
+              <FileText className="mr-2 h-5 w-5" />
+              Advertisements
+            </div>
+          </Link>
+        </div>
+
+        <div className="flex space-x-2">
+          <Button 
+            variant={activeSection === 'manage' ? 'default' : 'outline'} 
+            onClick={() => setActiveSection('manage')}
+            className="flex items-center"
+          >
+            <Calendar className="mr-2 h-4 w-4" />
+            Manage Events
+          </Button>
+          <Button 
+            variant={activeSection === 'announce' ? 'default' : 'outline'} 
+            onClick={() => {
+              setActiveSection('announce');
+              setSelectedEvent(null);
+            }}
+            className="flex items-center"
+          >
+            <Megaphone className="mr-2 h-4 w-4" />
+            Announce Events
+          </Button>
+        </div>
+
+        {activeSection === 'announce' ? renderAnnounceSection() : renderEventList()}
+      </div>
     </Layout>
   );
 }
