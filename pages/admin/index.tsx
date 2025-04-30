@@ -141,7 +141,7 @@ export default function AdminDashboard() {
       case 'events':
         return <iframe src="/admin/events" className="w-full h-full border-none" />;
       case 'event-announcer':
-        return <iframe src="/admin/event-announcer" className="w-full h-full border-none" />;
+        return <iframe src="/admin/event-announcer" className="w-full h-screen border-none" />;
       case 'advertisements':
         return <iframe src="/admin/advertisements" className="w-full h-full border-none" />;
       case 'users':
