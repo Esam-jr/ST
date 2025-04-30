@@ -138,9 +138,9 @@ export default function AdminDashboard() {
       case 'sponsor-calls':
         return <AdminSponsorCalls />;
       case 'events':
-        return <iframe src="/admin/events" className="w-full h-full border-none" />;
+        return <iframe src="/admin/events" className="w-full h-[calc(100vh-8rem)] border-none" />;
       case 'advertisements':
-        return <iframe src="/admin/advertisements" className="w-full h-full border-none" />;
+        return <iframe src="/admin/advertisements" className="w-full h-[calc(100vh-8rem)] border-none" />;
       case 'users':
         return <AdminUserManagement />;
       case 'reviewer-management':
@@ -262,7 +262,7 @@ export default function AdminDashboard() {
             </div>
           </header>
 
-          <div className="p-6">
+          <div className="p-6 h-[calc(100%-4rem)] overflow-auto">
             {renderContent()}
           </div>
         </main>

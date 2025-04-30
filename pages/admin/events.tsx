@@ -674,7 +674,7 @@ export default function AdminEventsPage() {
 
   return (
     <Layout title="Event Management | Admin">
-      <div className="container mx-auto py-6 space-y-6">
+      <div className="container mx-auto py-6 space-y-6 min-h-[calc(100vh-4rem)]">
         {/* Admin Navigation Tabs */}
         <div className="flex border-b">
           <Link href="/admin/events" className="mr-4 px-4 py-2 text-primary font-medium border-b-2 border-primary">
