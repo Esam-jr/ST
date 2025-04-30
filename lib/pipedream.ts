@@ -6,7 +6,7 @@
  * Send event data to Pipedream webhook
  */
 export async function announceEvent(eventData: any): Promise<Response> {
-  const webhookUrl = process.env.PIPEDREAM_EVENT_WEBHOOK_URL;
+  const webhookUrl = process.env.PIPEDREAM_WEBHOOK_URL;
   
   if (!webhookUrl) {
     throw new Error('Pipedream webhook URL not configured');

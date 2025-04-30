@@ -63,7 +63,7 @@ rl.question('Enter your Pipedream webhook URL for event announcements: ', (webho
   }
 
   const envContent = readEnvFile();
-  const updatedContent = addOrUpdateEnvVar(envContent, 'PIPEDREAM_EVENT_WEBHOOK_URL', webhookUrl);
+  const updatedContent = addOrUpdateEnvVar(envContent, 'PIPEDREAM_WEBHOOK_URL', webhookUrl);
   updateEnvFile(updatedContent);
   
   console.log('');

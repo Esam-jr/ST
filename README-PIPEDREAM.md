@@ -76,7 +76,7 @@ Add similar steps for LinkedIn and email notifications.
 
 ## Environment Variables
 
-- `PIPEDREAM_EVENT_WEBHOOK_URL`: The webhook URL for your Pipedream workflow
+- `PIPEDREAM_WEBHOOK_URL`: The webhook URL for your Pipedream workflow
 
 You will also need to set up API credentials for the social platforms in your Pipedream workflow.
 
