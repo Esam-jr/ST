@@ -3,6 +3,7 @@ import { useRouter } from 'next/router';
 import { GetServerSideProps } from 'next';
 import { getSession } from 'next-auth/react';
 import axios from 'axios';
+import useSWR, { mutate } from 'swr';
 import Layout from '@/components/layout/Layout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -54,12 +55,24 @@ const formSchema = z.object({
 
 type FormValues = z.infer<typeof formSchema>;
 
+// Fetcher function for SWR
+const fetcher = (url: string) => axios.get(url).then(res => res.data);
+
 export default function EditEventPage() {
   const router = useRouter();
   const { id } = router.query;
   const [isLoading, setIsLoading] = useState(false);
-  const [event, setEvent] = useState<any>(null);
-  const [startupCalls, setStartupCalls] = useState([]);
+  
+  // Use SWR for data fetching instead of useEffect
+  const { data: event, error: eventError } = useSWR(
+    id ? `/api/events/${id}` : null, 
+    fetcher
+  );
+  
+  const { data: startupCalls = [], error: callsError } = useSWR(
+    '/api/startupcalls',
+    fetcher
+  );
   
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -73,69 +86,48 @@ export default function EditEventPage() {
       virtualLink: '',
       imageUrl: '',
       type: 'WORKSHOP',
-      startupCallId: '',
+      startupCallId: 'none',
     },
   });
 
-  // Fetch the event details
+  // Update form when event data is loaded
   useEffect(() => {
-    if (id) {
-      const fetchEvent = async () => {
-        try {
-          const response = await axios.get(`/api/events/${id}`);
-          const eventData = response.data;
-          setEvent(eventData);
-          
-          // Format dates for input fields
-          const formattedStartDate = new Date(eventData.startDate).toISOString().split('T')[0];
-          const formattedEndDate = eventData.endDate ? new Date(eventData.endDate).toISOString().split('T')[0] : '';
-          
-          // Set form values
-          form.reset({
-            title: eventData.title,
-            description: eventData.description,
-            startDate: formattedStartDate,
-            endDate: formattedEndDate,
-            location: eventData.location || '',
-            isVirtual: eventData.isVirtual || false,
-            virtualLink: eventData.virtualLink || '',
-            imageUrl: eventData.imageUrl || '',
-            type: eventData.type || 'WORKSHOP',
-            startupCallId: eventData.startupCallId || '',
-          });
-        } catch (error) {
-          console.error('Error fetching event:', error);
-          toast({
-            title: 'Error',
-            description: 'Failed to fetch event details',
-            variant: 'destructive',
-          });
-        }
-      };
+    if (event) {
+      // Format dates for input fields
+      const formattedStartDate = new Date(event.startDate).toISOString().split('T')[0];
+      const formattedEndDate = event.endDate ? new Date(event.endDate).toISOString().split('T')[0] : '';
       
-      fetchEvent();
+      // Set form values
+      form.reset({
+        title: event.title,
+        description: event.description,
+        startDate: formattedStartDate,
+        endDate: formattedEndDate,
+        location: event.location || '',
+        isVirtual: event.isVirtual || false,
+        virtualLink: event.virtualLink || '',
+        imageUrl: event.imageUrl || '',
+        type: event.type || 'WORKSHOP',
+        startupCallId: event.startupCallId || 'none',
+      });
     }
-  }, [id, form]);
-
-  // Fetch startup calls for the dropdown
-  useEffect(() => {
-    const fetchStartupCalls = async () => {
-      try {
-        const response = await axios.get('/api/startupcalls');
-        setStartupCalls(response.data);
-      } catch (error) {
-        console.error('Error fetching startup calls:', error);
-      }
-    };
-    
-    fetchStartupCalls();
-  }, []);
+  }, [event, form]);
 
   const onSubmit = async (values: FormValues) => {
     setIsLoading(true);
     
     try {
-      await axios.put(`/api/events/${id}`, values);
+      // Convert "none" value to null for startupCallId
+      const dataToSubmit = {
+        ...values,
+        startupCallId: values.startupCallId === 'none' ? null : values.startupCallId
+      };
+      
+      await axios.put(`/api/events/${id}`, dataToSubmit);
+      
+      // Revalidate data globally
+      mutate(`/api/events/${id}`);
+      mutate('/api/events');
       
       toast({
         title: 'Success',
@@ -154,6 +146,37 @@ export default function EditEventPage() {
       setIsLoading(false);
     }
   };
+  
+  // Show loading state while data is being fetched
+  if (!event && !eventError) {
+    return (
+      <Layout title="Edit Event | Admin">
+        <div className="container mx-auto py-6 flex justify-center items-center min-h-[60vh]">
+          <div>Loading event data...</div>
+        </div>
+      </Layout>
+    );
+  }
+  
+  // Show error state
+  if (eventError) {
+    return (
+      <Layout title="Edit Event | Admin">
+        <div className="container mx-auto py-6">
+          <div className="text-red-500">
+            Error loading event data. Please try again.
+          </div>
+          <Button 
+            variant="outline" 
+            onClick={() => router.back()}
+            className="mt-4"
+          >
+            Go Back
+          </Button>
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout title="Edit Event | Admin">
@@ -379,7 +402,7 @@ export default function EditEventPage() {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            <SelectItem value="">None</SelectItem>
+                            <SelectItem value="none">None</SelectItem>
                             {startupCalls.map((call: any) => (
                               <SelectItem key={call.id} value={call.id}>
                                 {call.title}
