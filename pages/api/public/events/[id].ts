@@ -13,23 +13,27 @@ export default async function handler(
   
   if (req.method === 'GET') {
     try {
-      const event = await prisma.event.findUnique({
-        where: { id },
-        select: {
-          id: true,
-          title: true,
-          description: true,
-          startDate: true,
-          endDate: true,
-          location: true,
-          isVirtual: true,
-          virtualLink: true,
-          imageUrl: true,
-          type: true,
-          createdAt: true,
-          // Exclude sensitive or admin-only fields
-        },
-      });
+      // Use raw query to avoid prepared statement issues
+      const events = await prisma.$queryRaw`
+        SELECT 
+          id, 
+          title, 
+          description, 
+          "startDate", 
+          "endDate", 
+          location, 
+          "isVirtual", 
+          "virtualLink", 
+          "imageUrl", 
+          type, 
+          "createdAt"
+        FROM "Event"
+        WHERE id = ${id}
+        LIMIT 1
+      `;
+      
+      // Check if we got a result
+      const event = Array.isArray(events) && events.length > 0 ? events[0] : null;
       
       if (!event) {
         return res.status(404).json({ error: 'Event not found' });
@@ -38,7 +42,10 @@ export default async function handler(
       return res.status(200).json(event);
     } catch (error) {
       console.error('Error fetching event:', error);
-      return res.status(500).json({ error: 'Failed to fetch event' });
+      return res.status(500).json({ 
+        error: 'Failed to fetch event',
+        details: process.env.NODE_ENV !== 'production' && error instanceof Error ? error.message : undefined
+      });
     }
   }
   

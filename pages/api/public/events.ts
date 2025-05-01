@@ -9,38 +9,36 @@ export default async function handler(
     try {
       // Get current date at the start of the day
       const now = new Date();
-      now.setHours(0, 0, 0, 0);
       
-      // Find all public events that are either happening today or in the future
-      const events = await prisma.event.findMany({
-        where: {
-          startDate: {
-            gte: now,
-          },
-        },
-        orderBy: {
-          startDate: 'asc',  // Show soonest events first
-        },
-        select: {
-          id: true,
-          title: true,
-          description: true,
-          startDate: true,
-          endDate: true,
-          location: true,
-          isVirtual: true,
-          virtualLink: true,
-          imageUrl: true,
-          type: true,
-          createdAt: true,
-          // Exclude sensitive or admin-only fields
-        },
-      });
+      // Format date for SQL query
+      const formattedDate = now.toISOString();
+      
+      // Use raw query to avoid prepared statement issues
+      const events = await prisma.$queryRaw`
+        SELECT 
+          id, 
+          title, 
+          description, 
+          "startDate", 
+          "endDate", 
+          location, 
+          "isVirtual", 
+          "virtualLink", 
+          "imageUrl", 
+          type, 
+          "createdAt"
+        FROM "Event"
+        WHERE "startDate" >= ${formattedDate}::timestamp
+        ORDER BY "startDate" ASC
+      `;
 
       return res.status(200).json(events);
     } catch (error) {
       console.error('Error fetching events:', error);
-      return res.status(500).json({ error: 'Failed to fetch events' });
+      return res.status(500).json({ 
+        error: 'Failed to fetch events',
+        details: process.env.NODE_ENV !== 'production' && error instanceof Error ? error.message : undefined 
+      });
     }
   }
 

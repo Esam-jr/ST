@@ -230,23 +230,27 @@ export default function EventDetailPage({ fallbackData }: { fallbackData: Event 
 }
 
 export const getStaticPaths: GetStaticPaths = async () => {
-  // Get the most recent events to pre-render
-  const events = await prisma.event.findMany({
-    take: 10,
-    orderBy: {
-      createdAt: 'desc',
-    },
-    select: {
-      id: true,
-    },
-  });
-  
-  // Add explicit type to event parameter
-  const paths = events.map((event: { id: string }) => ({
-    params: { id: event.id.toString() },
-  }));
-  
-  return { paths, fallback: true };
+  try {
+    // Use a simpler query to avoid prepared statement issues
+    const events = await prisma.$queryRaw`
+      SELECT id FROM "Event" 
+      ORDER BY "createdAt" DESC 
+      LIMIT 10
+    `;
+    
+    // Map the raw query results to path params
+    const paths = Array.isArray(events) 
+      ? events.map((event: any) => ({
+          params: { id: event.id.toString() },
+        }))
+      : [];
+    
+    return { paths, fallback: true };
+  } catch (error) {
+    console.error('Error in getStaticPaths:', error);
+    // Return empty paths array but enable fallback
+    return { paths: [], fallback: true };
+  }
 };
 
 export const getStaticProps: GetStaticProps = async ({ params }) => {
@@ -257,28 +261,33 @@ export const getStaticProps: GetStaticProps = async ({ params }) => {
       return { notFound: true };
     }
     
-    const event = await prisma.event.findUnique({
-      where: { id },
-      select: {
-        id: true,
-        title: true,
-        description: true,
-        startDate: true,
-        endDate: true,
-        location: true,
-        isVirtual: true,
-        virtualLink: true,
-        imageUrl: true,
-        type: true,
-        createdAt: true,
-      },
-    });
+    // Use raw query to avoid prepared statement issues
+    const events = await prisma.$queryRaw`
+      SELECT 
+        id, 
+        title, 
+        description, 
+        "startDate", 
+        "endDate", 
+        location, 
+        "isVirtual", 
+        "virtualLink", 
+        "imageUrl", 
+        type, 
+        "createdAt"
+      FROM "Event"
+      WHERE id = ${id}
+      LIMIT 1
+    `;
+    
+    // Check if we got a result
+    const event = Array.isArray(events) && events.length > 0 ? events[0] : null;
     
     if (!event) {
       return { notFound: true };
     }
     
-    // Convert dates to strings for serialization
+    // Convert dates to strings for serialization and ensure proper format
     return {
       props: {
         fallbackData: JSON.parse(JSON.stringify(event)),
