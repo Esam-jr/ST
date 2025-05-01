@@ -41,7 +41,20 @@ export default function Home() {
   // Fetch latest updates with SWR
   const { data: latestUpdates = [], error: updatesError } = useSWR<UpdateItem[]>(
     '/api/public/latest-updates',
-    fetcher
+    fetcher,
+    {
+      onErrorRetry: (error, key, config, revalidate, { retryCount }) => {
+        // Only retry up to 3 times
+        if (retryCount >= 3) return;
+        
+        // Retry after 5 seconds
+        setTimeout(() => revalidate({ retryCount }), 5000);
+      },
+      // Don't revalidate on focus to avoid excessive requests when there are issues
+      revalidateOnFocus: false,
+      // Keep displaying stale data on error to avoid UI flickering
+      keepPreviousData: true
+    }
   );
 
   return (

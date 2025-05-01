@@ -36,7 +36,7 @@ export default async function handler(
       // Get active announcements (limited to 5)
       const announcements = await prisma.advertisement.findMany({
         where: {
-          isActive: true,
+          status: 'ACTIVE',
         },
         orderBy: {
           createdAt: 'desc',
@@ -45,7 +45,7 @@ export default async function handler(
         select: {
           id: true,
           title: true,
-          description: true,
+          content: true,
           imageUrl: true,
           createdAt: true,
         },
@@ -67,7 +67,7 @@ export default async function handler(
       const formattedAnnouncements = announcements.map(announcement => ({
         id: announcement.id,
         title: announcement.title,
-        description: announcement.description,
+        description: announcement.content,
         imageUrl: announcement.imageUrl,
         type: 'announcement',
         category: 'ANNOUNCEMENT',
