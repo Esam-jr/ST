@@ -11,14 +11,6 @@ import { PrismaClient } from '@prisma/client';
 // exhausting your database connection limit.
 // Learn more: https://pris.ly/d/help/next-js-best-practices
 
-// Define our custom global type
-interface CustomNodeJsGlobal extends NodeJS.Global {
-  prisma: PrismaClient | undefined;
-}
-
-// Declare global var with our custom type
-declare const global: CustomNodeJsGlobal;
-
 // Create a singleton PrismaClient instance
 let prisma: PrismaClient;
 
@@ -45,15 +37,23 @@ if (typeof window === 'undefined') {
 }
 
 // Set up proper connection management for development
-if (process.env.NODE_ENV !== 'production') {
-  // Register optimized connection management handlers
-  if (typeof window === 'undefined') {
-    // For server-side code, properly handle Prisma connections
-    prisma.$on('beforeExit', async () => {
-      // Wait for all connections to finish before exiting
-      await prisma.$disconnect();
-    });
-  }
+if (process.env.NODE_ENV !== 'production' && typeof window === 'undefined') {
+  // Add process event listeners for proper cleanup
+  // This replaces the unsupported $on('beforeExit') method
+  process.on('beforeExit', async () => {
+    await prisma.$disconnect();
+  });
+  
+  // Also handle SIGINT and SIGTERM
+  process.on('SIGINT', async () => {
+    await prisma.$disconnect();
+    process.exit(0);
+  });
+  
+  process.on('SIGTERM', async () => {
+    await prisma.$disconnect();
+    process.exit(0);
+  });
 }
 
 export default prisma;
