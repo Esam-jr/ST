@@ -92,6 +92,18 @@ export default function Navbar() {
               >
                 Sponsors
               </Link>
+              {session?.user?.role === 'SPONSOR' && (
+                <Link
+                  href="/sponsor/opportunities"
+                  className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                    router.pathname.startsWith('/sponsor/opportunities')
+                      ? 'bg-primary/10 text-primary'
+                      : 'text-foreground/60 hover:bg-accent hover:text-accent-foreground'
+                  }`}
+                >
+                  Sponsorship Opportunities
+                </Link>
+              )}
               <Link
                 href="/events"
                 className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
@@ -219,6 +231,18 @@ export default function Navbar() {
             >
               Sponsors
             </Link>
+            {session?.user?.role === 'SPONSOR' && (
+              <Link
+                href="/sponsor/opportunities"
+                className={`block rounded-md px-3 py-2 text-sm font-medium ${
+                  router.pathname.startsWith('/sponsor/opportunities')
+                    ? 'bg-primary/10 text-primary'
+                    : 'text-foreground/60 hover:bg-accent hover:text-accent-foreground'
+                }`}
+              >
+                Sponsorship Opportunities
+              </Link>
+            )}
             <Link
               href="/events"
               className={`block rounded-md px-3 py-2 text-sm font-medium ${

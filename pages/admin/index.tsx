@@ -104,6 +104,7 @@ export default function AdminDashboard() {
     { id: 'overview', label: 'Overview', icon: <Home className="h-5 w-5" /> },
     { id: 'startup-calls', label: 'Startup Calls', icon: <Briefcase className="h-5 w-5" /> },
     { id: 'sponsor-calls', label: 'Sponsor Calls', icon: <Award className="h-5 w-5" /> },
+    { id: 'sponsorship-opportunities', label: 'Sponsorship Opportunities', icon: <DollarSign className="h-5 w-5" /> },
     { id: 'events', label: 'Events', icon: <Calendar className="h-5 w-5" /> },
     { id: 'users', label: 'Users & Roles', icon: <Users className="h-5 w-5" /> },
     { id: 'reviewer-management', label: 'Reviewer Management', icon: <ClipboardList className="h-5 w-5" /> },
@@ -137,6 +138,8 @@ export default function AdminDashboard() {
         return <AdminStartupCalls />;
       case 'sponsor-calls':
         return <AdminSponsorCalls />;
+      case 'sponsorship-opportunities':
+        return <iframe src="/admin/sponsorship-opportunities" className="w-full h-[calc(100vh-8rem)] border-none" />;
       case 'events':
         return <iframe src="/admin/events" className="w-full h-[calc(100vh-8rem)] border-none" />;
       case 'advertisements':
