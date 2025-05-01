@@ -41,15 +41,15 @@ import * as z from 'zod';
 
 // Form validation schema
 const formSchema = z.object({
-  title: z.string().min(3, { message: 'Title must be at least 3 characters' }),
-  description: z.string().min(10, { message: 'Description must be at least 10 characters' }),
-  startDate: z.string(),
+  title: z.string().min(3, { message: 'Title is required' }),
+  description: z.string().min(10, { message: 'Description is required' }),
+  startDate: z.string().min(1, { message: 'Start date is required' }),
   endDate: z.string().optional(),
-  location: z.string().min(3, { message: 'Location is required' }),
+  location: z.string().optional(),
   isVirtual: z.boolean().default(false),
-  virtualLink: z.string().url({ message: 'Virtual link must be a valid URL' }).optional().or(z.literal('')),
-  imageUrl: z.string().url({ message: 'Image URL must be a valid URL' }).optional().or(z.literal('')),
-  type: z.enum(['WORKSHOP', 'NETWORKING', 'CONFERENCE', 'MEETUP', 'DEADLINE', 'OTHER']),
+  virtualLink: z.string().optional(),
+  imageUrl: z.string().optional(),
+  type: z.enum(['WORKSHOP', 'CONFERENCE', 'MEETUP', 'WEBINAR']),
   startupCallId: z.string().optional(),
 });
 
