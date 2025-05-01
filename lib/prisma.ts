@@ -7,59 +7,52 @@ import { PrismaClient } from '@prisma/client';
  * by optimizing connection pooling and disabling prepared statements when necessary
  */
 
-const prismaClientSingleton = () => {
-  return new PrismaClient();
-};
+// PrismaClient is attached to the `global` object in development to prevent
+// exhausting your database connection limit.
+// Learn more: https://pris.ly/d/help/next-js-best-practices
 
-type PrismaClientSingleton = ReturnType<typeof prismaClientSingleton>;
+// Define our custom global type
+interface CustomNodeJsGlobal extends NodeJS.Global {
+  prisma: PrismaClient | undefined;
+}
 
-const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClientSingleton | undefined;
-};
+// Declare global var with our custom type
+declare const global: CustomNodeJsGlobal;
 
-const prisma = globalForPrisma.prisma ?? prismaClientSingleton();
+// Create a singleton PrismaClient instance
+let prisma: PrismaClient;
+
+if (typeof window === 'undefined') {
+  // We're on the server
+  if (process.env.NODE_ENV === 'production') {
+    // In production, create a new client
+    prisma = new PrismaClient();
+  } else {
+    // In development, reuse the client
+    // @ts-ignore - Global doesn't have prisma property
+    if (!global.prisma) {
+      // @ts-ignore - Global doesn't have prisma property
+      global.prisma = new PrismaClient({
+        log: ['error', 'warn'],
+      });
+    }
+    // @ts-ignore - Global doesn't have prisma property
+    prisma = global.prisma;
+  }
+} else {
+  // We're in the browser
+  prisma = new PrismaClient();
+}
 
 // Set up proper connection management for development
 if (process.env.NODE_ENV !== 'production') {
-  globalForPrisma.prisma = prisma;
-  
   // Register optimized connection management handlers
   if (typeof window === 'undefined') {
-    if (!(global as any).__prismaListenerInitialized) {
-      (global as any).__prismaListenerInitialized = true;
-      
-      // Clean up on process exit
-      process.on('beforeExit', async () => {
-        await prisma.$disconnect();
-      });
-      
-      // Handle termination signals efficiently
-      ['SIGINT', 'SIGTERM', 'SIGQUIT'].forEach(signal => {
-        process.on(signal, async () => {
-          console.log(`${signal} received, cleaning up Prisma connections`);
-          await prisma.$disconnect();
-          process.exit(0);
-        });
-      });
-      
-      // For Next.js Fast Refresh
-      process.on('SIGHUP', async () => {
-        console.log('SIGHUP received, reconnecting Prisma');
-        await prisma.$disconnect();
-      });
-      
-      // Handle connection errors
-      process.on('uncaughtException', async (err) => {
-        if (err.message && (
-          err.message.includes('prepared statement') ||
-          err.message.includes('connection') ||
-          err.message.includes('timeout')
-        )) {
-          console.log('Uncaught Prisma error, resetting connection:', err.message);
-          await prisma.$disconnect();
-        }
-      });
-    }
+    // For server-side code, properly handle Prisma connections
+    prisma.$on('beforeExit', async () => {
+      // Wait for all connections to finish before exiting
+      await prisma.$disconnect();
+    });
   }
 }
 
