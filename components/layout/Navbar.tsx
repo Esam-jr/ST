@@ -85,14 +85,14 @@ export default function Navbar() {
                 Startups
               </Link>
               <Link
-                href="/sponsors"
+                href="/sponsorship-opportunities"
                 className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-                  router.pathname.startsWith('/sponsors')
+                  router.pathname.startsWith('/sponsorship-opportunities')
                     ? 'bg-primary/10 text-primary'
                     : 'text-foreground/60 hover:bg-accent hover:text-accent-foreground'
                 }`}
               >
-                Sponsors
+                Sponsor Call
               </Link>
               {session?.user?.role === 'SPONSOR' && (
                 <Link
@@ -103,7 +103,7 @@ export default function Navbar() {
                       : 'text-foreground/60 hover:bg-accent hover:text-accent-foreground'
                   }`}
                 >
-                  Sponsorship Opportunities
+                  My Sponsorships
                 </Link>
               )}
               {session?.user?.role === 'ADMIN' && (
@@ -236,14 +236,14 @@ export default function Navbar() {
               Startups
             </Link>
             <Link
-              href="/sponsors"
+              href="/sponsorship-opportunities"
               className={`block rounded-md px-3 py-2 text-sm font-medium ${
-                router.pathname.startsWith('/sponsors')
+                router.pathname.startsWith('/sponsorship-opportunities')
                   ? 'bg-primary/10 text-primary'
                   : 'text-foreground/60 hover:bg-accent hover:text-accent-foreground'
               }`}
             >
-              Sponsors
+              Sponsor Call
             </Link>
             {session?.user?.role === 'SPONSOR' && (
               <Link
@@ -254,7 +254,7 @@ export default function Navbar() {
                     : 'text-foreground/60 hover:bg-accent hover:text-accent-foreground'
                 }`}
               >
-                Sponsorship Opportunities
+                My Sponsorships
               </Link>
             )}
             {session?.user?.role === 'ADMIN' && (
