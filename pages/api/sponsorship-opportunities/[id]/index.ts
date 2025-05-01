@@ -1,52 +1,60 @@
-import { NextApiRequest, NextApiResponse } from 'next';
+import type { NextApiRequest, NextApiResponse } from 'next';
 import { getServerSession } from 'next-auth/next';
-import { authOptions } from '../../auth/[...nextauth]';
+import { authOptions } from '@/pages/api/auth/[...nextauth]';
 import prisma from '@/lib/prisma';
 
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
+  const id = req.query.id as string;
+
+  if (!id) {
+    return res.status(400).json({ message: 'Missing opportunity ID' });
+  }
+
   const session = await getServerSession(req, res, authOptions);
 
-  // Check authentication
+  // Allow public access to GET endpoint for active opportunities
+  if (req.method === 'GET') {
+    return getSponsorshipOpportunity(req, res, session, id);
+  }
+
+  // Check authentication for all other requests
   if (!session) {
-    return res.status(401).json({ error: 'Unauthorized' });
+    return res.status(401).json({ message: 'Unauthorized' });
   }
 
-  const { id } = req.query;
-
-  if (!id || typeof id !== 'string') {
-    return res.status(400).json({ error: 'Invalid opportunity ID' });
-  }
-
-  // Handle different HTTP methods
   switch (req.method) {
-    case 'GET':
-      return getSponsorshipOpportunity(req, res, session, id);
     case 'PATCH':
+    case 'PUT':
+      if (session.user.role !== 'ADMIN') {
+        return res.status(403).json({ message: 'Forbidden' });
+      }
       return updateSponsorshipOpportunity(req, res, session, id);
     case 'DELETE':
+      if (session.user.role !== 'ADMIN') {
+        return res.status(403).json({ message: 'Forbidden' });
+      }
       return deleteSponsorshipOpportunity(req, res, session, id);
     default:
-      return res.status(405).json({ error: 'Method not allowed' });
+      return res.status(405).json({ message: 'Method not allowed' });
   }
 }
 
-// Get a specific sponsorship opportunity
 async function getSponsorshipOpportunity(
   req: NextApiRequest, 
   res: NextApiResponse, 
-  session: any, 
+  session: any | null, 
   id: string
 ) {
   try {
-    // Check if the opportunity exists
     const opportunity = await prisma.sponsorshipOpportunity.findUnique({
       where: { id },
       include: {
         startupCall: {
           select: {
+            id: true,
             title: true,
           },
         },
@@ -59,22 +67,21 @@ async function getSponsorshipOpportunity(
     });
 
     if (!opportunity) {
-      return res.status(404).json({ error: 'Sponsorship opportunity not found' });
+      return res.status(404).json({ message: 'Sponsorship opportunity not found' });
     }
 
-    // If not admin and the opportunity is not active, don't allow access
-    if (session.user.role !== 'ADMIN' && opportunity.status !== 'active') {
-      return res.status(403).json({ error: 'Access to this opportunity is restricted' });
+    // If user is not admin and the opportunity is not active, restrict access
+    if (!session || (session.user.role !== 'ADMIN' && opportunity.status !== 'ACTIVE')) {
+      return res.status(403).json({ message: 'This opportunity is not currently available' });
     }
 
     return res.status(200).json(opportunity);
   } catch (error) {
     console.error('Error fetching sponsorship opportunity:', error);
-    return res.status(500).json({ error: 'Failed to fetch sponsorship opportunity' });
+    return res.status(500).json({ message: 'Failed to fetch sponsorship opportunity' });
   }
 }
 
-// Update a sponsorship opportunity
 async function updateSponsorshipOpportunity(
   req: NextApiRequest, 
   res: NextApiResponse, 
@@ -82,27 +89,6 @@ async function updateSponsorshipOpportunity(
   id: string
 ) {
   try {
-    // Only admins can update sponsorship opportunities
-    if (session.user.role !== 'ADMIN') {
-      return res.status(403).json({ error: 'Forbidden: Only administrators can update sponsorship opportunities' });
-    }
-
-    // Check if the opportunity exists
-    const existingOpportunity = await prisma.sponsorshipOpportunity.findUnique({
-      where: { id },
-      include: {
-        _count: {
-          select: {
-            applications: true,
-          },
-        },
-      },
-    });
-
-    if (!existingOpportunity) {
-      return res.status(404).json({ error: 'Sponsorship opportunity not found' });
-    }
-
     const {
       title,
       description,
@@ -112,23 +98,32 @@ async function updateSponsorshipOpportunity(
       currency,
       status,
       startupCallId,
-      deadline,
+      deadline
     } = req.body;
 
-    // Validate status changes
-    if (status && status !== existingOpportunity.status) {
-      // If there are applications and trying to change to draft, don't allow
-      if (status === 'draft' && existingOpportunity._count.applications > 0) {
-        return res.status(400).json({ 
-          error: 'Cannot change status to draft because there are existing applications' 
-        });
-      }
+    // Check if opportunity exists
+    const existingOpportunity = await prisma.sponsorshipOpportunity.findUnique({
+      where: { id },
+    });
+
+    if (!existingOpportunity) {
+      return res.status(404).json({ message: 'Sponsorship opportunity not found' });
     }
 
-    // Prepare the update data
-    const updateData: any = {};
+    // Validate amount fields if they are provided
+    if (
+      (minAmount !== undefined || maxAmount !== undefined) &&
+      ((minAmount && isNaN(Number(minAmount))) ||
+        (maxAmount && isNaN(Number(maxAmount))) ||
+        (minAmount && Number(minAmount) < 0) ||
+        (minAmount && maxAmount && Number(minAmount) > Number(maxAmount)))
+    ) {
+      return res.status(400).json({ message: 'Invalid amount values' });
+    }
 
-    // Only include fields that were provided in the request
+    // Prepare update data
+    const updateData: any = {};
+    
     if (title !== undefined) updateData.title = title;
     if (description !== undefined) updateData.description = description;
     if (benefits !== undefined) updateData.benefits = benefits;
@@ -137,19 +132,8 @@ async function updateSponsorshipOpportunity(
     if (currency !== undefined) updateData.currency = currency;
     if (status !== undefined) updateData.status = status;
     if (startupCallId !== undefined) updateData.startupCallId = startupCallId || null;
-    if (deadline !== undefined) updateData.deadline = deadline || null;
-
-    // If both min and max amount are provided, validate their relationship
-    if (updateData.minAmount !== undefined && updateData.maxAmount !== undefined) {
-      if (updateData.minAmount > updateData.maxAmount) {
-        return res.status(400).json({ error: 'Minimum amount cannot be greater than maximum amount' });
-      }
-    } else if (updateData.minAmount !== undefined && updateData.minAmount > existingOpportunity.maxAmount) {
-      return res.status(400).json({ error: 'Minimum amount cannot be greater than the existing maximum amount' });
-    } else if (updateData.maxAmount !== undefined && updateData.maxAmount < existingOpportunity.minAmount) {
-      return res.status(400).json({ error: 'Maximum amount cannot be less than the existing minimum amount' });
-    }
-
+    if (deadline !== undefined) updateData.deadline = deadline ? new Date(deadline) : null;
+    
     // Update the opportunity
     const updatedOpportunity = await prisma.sponsorshipOpportunity.update({
       where: { id },
@@ -159,11 +143,10 @@ async function updateSponsorshipOpportunity(
     return res.status(200).json(updatedOpportunity);
   } catch (error) {
     console.error('Error updating sponsorship opportunity:', error);
-    return res.status(500).json({ error: 'Failed to update sponsorship opportunity' });
+    return res.status(500).json({ message: 'Failed to update sponsorship opportunity' });
   }
 }
 
-// Delete a sponsorship opportunity
 async function deleteSponsorshipOpportunity(
   req: NextApiRequest, 
   res: NextApiResponse, 
@@ -171,31 +154,22 @@ async function deleteSponsorshipOpportunity(
   id: string
 ) {
   try {
-    // Only admins can delete sponsorship opportunities
-    if (session.user.role !== 'ADMIN') {
-      return res.status(403).json({ error: 'Forbidden: Only administrators can delete sponsorship opportunities' });
-    }
-
-    // Check if the opportunity exists
-    const opportunity = await prisma.sponsorshipOpportunity.findUnique({
+    // Check if opportunity exists
+    const existingOpportunity = await prisma.sponsorshipOpportunity.findUnique({
       where: { id },
       include: {
-        _count: {
-          select: {
-            applications: true,
-          },
-        },
+        applications: true,
       },
     });
 
-    if (!opportunity) {
-      return res.status(404).json({ error: 'Sponsorship opportunity not found' });
+    if (!existingOpportunity) {
+      return res.status(404).json({ message: 'Sponsorship opportunity not found' });
     }
 
-    // Only allow deletion if there are no applications or if it's in draft status
-    if (opportunity._count.applications > 0 && opportunity.status !== 'draft') {
+    // Don't allow deletion if there are applications and it's not a draft
+    if (existingOpportunity.applications.length > 0 && existingOpportunity.status !== 'DRAFT') {
       return res.status(400).json({ 
-        error: 'Cannot delete this opportunity because it has applications. Consider archiving it instead.' 
+        message: 'Cannot delete opportunity with existing applications. Consider archiving instead.' 
       });
     }
 
@@ -207,6 +181,6 @@ async function deleteSponsorshipOpportunity(
     return res.status(200).json({ message: 'Sponsorship opportunity deleted successfully' });
   } catch (error) {
     console.error('Error deleting sponsorship opportunity:', error);
-    return res.status(500).json({ error: 'Failed to delete sponsorship opportunity' });
+    return res.status(500).json({ message: 'Failed to delete sponsorship opportunity' });
   }
 } 

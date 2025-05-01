@@ -1,6 +1,6 @@
-import { NextApiRequest, NextApiResponse } from 'next';
+import type { NextApiRequest, NextApiResponse } from 'next';
 import { getServerSession } from 'next-auth/next';
-import { authOptions } from '../auth/[...nextauth]';
+import { authOptions } from '@/pages/api/auth/[...nextauth]';
 import prisma from '@/lib/prisma';
 
 export default async function handler(
@@ -9,53 +9,56 @@ export default async function handler(
 ) {
   const session = await getServerSession(req, res, authOptions);
 
-  // Check authentication
-  if (!session) {
-    return res.status(401).json({ error: 'Unauthorized' });
+  // Allow public access to GET endpoints for active opportunities
+  if (req.method === 'GET' && req.query.status === 'active') {
+    return getSponsorshipOpportunities(req, res);
   }
 
-  // Handle different HTTP methods
+  // Check authentication for all other requests
+  if (!session) {
+    return res.status(401).json({ message: 'Unauthorized' });
+  }
+
   switch (req.method) {
     case 'GET':
       return getSponsorshipOpportunities(req, res, session);
     case 'POST':
+      if (session.user.role !== 'ADMIN') {
+        return res.status(403).json({ message: 'Forbidden' });
+      }
       return createSponsorshipOpportunity(req, res, session);
     default:
-      return res.status(405).json({ error: 'Method not allowed' });
+      return res.status(405).json({ message: 'Method not allowed' });
   }
 }
 
-// Get sponsorship opportunities with optional filtering
-async function getSponsorshipOpportunities(req: NextApiRequest, res: NextApiResponse, session: any) {
+async function getSponsorshipOpportunities(req: NextApiRequest, res: NextApiResponse, session?: any) {
   try {
     const { status } = req.query;
     
-    // Create filter based on query parameters
-    const filter: any = {};
+    // Build filter conditions based on query parameters
+    const whereConditions: any = {};
     
     // Filter by status if provided
     if (status) {
-      filter.status = status === 'active' 
-        ? 'active' 
-        : status === 'closed' 
-          ? 'closed' 
-          : status === 'draft' 
-            ? 'draft' 
-            : status === 'archived' 
-              ? 'archived' 
-              : undefined;
+      if (typeof status === 'string') {
+        whereConditions.status = status.toUpperCase();
+      } else if (Array.isArray(status)) {
+        whereConditions.status = { in: status.map(s => s.toUpperCase()) };
+      }
     }
     
-    // If user is not admin, only show active opportunities unless they're specifically requesting their own
-    if (session.user.role !== 'ADMIN' && req.query.own !== 'true') {
-      filter.status = 'active';
+    // Only admins can see all opportunities, others only see active ones
+    if (!session || session.user.role !== 'ADMIN') {
+      whereConditions.status = 'ACTIVE';
     }
     
     const opportunities = await prisma.sponsorshipOpportunity.findMany({
-      where: filter,
+      where: whereConditions,
       include: {
         startupCall: {
           select: {
+            id: true,
             title: true,
           },
         },
@@ -69,62 +72,59 @@ async function getSponsorshipOpportunities(req: NextApiRequest, res: NextApiResp
         createdAt: 'desc',
       },
     });
-
+    
     return res.status(200).json(opportunities);
   } catch (error) {
     console.error('Error fetching sponsorship opportunities:', error);
-    return res.status(500).json({ error: 'Failed to fetch sponsorship opportunities' });
+    return res.status(500).json({ message: 'Failed to fetch sponsorship opportunities' });
   }
 }
 
-// Create a new sponsorship opportunity
 async function createSponsorshipOpportunity(req: NextApiRequest, res: NextApiResponse, session: any) {
   try {
-    // Only admins can create sponsorship opportunities
-    if (session.user.role !== 'ADMIN') {
-      return res.status(403).json({ error: 'Forbidden: Only administrators can create sponsorship opportunities' });
-    }
-
-    const {
-      title,
-      description,
-      benefits,
-      minAmount,
-      maxAmount,
-      currency,
-      status = 'draft', // Default to draft
+    const { 
+      title, 
+      description, 
+      benefits, 
+      minAmount, 
+      maxAmount, 
+      currency, 
+      status = 'DRAFT',
       startupCallId,
-      deadline,
+      deadline 
     } = req.body;
-
-    // Basic validation
-    if (!title || !description || !minAmount || !maxAmount || !currency) {
-      return res.status(400).json({ error: 'Missing required fields' });
+    
+    if (!title || !description || minAmount === undefined || maxAmount === undefined || !currency) {
+      return res.status(400).json({ message: 'Missing required fields' });
     }
-
-    // Validate amounts
-    if (minAmount <= 0 || maxAmount <= 0 || minAmount > maxAmount) {
-      return res.status(400).json({ error: 'Invalid amount values' });
+    
+    // Validate numeric fields
+    if (isNaN(minAmount) || isNaN(maxAmount) || minAmount < 0 || maxAmount < minAmount) {
+      return res.status(400).json({ message: 'Invalid amount values' });
     }
-
-    // Create the opportunity
+    
     const opportunity = await prisma.sponsorshipOpportunity.create({
       data: {
         title,
         description,
-        benefits: Array.isArray(benefits) ? benefits : [],
+        benefits,
         minAmount: Number(minAmount),
         maxAmount: Number(maxAmount),
         currency,
         status,
         startupCallId: startupCallId || null,
-        // Additional fields can be added as needed
+        deadline: deadline ? new Date(deadline) : null,
+        createdBy: {
+          connect: {
+            id: session.user.id,
+          },
+        },
       },
     });
-
+    
     return res.status(201).json(opportunity);
   } catch (error) {
     console.error('Error creating sponsorship opportunity:', error);
-    return res.status(500).json({ error: 'Failed to create sponsorship opportunity' });
+    return res.status(500).json({ message: 'Failed to create sponsorship opportunity' });
   }
 } 
