@@ -61,7 +61,7 @@ export default function EventsPage() {
       setDeletingId(null);
     }
   };
-
+  
   return (
     <Layout title="Events Management | Admin">
       <div className="container mx-auto py-6 space-y-6">
@@ -185,7 +185,7 @@ export default function EventsPage() {
       </div>
     </Layout>
   );
-}
+} 
 
 export const getServerSideProps: GetServerSideProps = async (context) => {
   const session = await getSession(context);

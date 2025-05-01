@@ -33,7 +33,7 @@ export default function PublicEventsPage() {
   const filteredEvents = events.filter((event: any) => 
     event.title.toLowerCase().includes(searchTerm.toLowerCase())
   );
-
+  
   return (
     <Layout title="Events | Startup Network">
       <div className="container mx-auto py-12 px-4 sm:px-6 lg:px-8">
@@ -41,9 +41,9 @@ export default function PublicEventsPage() {
           <h1 className="text-4xl font-bold mb-4">Upcoming Events</h1>
           <p className="text-xl text-gray-600 max-w-2xl mx-auto">
             Join our community events, workshops, and networking opportunities to connect with fellow entrepreneurs.
-          </p>
-        </div>
-
+            </p>
+          </div>
+          
         <div className="flex w-full max-w-md mx-auto items-center space-x-2 mb-12">
           <Input
             type="text"
@@ -54,9 +54,9 @@ export default function PublicEventsPage() {
           />
           <Button type="submit" variant="ghost">
             <Search className="h-4 w-4" />
-          </Button>
+            </Button>
         </div>
-
+        
         {error ? (
           <div className="bg-red-50 p-4 rounded-md text-red-800 max-w-3xl mx-auto">
             Unable to load events. Please try again later.
@@ -64,11 +64,11 @@ export default function PublicEventsPage() {
         ) : events.length === 0 ? (
           <div className="text-center py-10">
             <p className="text-gray-500">No upcoming events at the moment. Please check back soon!</p>
-          </div>
+                  </div>
         ) : filteredEvents.length === 0 ? (
           <div className="text-center py-10">
             <p className="text-gray-500">No events match your search.</p>
-          </div>
+                  </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-7xl mx-auto">
             {filteredEvents.map((event: any) => (
@@ -98,8 +98,8 @@ export default function PublicEventsPage() {
                     <span>
                       {event.isVirtual ? 'Virtual Event' : event.location || 'Location TBA'}
                     </span>
-                  </div>
-                  
+          </div>
+          
                   <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-100">
                     <span className="inline-block bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">
                       {event.type}
