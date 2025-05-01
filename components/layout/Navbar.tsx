@@ -38,6 +38,8 @@ export default function Navbar() {
         return '/sponsor-dashboard';
       } else if (session?.user?.role === 'REVIEWER') {
         return '/reviewer-dashboard'; 
+      } else if (session?.user?.role === 'ADMIN') {
+        return '/admin'; 
       } else {
         return '/';
       }
@@ -104,6 +106,18 @@ export default function Navbar() {
                   Sponsorship Opportunities
                 </Link>
               )}
+              {session?.user?.role === 'ADMIN' && (
+                <Link
+                  href="/admin"
+                  className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                    router.pathname.startsWith('/admin')
+                      ? 'bg-primary/10 text-primary'
+                      : 'text-foreground/60 hover:bg-accent hover:text-accent-foreground'
+                  }`}
+                >
+                  Admin Dashboard
+                </Link>
+              )}
               <Link
                 href="/events"
                 className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
@@ -125,7 +139,7 @@ export default function Navbar() {
                 <NotificationDropdown />
                 <div className="hidden sm:block">
                   <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
+                    <DropdownMenuTrigger>
                       <Button variant="ghost" size="icon" className="relative h-8 w-8 rounded-full">
                         <Avatar className="h-8 w-8">
                           <AvatarImage src={session.user?.image || undefined} alt={session.user?.name || 'User'} />
@@ -145,11 +159,11 @@ export default function Navbar() {
                         </div>
                       </div>
                       <DropdownMenuSeparator />
-                      <DropdownMenuItem asChild>
-                        <Link href={getDashboardLink()}>Dashboard</Link>
+                      <DropdownMenuItem>
+                        <Link href={getDashboardLink()} className="w-full">Dashboard</Link>
                       </DropdownMenuItem>
-                      <DropdownMenuItem asChild>
-                        <Link href="/profile">Profile</Link>
+                      <DropdownMenuItem>
+                        <Link href="/profile" className="w-full">Profile</Link>
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem 
@@ -164,12 +178,12 @@ export default function Navbar() {
               </>
             ) : (
               <div className="hidden space-x-2 sm:flex">
-                <Button variant="outline" asChild>
-                  <Link href="/auth/signin">Sign in</Link>
-                </Button>
-                <Button asChild>
-                  <Link href="/auth/signup">Sign up</Link>
-                </Button>
+                <Link href="/auth/signin">
+                  <Button variant="outline">Sign in</Button>
+                </Link>
+                <Link href="/auth/signup">
+                  <Button>Sign up</Button>
+                </Link>
               </div>
             )}
             
@@ -243,6 +257,18 @@ export default function Navbar() {
                 Sponsorship Opportunities
               </Link>
             )}
+            {session?.user?.role === 'ADMIN' && (
+              <Link
+                href="/admin"
+                className={`block rounded-md px-3 py-2 text-sm font-medium ${
+                  router.pathname.startsWith('/admin')
+                    ? 'bg-primary/10 text-primary'
+                    : 'text-foreground/60 hover:bg-accent hover:text-accent-foreground'
+                }`}
+              >
+                Admin Dashboard
+              </Link>
+            )}
             <Link
               href="/events"
               className={`block rounded-md px-3 py-2 text-sm font-medium ${
@@ -278,12 +304,12 @@ export default function Navbar() {
               </>
             ) : (
               <div className="mt-4 flex flex-col space-y-2 px-3">
-                <Button variant="outline" asChild className="w-full justify-center">
-                  <Link href="/auth/signin">Sign in</Link>
-                </Button>
-                <Button asChild className="w-full justify-center">
-                  <Link href="/auth/signup">Sign up</Link>
-                </Button>
+                <Link href="/auth/signin">
+                  <Button variant="outline" className="w-full justify-center">Sign in</Button>
+                </Link>
+                <Link href="/auth/signup">
+                  <Button className="w-full justify-center">Sign up</Button>
+                </Link>
               </div>
             )}
           </div>
