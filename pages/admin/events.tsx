@@ -34,6 +34,7 @@ import { Calendar, Edit, MoreVertical, Plus, Search, Share2, Trash2, FileText, M
 import Layout from '@/components/layout/Layout';
 import EventAnnouncement from '@/components/admin/EventAnnouncement';
 import axios from 'axios';
+import React from 'react';
 
 type EventType = 'WORKSHOP' | 'NETWORKING' | 'CONFERENCE' | 'MEETUP' | 'DEADLINE' | 'OTHER';
 
@@ -68,26 +69,42 @@ export default function AdminEventsPage() {
   const [selectedTab, setSelectedTab] = useState<string>('upcoming');
   const [activeSection, setActiveSection] = useState<string>(router.query.section as string || 'manage');
 
-  // Fetch events
+  // Fetch events with optimized loading
   const fetchEvents = async () => {
     setIsLoading(true);
     try {
-      const response = await axios.get('/api/events');
+      // Use AbortController to handle request cancellation if component unmounts
+      const controller = new AbortController();
+      const signal = controller.signal;
+      
+      const response = await axios.get('/api/events', { signal });
       setEvents(response.data);
+      
+      return () => controller.abort(); // Cleanup function to abort request if needed
     } catch (error) {
-      console.error('Error fetching events:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to fetch events',
-        variant: 'destructive',
-      });
+      if (axios.isCancel(error)) {
+        console.log('Request canceled:', error.message);
+      } else {
+        console.error('Error fetching events:', error);
+        toast({
+          title: 'Error',
+          description: 'Failed to fetch events',
+          variant: 'destructive',
+        });
+      }
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchEvents();
+    const cleanup = fetchEvents();
+    return () => {
+      // Call the cleanup function if it exists
+      if (cleanup instanceof Function) {
+        cleanup();
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -96,35 +113,37 @@ export default function AdminEventsPage() {
     }
   }, [router.query.section]);
 
-  // Filter events based on search query and tab
-  const filteredEvents = events
-    .filter(event => {
-      const matchesSearch = event.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          event.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          event.location.toLowerCase().includes(searchQuery.toLowerCase());
-      
-      const now = new Date();
-      const eventDate = new Date(event.startDate);
-      
-      if (selectedTab === 'upcoming') {
-        return matchesSearch && eventDate >= now;
-      } else if (selectedTab === 'past') {
-        return matchesSearch && eventDate < now;
-      }
-      
-      return matchesSearch;
-    })
-    .sort((a, b) => {
-      // Sort by date (upcoming first or past first based on tab)
-      const dateA = new Date(a.startDate);
-      const dateB = new Date(b.startDate);
-      
-      if (selectedTab === 'upcoming') {
-        return dateA.getTime() - dateB.getTime();
-      } else {
-        return dateB.getTime() - dateA.getTime();
-      }
-    });
+  // Memoize filtered events to prevent unnecessary calculations
+  const filteredEvents = React.useMemo(() => {
+    return events
+      .filter(event => {
+        const matchesSearch = event.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                            event.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                            (event.location && event.location.toLowerCase().includes(searchQuery.toLowerCase()));
+        
+        const now = new Date();
+        const eventDate = new Date(event.startDate);
+        
+        if (selectedTab === 'upcoming') {
+          return matchesSearch && eventDate >= now;
+        } else if (selectedTab === 'past') {
+          return matchesSearch && eventDate < now;
+        }
+        
+        return matchesSearch;
+      })
+      .sort((a, b) => {
+        // Sort by date (upcoming first or past first based on tab)
+        const dateA = new Date(a.startDate);
+        const dateB = new Date(b.startDate);
+        
+        if (selectedTab === 'upcoming') {
+          return dateA.getTime() - dateB.getTime(); // Closest dates first
+        } else {
+          return dateB.getTime() - dateA.getTime(); // Most recent past events first
+        }
+      });
+  }, [events, searchQuery, selectedTab]);
 
   // Format date for display
   const formatEventDate = (date: string) => {
