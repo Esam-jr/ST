@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { useSession } from 'next-auth/react';
-import { useForm } from 'react-hook-form';
+import { useForm, Controller, SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import Layout from '@/components/layout/Layout';
@@ -33,26 +33,39 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
-import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, AlertCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
 import axios from 'axios';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
-// Define schema for the form
+// Define schema for the form with stronger validation
 const formSchema = z.object({
-  title: z.string().min(3, { message: 'Title must be at least 3 characters' }),
-  description: z.string().min(10, { message: 'Description must be at least 10 characters' }),
-  benefits: z.array(z.string()),
+  title: z.string().min(3, { message: 'Title must be at least 3 characters' })
+    .max(100, { message: 'Title must not exceed 100 characters' }),
+  description: z.string().min(10, { message: 'Description must be at least 10 characters' })
+    .max(2000, { message: 'Description must not exceed 2000 characters' }),
+  benefits: z.array(
+    z.string().min(1, { message: 'Benefit cannot be empty' })
+      .max(200, { message: 'Benefit must not exceed 200 characters' })
+  ).min(1, { message: 'At least one benefit is required' }),
   minAmount: z.coerce.number().positive({ message: 'Min amount must be positive' }),
   maxAmount: z.coerce.number().positive({ message: 'Max amount must be positive' }),
   currency: z.string().min(1, { message: 'Currency is required' }),
   startupCallId: z.string().optional(),
-  status: z.string().default('draft'),
-  deadline: z.string().optional()
+  status: z.enum(['draft', 'active', 'closed', 'archived']),
+  deadline: z.string().optional().refine(date => {
+    if (!date) return true;
+    // Check if the date is in the future
+    return new Date(date) > new Date();
+  }, { message: "Deadline must be in the future" })
 }).refine(data => data.maxAmount >= data.minAmount, {
   message: "Maximum amount must be greater than or equal to minimum amount",
   path: ["maxAmount"]
 });
+
+// Define the type from our zod schema
+type FormValues = z.infer<typeof formSchema>;
 
 // Type for startup calls that can be associated with the opportunity
 interface StartupCall {
@@ -67,9 +80,10 @@ export default function CreateSponsorshipOpportunity() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [startupCalls, setStartupCalls] = useState<StartupCall[]>([]);
   const [isLoadingCalls, setIsLoadingCalls] = useState(true);
+  const [formError, setFormError] = useState<string | null>(null);
 
   // Initialize form with zod resolver
-  const form = useForm<z.infer<typeof formSchema>>({
+  const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       title: '',
@@ -89,10 +103,15 @@ export default function CreateSponsorshipOpportunity() {
       router.push('/auth/signin?callbackUrl=/admin/sponsorship-opportunities/create');
     } else if (sessionStatus === 'authenticated' && session?.user?.role !== 'ADMIN') {
       router.push('/dashboard');
+      toast({
+        title: 'Access Denied',
+        description: 'You do not have permission to access this page',
+        variant: 'destructive',
+      });
     } else if (sessionStatus === 'authenticated') {
       fetchStartupCalls();
     }
-  }, [sessionStatus, session, router]);
+  }, [sessionStatus, session, router, toast]);
 
   // Fetch startup calls for the dropdown
   const fetchStartupCalls = async () => {
@@ -113,17 +132,29 @@ export default function CreateSponsorshipOpportunity() {
   };
 
   // Handle form submission
-  const onSubmit = async (data: z.infer<typeof formSchema>) => {
+  const onSubmit: SubmitHandler<FormValues> = async (data) => {
     try {
       setIsSubmitting(true);
+      setFormError(null);
       
       // Filter out empty benefits
       const filteredBenefits = data.benefits.filter(benefit => benefit.trim() !== '');
       
-      const response = await axios.post('/api/sponsorship-opportunities', {
+      if (filteredBenefits.length === 0) {
+        form.setError('benefits', {
+          type: 'manual',
+          message: 'At least one non-empty benefit is required'
+        });
+        setIsSubmitting(false);
+        return;
+      }
+      
+      const formData = {
         ...data,
         benefits: filteredBenefits
-      });
+      };
+      
+      const response = await axios.post('/api/sponsorship-opportunities', formData);
       
       toast({
         title: 'Success',
@@ -131,8 +162,27 @@ export default function CreateSponsorshipOpportunity() {
       });
       
       router.push('/admin/sponsorship-opportunities');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating sponsorship opportunity:', error);
+      
+      // Handle API validation errors
+      if (error.response?.data?.errors) {
+        const apiErrors = error.response.data.errors;
+        apiErrors.forEach((err: any) => {
+          if (err.path) {
+            form.setError(err.path[0] as any, {
+              type: 'server',
+              message: err.message
+            });
+          }
+        });
+      } else {
+        setFormError(
+          error.response?.data?.message || 
+          'Failed to create sponsorship opportunity. Please try again.'
+        );
+      }
+      
       toast({
         title: 'Error',
         description: 'Failed to create sponsorship opportunity',
@@ -152,8 +202,12 @@ export default function CreateSponsorshipOpportunity() {
   // Handle removing a benefit field
   const removeBenefit = (index: number) => {
     const currentBenefits = form.getValues('benefits') || [];
+    // Don't remove if it's the last one
+    if (currentBenefits.length <= 1) {
+      return;
+    }
     const newBenefits = currentBenefits.filter((_, i) => i !== index);
-    form.setValue('benefits', newBenefits.length ? newBenefits : ['']);
+    form.setValue('benefits', newBenefits);
   };
 
   return (
@@ -168,6 +222,14 @@ export default function CreateSponsorshipOpportunity() {
           </Link>
           <h1 className="text-3xl font-bold">Create Sponsorship Opportunity</h1>
         </div>
+
+        {formError && (
+          <Alert variant="destructive" className="mb-6">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Error</AlertTitle>
+            <AlertDescription>{formError}</AlertDescription>
+          </Alert>
+        )}
 
         <Card>
           <CardHeader>
@@ -184,7 +246,7 @@ export default function CreateSponsorshipOpportunity() {
                   name="title"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Title</FormLabel>
+                      <FormLabel>Title *</FormLabel>
                       <FormControl>
                         <Input placeholder="e.g. Technology Innovation Sponsorship" {...field} />
                       </FormControl>
@@ -201,7 +263,7 @@ export default function CreateSponsorshipOpportunity() {
                   name="description"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Description</FormLabel>
+                      <FormLabel>Description *</FormLabel>
                       <FormControl>
                         <Textarea
                           placeholder="Describe the sponsorship opportunity and its impact..."
@@ -260,10 +322,13 @@ export default function CreateSponsorshipOpportunity() {
                     name="minAmount"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Minimum Amount</FormLabel>
+                        <FormLabel>Minimum Amount *</FormLabel>
                         <FormControl>
                           <Input type="number" min="1" {...field} />
                         </FormControl>
+                        <FormDescription>
+                          The minimum sponsorship amount.
+                        </FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -274,10 +339,13 @@ export default function CreateSponsorshipOpportunity() {
                     name="maxAmount"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Maximum Amount</FormLabel>
+                        <FormLabel>Maximum Amount *</FormLabel>
                         <FormControl>
                           <Input type="number" min="1" {...field} />
                         </FormControl>
+                        <FormDescription>
+                          The maximum sponsorship amount.
+                        </FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -288,7 +356,7 @@ export default function CreateSponsorshipOpportunity() {
                     name="currency"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Currency</FormLabel>
+                        <FormLabel>Currency *</FormLabel>
                         <Select
                           onValueChange={field.onChange}
                           defaultValue={field.value}
@@ -307,11 +375,44 @@ export default function CreateSponsorshipOpportunity() {
                             <SelectItem value="JPY">JPY (¥)</SelectItem>
                           </SelectContent>
                         </Select>
+                        <FormDescription>
+                          The currency for the sponsorship amounts.
+                        </FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
                 </div>
+
+                <FormField
+                  control={form.control}
+                  name="status"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Status *</FormLabel>
+                      <Select
+                        onValueChange={field.onChange}
+                        defaultValue={field.value}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select status" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="draft">Draft</SelectItem>
+                          <SelectItem value="active">Active</SelectItem>
+                          <SelectItem value="closed">Closed</SelectItem>
+                          <SelectItem value="archived">Archived</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormDescription>
+                        Set to Draft to save without making it public, or Active to publish immediately.
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
 
                 <FormField
                   control={form.control}
@@ -332,7 +433,7 @@ export default function CreateSponsorshipOpportunity() {
 
                 <div>
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-medium">Sponsor Benefits</h3>
+                    <h3 className="text-lg font-medium">Sponsor Benefits *</h3>
                     <Button
                       type="button"
                       variant="outline"
@@ -360,7 +461,7 @@ export default function CreateSponsorshipOpportunity() {
                           </FormItem>
                         )}
                       />
-                      {index > 0 && (
+                      {form.watch('benefits').length > 1 && (
                         <Button
                           type="button"
                           variant="ghost"
@@ -372,6 +473,7 @@ export default function CreateSponsorshipOpportunity() {
                       )}
                     </div>
                   ))}
+                  <FormMessage>{form.formState.errors.benefits?.message}</FormMessage>
                 </div>
 
                 <Separator />

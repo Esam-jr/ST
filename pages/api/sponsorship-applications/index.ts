@@ -1,185 +1,235 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getServerSession } from 'next-auth/next';
+import { getServerSession } from 'next-auth';
 import { authOptions } from '../auth/[...nextauth]';
 import prisma from '@/lib/prisma';
+import { z } from 'zod';
+
+// Define interfaces for our types
+interface SponsorshipOpportunity {
+  id: string;
+  title: string;
+  description: string;
+  benefits: string[];
+  minAmount: number;
+  maxAmount: number;
+  currency: string;
+  status: string;
+  deadline: Date | null;
+  startupCallId: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// Define validation schema for creating an application
+const createApplicationSchema = z.object({
+  opportunityId: z.string().min(1, { message: 'Opportunity ID is required' }),
+  amount: z.coerce.number().positive({ message: 'Amount must be positive' }),
+  currency: z.string().min(1, { message: 'Currency is required' }),
+  message: z.string().optional(),
+});
 
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
+  // Check if the user is authenticated
   const session = await getServerSession(req, res, authOptions);
-
-  // Check authentication
   if (!session) {
-    return res.status(401).json({ error: 'Unauthorized' });
+    return res.status(401).json({ message: 'Unauthorized' });
   }
 
-  // Handle different HTTP methods
-  switch (req.method) {
-    case 'GET':
-      return getSponsorshipApplications(req, res, session);
-    case 'POST':
-      return createSponsorshipApplication(req, res, session);
-    default:
-      return res.status(405).json({ error: 'Method not allowed' });
+  // Handle GET request - retrieve applications
+  if (req.method === 'GET') {
+    try {
+      const applications = await getApplicationsForUser(session.user.id, session.user.role);
+      return res.status(200).json(applications);
+    } catch (error) {
+      console.error('Error fetching sponsorship applications:', error);
+      return res.status(500).json({
+        message: 'Failed to fetch sponsorship applications',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
   }
-}
 
-// Get sponsorship applications
-async function getSponsorshipApplications(req: NextApiRequest, res: NextApiResponse, session: any) {
-  try {
-    // Extract query parameters
-    const { opportunityId, status } = req.query;
-    
-    // Build filter
-    const filter: any = {};
-    
-    // Filter by opportunity ID if provided
-    if (opportunityId) {
-      filter.opportunityId = opportunityId as string;
-    }
-    
-    // Filter by status if provided
-    if (status) {
-      filter.status = status as string;
-    }
-    
-    // Admins can see all applications, sponsors can only see their own
-    if (session.user.role === 'ADMIN') {
-      // Admins get all applications matching the filter
-      const applications = await prisma.sponsorshipApplication.findMany({
-        where: filter,
+  // Handle POST request - create new application
+  else if (req.method === 'POST') {
+    try {
+      // Validate request data
+      const validationResult = createApplicationSchema.safeParse(req.body);
+      
+      if (!validationResult.success) {
+        return res.status(400).json({
+          message: 'Validation error',
+          errors: validationResult.error.errors
+        });
+      }
+      
+      const data = validationResult.data;
+      
+      // Get the opportunity to check if it exists and validate requirements
+      const opportunity = await prisma.sponsorshipOpportunity.findUnique({
+        where: { id: data.opportunityId }
+      }) as SponsorshipOpportunity | null;
+      
+      if (!opportunity) {
+        return res.status(404).json({ message: 'Sponsorship opportunity not found' });
+      }
+      
+      // Check if opportunity is active (case-insensitive)
+      if (opportunity.status.toUpperCase() !== 'ACTIVE') {
+        return res.status(400).json({ message: 'This opportunity is not open for applications' });
+      }
+      
+      // Check if deadline has passed
+      if (opportunity.deadline && new Date(opportunity.deadline) < new Date()) {
+        return res.status(400).json({ message: 'The application deadline has passed' });
+      }
+      
+      // Check currency
+      if (data.currency !== opportunity.currency) {
+        return res.status(400).json({ 
+          message: `Currency must match the opportunity currency: ${opportunity.currency}` 
+        });
+      }
+      
+      // Check amount range
+      if (data.amount < opportunity.minAmount || data.amount > opportunity.maxAmount) {
+        return res.status(400).json({ 
+          message: `Amount must be between ${opportunity.minAmount} and ${opportunity.maxAmount} ${opportunity.currency}` 
+        });
+      }
+      
+      // Check if user already has a pending or accepted application for this opportunity
+      const existingApplication = await prisma.sponsorshipApplication.findFirst({
+        where: {
+          opportunityId: data.opportunityId,
+          sponsorId: session.user.id,
+          status: {
+            in: ['PENDING', 'ACCEPTED']
+          }
+        }
+      });
+      
+      if (existingApplication) {
+        return res.status(409).json({ 
+          message: 'You already have a pending or accepted application for this opportunity' 
+        });
+      }
+      
+      // Create the application
+      const application = await prisma.sponsorshipApplication.create({
+        data: {
+          amount: data.amount,
+          currency: data.currency,
+          message: data.message || '',
+          status: 'PENDING',
+          opportunity: {
+            connect: { id: data.opportunityId }
+          },
+          sponsor: {
+            connect: { id: session.user.id }
+          }
+        },
         include: {
           opportunity: {
             select: {
+              id: true,
               title: true,
-              minAmount: true,
-              maxAmount: true,
-              currency: true,
-              startupCallId: true,
-              startupCall: {
-                select: {
-                  title: true,
-                },
-              },
-            },
+              status: true,
+            }
           },
           sponsor: {
             select: {
               id: true,
               name: true,
               email: true,
-            },
-          },
-        },
-        orderBy: {
-          createdAt: 'desc',
-        },
+            }
+          }
+        }
       });
       
-      return res.status(200).json(applications);
-    } else if (session.user.role === 'SPONSOR') {
-      // Sponsors can only see their own applications
-      filter.sponsorId = session.user.id;
+      // TODO: Send notification to admins about new application
       
-      const applications = await prisma.sponsorshipApplication.findMany({
-        where: filter,
-        include: {
-          opportunity: {
-            select: {
-              title: true,
-              minAmount: true,
-              maxAmount: true,
-              currency: true,
-              description: true,
-              benefits: true,
-              startupCallId: true,
-              startupCall: {
-                select: {
-                  title: true,
-                },
-              },
-            },
-          },
-        },
-        orderBy: {
-          createdAt: 'desc',
-        },
+      return res.status(201).json(application);
+    } catch (error) {
+      console.error('Error creating sponsorship application:', error);
+      
+      // Handle Prisma-specific errors
+      if (error instanceof Error && error.name === 'PrismaClientKnownRequestError') {
+        // Cast to any to access code
+        const prismaError = error as any;
+        
+        if (prismaError.code === 'P2025') {
+          return res.status(404).json({ 
+            message: 'Referenced resource not found',
+            error: error.message
+          });
+        }
+      }
+      
+      return res.status(500).json({
+        message: 'Failed to create sponsorship application',
+        error: error instanceof Error ? error.message : 'Unknown error'
       });
-      
-      return res.status(200).json(applications);
-    } else {
-      // Other roles don't have access
-      return res.status(403).json({ error: 'Forbidden: Access denied to sponsorship applications' });
     }
-  } catch (error) {
-    console.error('Error fetching sponsorship applications:', error);
-    return res.status(500).json({ error: 'Failed to fetch sponsorship applications' });
+  }
+  
+  // Handle other methods
+  else {
+    return res.status(405).json({ message: 'Method not allowed' });
   }
 }
 
-// Create a new sponsorship application
-async function createSponsorshipApplication(req: NextApiRequest, res: NextApiResponse, session: any) {
-  try {
-    // Only sponsors can apply for sponsorship opportunities
-    if (session.user.role !== 'SPONSOR') {
-      return res.status(403).json({ error: 'Forbidden: Only sponsors can apply for sponsorship opportunities' });
-    }
-
-    const { opportunityId, amount, currency, message } = req.body;
-
-    // Basic validation
-    if (!opportunityId || !amount || !currency) {
-      return res.status(400).json({ error: 'Missing required fields' });
-    }
-
-    // Check if the opportunity exists and is active
-    const opportunity = await prisma.sponsorshipOpportunity.findUnique({
-      where: { id: opportunityId },
-    });
-
-    if (!opportunity) {
-      return res.status(404).json({ error: 'Sponsorship opportunity not found' });
-    }
-
-    if (opportunity.status !== 'active') {
-      return res.status(400).json({ error: 'This sponsorship opportunity is not currently accepting applications' });
-    }
-
-    // Check if amount is within the valid range
-    if (amount < opportunity.minAmount || amount > opportunity.maxAmount) {
-      return res.status(400).json({ 
-        error: `Amount must be between ${opportunity.minAmount} and ${opportunity.maxAmount} ${opportunity.currency}` 
-      });
-    }
-
-    // Check if the sponsor has already applied for this opportunity
-    const existingApplication = await prisma.sponsorshipApplication.findFirst({
-      where: {
-        opportunityId,
-        sponsorId: session.user.id,
+// Helper function to get applications based on user role
+async function getApplicationsForUser(userId: string, role: string) {
+  // Admins can see all applications
+  if (role === 'ADMIN') {
+    return prisma.sponsorshipApplication.findMany({
+      orderBy: {
+        createdAt: 'desc'
       },
+        include: {
+          opportunity: {
+            select: {
+            id: true,
+              title: true,
+            currency: true,
+              minAmount: true,
+              maxAmount: true,
+            status: true,
+          }
+        },
+        sponsor: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          }
+        }
+      }
     });
-
-    if (existingApplication) {
-      return res.status(400).json({ error: 'You have already applied for this sponsorship opportunity' });
-    }
-
-    // Create the application
-    const application = await prisma.sponsorshipApplication.create({
-      data: {
-        opportunityId,
-        sponsorId: session.user.id,
-        amount: Number(amount),
-        currency,
-        message: message || null,
-        status: 'pending', // Default status for new applications
-      },
-    });
-
-    return res.status(201).json(application);
-  } catch (error) {
-    console.error('Error creating sponsorship application:', error);
-    return res.status(500).json({ error: 'Failed to create sponsorship application' });
   }
+  
+  // Regular users (sponsors) can only see their own applications
+  return prisma.sponsorshipApplication.findMany({
+    where: {
+      sponsorId: userId
+    },
+    orderBy: {
+      createdAt: 'desc'
+    },
+    include: {
+      opportunity: {
+        select: {
+          id: true,
+          title: true,
+          currency: true,
+          minAmount: true,
+          maxAmount: true,
+          status: true,
+        }
+      }
+    }
+  });
 } 
