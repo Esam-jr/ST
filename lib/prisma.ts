@@ -27,6 +27,32 @@ if (typeof window === 'undefined') {
       global.prisma = new PrismaClient({
         log: ['error', 'warn'],
       });
+      
+      // Only set up event listeners once
+      // @ts-ignore - Global doesn't have prismaListenersSet property
+      if (!global.prismaListenersSet) {
+        // Add process event listeners for proper cleanup
+        process.on('beforeExit', async () => {
+          // @ts-ignore - Global doesn't have prisma property
+          await global.prisma.$disconnect();
+        });
+        
+        // Also handle SIGINT and SIGTERM
+        process.on('SIGINT', async () => {
+          // @ts-ignore - Global doesn't have prisma property
+          await global.prisma.$disconnect();
+          process.exit(0);
+        });
+        
+        process.on('SIGTERM', async () => {
+          // @ts-ignore - Global doesn't have prisma property
+          await global.prisma.$disconnect();
+          process.exit(0);
+        });
+        
+        // @ts-ignore - Global doesn't have prismaListenersSet property
+        global.prismaListenersSet = true;
+      }
     }
     // @ts-ignore - Global doesn't have prisma property
     prisma = global.prisma;
@@ -34,26 +60,6 @@ if (typeof window === 'undefined') {
 } else {
   // We're in the browser
   prisma = new PrismaClient();
-}
-
-// Set up proper connection management for development
-if (process.env.NODE_ENV !== 'production' && typeof window === 'undefined') {
-  // Add process event listeners for proper cleanup
-  // This replaces the unsupported $on('beforeExit') method
-  process.on('beforeExit', async () => {
-    await prisma.$disconnect();
-  });
-  
-  // Also handle SIGINT and SIGTERM
-  process.on('SIGINT', async () => {
-    await prisma.$disconnect();
-    process.exit(0);
-  });
-  
-  process.on('SIGTERM', async () => {
-    await prisma.$disconnect();
-    process.exit(0);
-  });
 }
 
 export default prisma;
