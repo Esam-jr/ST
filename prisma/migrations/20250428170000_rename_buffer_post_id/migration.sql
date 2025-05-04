@@ -1,0 +1,3 @@
+-- Empty migration file
+-- This is a placeholder for a migration that was applied on another machine
+-- but is missing in the local environment 
