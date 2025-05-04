@@ -59,99 +59,24 @@ export default function PublicSponsorshipOpportunityDetailPage() {
     }
   }, [id]);
 
-  // Redirect sponsor users to their specific view
-  useEffect(() => {
-    if (sessionStatus === 'authenticated' && session?.user?.role === 'SPONSOR' && id) {
-      router.push(`/sponsor/opportunities/${id}`);
-    }
-  }, [sessionStatus, session, id, router]);
-
   const fetchOpportunityData = async () => {
     try {
       setLoading(true);
-      
-      // Fetch opportunity details
-      const opportunityResponse = await axios.get(`/api/sponsorship-opportunities/${id}`);
+
+      // Fetch opportunity details from the public API
+      const opportunityResponse = await axios.get(`/api/public/sponsorship-opportunities/${id}`);
       setOpportunity(opportunityResponse.data);
     } catch (error) {
       console.error('Error fetching opportunity data:', error);
       
-      // Use mock data if the API fails
-      if (id) {
-        const mockId = id.toString();
-        const mockOpportunities = {
-          '1': {
-            id: '1',
-            title: 'Technology Innovation Sponsorship',
-            description: 'Support cutting-edge technology startups developing innovative solutions for today\'s challenges.\n\nThis sponsorship opportunity allows companies to engage with and support promising tech startups. Your brand will be associated with innovation and technological advancement while giving startups the resources they need to succeed.',
-            benefits: ['Logo on all event materials', 'Speaking opportunity at demo day', 'Access to exclusive startup pitches', 'Networking opportunities with founders', 'Brand inclusion in press releases'],
-            minAmount: 5000,
-            maxAmount: 15000,
-            currency: 'USD',
-            status: 'ACTIVE',
-            createdAt: new Date().toISOString(),
-            deadline: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-            startupCallId: null,
-            startupCall: {
-              title: 'Tech Innovators 2023'
-            }
-          },
-          '2': {
-            id: '2',
-            title: 'Sustainability Challenge Sponsorship',
-            description: 'Help fund startups focused on environmental sustainability and clean energy solutions.\n\nThis sponsorship package offers an opportunity to support green initiatives and sustainable innovation. Your contribution will directly enable startups working on solutions to combat climate change and promote environmental sustainability.',
-            benefits: ['Brand visibility on website and materials', 'Judging panel seat', 'First access to funded startups', 'Co-branded content opportunities', 'Recognition at all sustainability events'],
-            minAmount: 10000,
-            maxAmount: 25000,
-            currency: 'EUR',
-            status: 'ACTIVE',
-            createdAt: new Date().toISOString(),
-            deadline: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString(),
-            startupCallId: null,
-            startupCall: {
-              title: 'Green Future Initiative'
-            }
-          },
-          '3': {
-            id: '3',
-            title: 'Healthcare Innovation Fund',
-            description: 'Support startups developing breakthrough technologies in healthcare and medical devices.\n\nThis sponsorship opportunity focuses on funding the next generation of healthcare innovations. Your contribution will help promising healthcare startups bring life-changing technologies to market faster.',
-            benefits: ['Premium logo placement on all materials', 'Private demo day with healthcare startups', 'Press release mention', 'Exclusive meetings with founders', 'Speaking opportunity at healthcare innovation conference'],
-            minAmount: 15000,
-            maxAmount: 50000,
-            currency: 'USD',
-            status: 'ACTIVE',
-            createdAt: new Date().toISOString(),
-            deadline: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-            startupCallId: null,
-            startupCall: {
-              title: 'MedTech Revolution'
-            }
-          }
-        };
-        
-        const mockOpportunity = mockOpportunities[mockId];
-        if (mockOpportunity) {
-          setOpportunity(mockOpportunity);
-          toast({
-            title: 'Using sample data',
-            description: 'Showing sample sponsorship opportunity for preview',
-            variant: 'default',
-          });
-        } else {
-          toast({
-            title: 'Error',
-            description: 'Opportunity not found',
-            variant: 'destructive',
-          });
-        }
-      } else {
-        toast({
-          title: 'Error',
-          description: 'Failed to load opportunity data',
-          variant: 'destructive',
-        });
-      }
+      toast({
+        title: 'Error',
+        description: 'Could not load the sponsorship opportunity. Please try again later.',
+        variant: 'destructive',
+      });
+      
+      // Navigate back to the opportunities list if we can't load this one
+      router.push('/sponsorship-opportunities');
     } finally {
       setLoading(false);
     }
@@ -346,15 +271,42 @@ export default function PublicSponsorshipOpportunityDetailPage() {
                 </div>
               </div>
               <div className="flex flex-col sm:flex-row gap-2">
-                <Link href={`/auth/signin?callbackUrl=/sponsor/opportunities/${opportunity.id}/apply`}>
-                  <Button variant="default" className="min-w-[120px] flex items-center gap-2">
-                    <LogIn className="h-4 w-4" />
-                    Sign In
+                {!session ? (
+                  <Link href={`/auth/signin?callbackUrl=/sponsorship-opportunities/${opportunity.id}`}>
+                    <Button variant="default" className="min-w-[120px] flex items-center gap-2">
+                      <LogIn className="h-4 w-4" />
+                      Sign In to Apply
+                    </Button>
+                  </Link>
+                ) : session.user?.role === 'SPONSOR' ? (
+                  <Button 
+                    variant="default" 
+                    className="min-w-[120px] flex items-center gap-2"
+                    onClick={() => {
+                      toast({
+                        title: "Coming Soon",
+                        description: "The application feature will be implemented soon.",
+                        variant: "default"
+                      });
+                    }}
+                  >
+                    <Star className="h-4 w-4" />
+                    Apply Now
                   </Button>
-                </Link>
-                <Link href={`/auth/signup?role=SPONSOR&callbackUrl=/sponsor/opportunities/${opportunity.id}/apply`}>
-                  <Button variant="outline" className="min-w-[150px]">
-                    Create Account
+                ) : (
+                  <Button 
+                    variant="outline" 
+                    className="min-w-[120px] flex items-center gap-2"
+                    disabled
+                  >
+                    <Info className="h-4 w-4" />
+                    Only Sponsors Can Apply
+                  </Button>
+                )}
+                <Link href="/sponsorship-opportunities">
+                  <Button variant="outline" className="min-w-[120px] flex items-center gap-2">
+                    <ArrowLeft className="h-4 w-4" />
+                    Back to List
                   </Button>
                 </Link>
               </div>
