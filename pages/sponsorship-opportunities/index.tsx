@@ -74,71 +74,21 @@ export default function PublicSponsorshipOpportunitiesPage() {
   const fetchOpportunities = async () => {
     try {
       setLoading(true);
-      const response = await axios.get('/api/sponsorship-opportunities?status=active');
+      // Use the new public API endpoint
+      const response = await axios.get('/api/public/sponsorship-opportunities');
       setOpportunities(response.data);
       setFilteredOpportunities(response.data);
     } catch (error) {
       console.error('Error fetching sponsorship opportunities:', error);
       toast({
-        title: 'Using sample data',
-        description: 'Using sample sponsorship opportunities for preview',
-        variant: 'default',
+        title: 'Error loading opportunities',
+        description: 'Failed to load sponsorship opportunities. Please try again later.',
+        variant: 'destructive',
       });
       
-      // Use mock data if API fails
-      const mockOpportunities = [
-        {
-          id: '1',
-          title: 'Technology Innovation Sponsorship',
-          description: 'Support cutting-edge technology startups developing innovative solutions for today\'s challenges.',
-          benefits: ['Logo on event materials', 'Speaking opportunity', 'Access to startup pitches', 'Networking with founders'],
-          minAmount: 5000,
-          maxAmount: 15000,
-          currency: 'USD',
-          status: 'ACTIVE',
-          createdAt: new Date().toISOString(),
-          deadline: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-          startupCallId: null,
-          startupCall: {
-            title: 'Tech Innovators 2023'
-          }
-        },
-        {
-          id: '2',
-          title: 'Sustainability Challenge Sponsorship',
-          description: 'Help fund startups focused on environmental sustainability and clean energy solutions.',
-          benefits: ['Brand visibility on website', 'Judging panel seat', 'First access to funded startups'],
-          minAmount: 10000,
-          maxAmount: 25000,
-          currency: 'EUR',
-          status: 'ACTIVE',
-          createdAt: new Date().toISOString(),
-          deadline: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString(),
-          startupCallId: null,
-          startupCall: {
-            title: 'Green Future Initiative'
-          }
-        },
-        {
-          id: '3',
-          title: 'Healthcare Innovation Fund',
-          description: 'Support startups developing breakthrough technologies in healthcare and medical devices.',
-          benefits: ['Premium logo placement', 'Private demo day', 'Press release mention', 'Exclusive meetings with founders'],
-          minAmount: 15000,
-          maxAmount: 50000,
-          currency: 'USD',
-          status: 'ACTIVE',
-          createdAt: new Date().toISOString(),
-          deadline: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-          startupCallId: null,
-          startupCall: {
-            title: 'MedTech Revolution'
-          }
-        }
-      ];
-      
-      setOpportunities(mockOpportunities);
-      setFilteredOpportunities(mockOpportunities);
+      // Set empty arrays when API fails instead of using mock data
+      setOpportunities([]);
+      setFilteredOpportunities([]);
     } finally {
       setLoading(false);
     }
@@ -174,15 +124,9 @@ export default function PublicSponsorshipOpportunitiesPage() {
     return deadlineDate < now;
   };
 
-  // Handle clicking on opportunity card
+  // Handle opportunity card click
   const handleOpportunityClick = (opportunityId: string) => {
-    // For sponsors, go to their specific application page
-    if (session?.user?.role === 'SPONSOR') {
-      router.push(`/sponsor/opportunities/${opportunityId}`);
-    } else {
-      // For others, show the public view
-      router.push(`/sponsorship-opportunities/${opportunityId}`);
-    }
+    router.push(`/sponsorship-opportunities/${opportunityId}`);
   };
 
   return (
@@ -221,97 +165,73 @@ export default function PublicSponsorshipOpportunitiesPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredOpportunities.map((opportunity) => (
-              <Card 
-                key={opportunity.id} 
-                className="h-full flex flex-col hover:shadow-md transition-shadow duration-200 cursor-pointer"
-                onClick={() => handleOpportunityClick(opportunity.id)}
-              >
-                <CardHeader className="pb-3">
+              <Card key={opportunity.id} className="flex flex-col">
+                <CardHeader>
                   <div className="flex justify-between items-start">
                     <CardTitle className="text-xl">{opportunity.title}</CardTitle>
-                    {opportunity.deadline && (
-                      <Badge 
-                        className={isDeadlinePassed(opportunity.deadline) 
-                          ? "bg-red-100 text-red-800 border-red-200" 
-                          : "bg-green-100 text-green-800 border-green-200"}
-                      >
-                        {isDeadlinePassed(opportunity.deadline) ? "Deadline Passed" : "Open"}
-                      </Badge>
-                    )}
+                    <Badge
+                      variant={
+                        isDeadlinePassed(opportunity.deadline)
+                          ? 'destructive'
+                          : 'outline'
+                      }
+                      className="ml-2"
+                    >
+                      {isDeadlinePassed(opportunity.deadline)
+                        ? 'Deadline Passed'
+                        : 'Active'}
+                    </Badge>
                   </div>
-                  {opportunity.startupCall && (
+                  {opportunity.startupCall?.title && (
                     <CardDescription>
-                      <span className="flex items-center">
-                        <Building className="h-3.5 w-3.5 mr-1" />
+                      <span className="flex items-center mt-1">
+                        <Building className="h-4 w-4 mr-1" />
                         {opportunity.startupCall.title}
                       </span>
                     </CardDescription>
                   )}
                 </CardHeader>
-                
-                <CardContent className="flex-grow">
-                  <p className="text-gray-700 line-clamp-3 mb-4">
+                <CardContent className="flex-1">
+                  <p className="line-clamp-3 text-muted-foreground mb-4">
                     {opportunity.description}
                   </p>
-                  
-                  <div className="space-y-2">
-                    <div className="flex items-center text-sm text-gray-600">
-                      <DollarSign className="h-4 w-4 mr-2 text-primary" />
-                      {formatCurrency(opportunity.minAmount, opportunity.currency)} - 
-                      {formatCurrency(opportunity.maxAmount, opportunity.currency)}
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <div className="flex items-center">
+                      <DollarSign className="h-4 w-4 mr-1 text-muted-foreground" />
+                      <span>
+                        {formatCurrency(opportunity.minAmount, opportunity.currency)} - {formatCurrency(opportunity.maxAmount, opportunity.currency)}
+                      </span>
                     </div>
-                    
-                    {opportunity.deadline && (
-                      <div className="flex items-center text-sm text-gray-600">
-                        <Calendar className="h-4 w-4 mr-2 text-primary" />
-                        Deadline: {formatDate(opportunity.deadline)}
-                      </div>
-                    )}
-                    
-                    {opportunity.benefits.length > 0 && (
-                      <div className="flex items-start text-sm text-gray-600 mt-1">
-                        <Star className="h-4 w-4 mr-2 text-primary mt-0.5" />
-                        <div>
-                          <div className="font-medium mb-1">Benefits include:</div>
-                          <ul className="list-disc pl-5 space-y-0.5">
-                            {opportunity.benefits.slice(0, 2).map((benefit, index) => (
-                              <li key={index}>{benefit}</li>
-                            ))}
-                            {opportunity.benefits.length > 2 && (
-                              <li className="text-primary">+{opportunity.benefits.length - 2} more</li>
-                            )}
-                          </ul>
-                        </div>
-                      </div>
-                    )}
+                    <div className="flex items-center">
+                      <Calendar className="h-4 w-4 mr-1 text-muted-foreground" />
+                      <span className={isDeadlinePassed(opportunity.deadline) ? 'text-destructive' : ''}>
+                        {formatDate(opportunity.deadline || '')}
+                      </span>
+                    </div>
                   </div>
                 </CardContent>
-                
-                <CardFooter className="pt-2 flex justify-between items-center">
-                  <div className="text-sm text-gray-500 flex items-center">
-                    <Clock className="h-4 w-4 mr-1" />
-                    {new Date(opportunity.createdAt).toLocaleDateString()}
-                  </div>
-                  
-                  {session?.user?.role === 'SPONSOR' ? (
-                    <Button 
-                      variant="default"
-                      size="sm"
-                      className="flex items-center"
-                      disabled={isDeadlinePassed(opportunity.deadline)}
-                    >
-                      Express Interest
-                      <ArrowRight className="ml-1 h-4 w-4" />
-                    </Button>
+                <CardFooter>
+                  {!session ? (
+                    <Link href={`/auth/signin?callbackUrl=/sponsorship-opportunities/${opportunity.id}`} className="w-full">
+                      <Button variant="outline" className="w-full flex items-center gap-2">
+                        <LogIn className="h-4 w-4" />
+                        Sign In to Apply
+                      </Button>
+                    </Link>
+                  ) : session.user?.role === 'SPONSOR' ? (
+                    <Link href={`/sponsorship-opportunities/${opportunity.id}`} className="w-full">
+                      <Button variant="default" className="w-full flex items-center gap-2">
+                        <ArrowRight className="h-4 w-4" />
+                        View Details
+                      </Button>
+                    </Link>
                   ) : (
-                    <Button 
-                      variant="outline"
-                      size="sm"
-                      className="flex items-center"
-                    >
-                      View Details
-                      <ArrowRight className="ml-1 h-4 w-4" />
-                    </Button>
+                    <Link href={`/sponsorship-opportunities/${opportunity.id}`} className="w-full">
+                      <Button variant="outline" className="w-full flex items-center gap-2">
+                        <Info className="h-4 w-4" />
+                        View Details
+                      </Button>
+                    </Link>
                   )}
                 </CardFooter>
               </Card>
