@@ -26,6 +26,7 @@ import {
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
 import axios from 'axios';
+import ApplySponsorshipForm from '@/components/sponsor/ApplySponsorshipForm';
 
 // Define types
 interface SponsorshipOpportunity {
@@ -43,6 +44,13 @@ interface SponsorshipOpportunity {
   startupCall?: {
     title: string;
   };
+}
+
+// Add type for session user
+interface SessionUser {
+  id: string;
+  role: string;
+  email: string;
 }
 
 export default function PublicSponsorshipOpportunityDetailPage() {
@@ -258,7 +266,7 @@ export default function PublicSponsorshipOpportunityDetailPage() {
           </CardFooter>
         </Card>
 
-        {!session && !isDeadlinePassed(opportunity.deadline) && (
+        {sessionStatus === 'authenticated' && !isDeadlinePassed(opportunity.deadline) && (
           <div className="mt-6 bg-blue-50 border border-blue-100 rounded-lg p-6">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
               <div className="flex items-start">
@@ -266,33 +274,28 @@ export default function PublicSponsorshipOpportunityDetailPage() {
                 <div>
                   <h3 className="font-medium text-blue-800 text-lg mb-1">Interested in this opportunity?</h3>
                   <p className="text-blue-700">
-                    Sign in or create a sponsor account to apply for this sponsorship opportunity.
+                    {session.user?.role === 'SPONSOR' 
+                      ? 'Submit your application to sponsor this opportunity.'
+                      : 'Sign in or create a sponsor account to apply for this sponsorship opportunity.'}
                   </p>
                 </div>
               </div>
               <div className="flex flex-col sm:flex-row gap-2">
-                {!session ? (
-                  <Link href={`/auth/signin?callbackUrl=/sponsorship-opportunities/${opportunity.id}`}>
-                    <Button variant="default" className="min-w-[120px] flex items-center gap-2">
-                      <LogIn className="h-4 w-4" />
-                      Sign In to Apply
-                    </Button>
-                  </Link>
-                ) : session.user?.role === 'SPONSOR' ? (
-                  <Button 
-                    variant="default" 
-                    className="min-w-[120px] flex items-center gap-2"
-                    onClick={() => {
+                {session.user?.role === 'SPONSOR' ? (
+                  <ApplySponsorshipForm 
+                    opportunityId={opportunity.id}
+                    minAmount={opportunity.minAmount}
+                    maxAmount={opportunity.maxAmount}
+                    currency={opportunity.currency}
+                    onSuccess={() => {
                       toast({
-                        title: "Coming Soon",
-                        description: "The application feature will be implemented soon.",
+                        title: "Application Submitted",
+                        description: "Your application has been submitted successfully.",
                         variant: "default"
                       });
+                      fetchOpportunityData(); // Refresh opportunity data
                     }}
-                  >
-                    <Star className="h-4 w-4" />
-                    Apply Now
-                  </Button>
+                  />
                 ) : (
                   <Button 
                     variant="outline" 
