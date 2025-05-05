@@ -51,16 +51,36 @@ export default async function handler(
         deadline: true,
         minAmount: true,
         maxAmount: true,
+        title: true,
       }
+    });
+
+    // Debug log the opportunity details
+    console.log('Opportunity found:', {
+      id: opportunity?.id,
+      status: opportunity?.status,
+      statusType: opportunity?.status ? typeof opportunity.status : 'undefined',
+      deadline: opportunity?.deadline,
     });
 
     if (!opportunity) {
       return res.status(404).json({ message: 'Opportunity not found' });
     }
 
-    if (opportunity.status !== 'OPEN') {
-      return res.status(400).json({ message: 'This opportunity is not open for applications' });
+    // Check if opportunity is open for applications
+    // Update status check to be case-insensitive and handle different status values
+    if (opportunity.status !== 'OPEN' && 
+        opportunity.status !== 'ACTIVE' && 
+        opportunity.status.toUpperCase() !== 'OPEN' && 
+        opportunity.status.toUpperCase() !== 'ACTIVE') {
+      return res.status(400).json({ 
+        message: 'This opportunity is not open for applications',
+        currentStatus: opportunity.status 
+      });
     }
+
+    // Log the opportunity status for debugging
+    console.log(`Opportunity status: ${opportunity.status}`);
 
     if (opportunity.deadline && new Date(opportunity.deadline) < new Date()) {
       return res.status(400).json({ message: 'The application deadline has passed' });
