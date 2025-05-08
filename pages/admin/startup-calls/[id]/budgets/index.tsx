@@ -46,7 +46,6 @@ import BudgetDashboard from "@/components/admin/budget/BudgetDashboard";
 import BudgetExpenses from "@/components/admin/budget/BudgetExpenses";
 import BudgetReports from "@/components/admin/budget/BudgetReports";
 import { Loader2, Plus, PlusCircle, Trash } from "lucide-react";
-import AdminLayout from "@/components/layouts/AdminLayout";
 import BudgetReportDialog from "@/components/admin/BudgetReportDialog";
 
 // Types
@@ -340,164 +339,151 @@ const BudgetManagement = () => {
     }).format(amount);
   };
 
-  if (loading) {
-    return (
-      <AdminLayout>
-        <div className="flex items-center justify-center h-64">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <span className="ml-2">Loading budgets...</span>
-        </div>
-      </AdminLayout>
-    );
-  }
-
   return (
-    <AdminLayout>
-      <div className="space-y-6">
-        {/* Header */}
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-3xl font-bold">Budget Management</h1>
-            <p className="text-muted-foreground">{startupCall?.title}</p>
-          </div>
-          <div className="flex space-x-2">
-            <BudgetReportDialog
-              startupCallId={startupCallId as string}
-              budgets={budgets}
-            />
-            <Button onClick={() => openBudgetDialog()}>
-              <Plus className="mr-2 h-4 w-4" /> Create Budget
-            </Button>
-          </div>
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold">Budget Management</h1>
+          <p className="text-muted-foreground">{startupCall?.title}</p>
         </div>
-
-        <Separator />
-
-        {/* Main content */}
-        <Tabs
-          value={activeTab}
-          onValueChange={setActiveTab}
-          className="space-y-4"
-        >
-          <TabsList>
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="budgets">Budgets</TabsTrigger>
-            <TabsTrigger value="expenses">Expenses</TabsTrigger>
-            <TabsTrigger value="reports">Reports</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="overview" className="space-y-4">
-            <BudgetDashboard
-              startupCallId={startupCallId as string}
-              budgets={budgets}
-            />
-          </TabsContent>
-
-          <TabsContent value="budgets" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Budgets</CardTitle>
-                <CardDescription>
-                  Manage all budgets for this startup call
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {budgets.length === 0 ? (
-                  <div className="text-center py-6">
-                    <p className="text-muted-foreground mb-4">
-                      No budgets have been created yet.
-                    </p>
-                    <Button onClick={() => openBudgetDialog()}>
-                      <PlusCircle className="mr-2 h-4 w-4" /> Create Your First
-                      Budget
-                    </Button>
-                  </div>
-                ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Title</TableHead>
-                        <TableHead>Fiscal Year</TableHead>
-                        <TableHead>Amount</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Categories</TableHead>
-                        <TableHead>Created</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {budgets.map((budget) => (
-                        <TableRow key={budget.id}>
-                          <TableCell className="font-medium">
-                            {budget.title}
-                          </TableCell>
-                          <TableCell>{budget.fiscalYear}</TableCell>
-                          <TableCell>
-                            {formatCurrency(
-                              budget.totalAmount,
-                              budget.currency
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            <span
-                              className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                                budget.status === "active"
-                                  ? "bg-green-100 text-green-800"
-                                  : budget.status === "draft"
-                                  ? "bg-yellow-100 text-yellow-800"
-                                  : budget.status === "closed"
-                                  ? "bg-red-100 text-red-800"
-                                  : "bg-gray-100 text-gray-800"
-                              }`}
-                            >
-                              {budget.status}
-                            </span>
-                          </TableCell>
-                          <TableCell>{budget.categories.length}</TableCell>
-                          <TableCell>
-                            {format(new Date(budget.createdAt), "MMM d, yyyy")}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex justify-end gap-2">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => openBudgetDialog(budget)}
-                              >
-                                Edit
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="text-red-500 hover:text-red-700 hover:bg-red-50"
-                                onClick={() => deleteBudget(budget.id)}
-                              >
-                                <Trash className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="expenses" className="space-y-4">
-            <BudgetExpenses
-              startupCallId={startupCallId as string}
-              budgets={budgets}
-              onExpenseChange={fetchBudgets}
-            />
-          </TabsContent>
-
-          <TabsContent value="reports" className="space-y-4">
-            <BudgetReports startupCallId={startupCallId as string} />
-          </TabsContent>
-        </Tabs>
+        <div className="flex space-x-2">
+          <BudgetReportDialog
+            startupCallId={startupCallId as string}
+            budgets={budgets}
+          />
+          <Button onClick={() => openBudgetDialog()}>
+            <Plus className="mr-2 h-4 w-4" /> Create Budget
+          </Button>
+        </div>
       </div>
+
+      <Separator />
+
+      {/* Main content */}
+      <Tabs
+        value={activeTab}
+        onValueChange={setActiveTab}
+        className="space-y-4"
+      >
+        <TabsList>
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="budgets">Budgets</TabsTrigger>
+          <TabsTrigger value="expenses">Expenses</TabsTrigger>
+          <TabsTrigger value="reports">Reports</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="overview" className="space-y-4">
+          <BudgetDashboard
+            startupCallId={startupCallId as string}
+            budgets={budgets}
+          />
+        </TabsContent>
+
+        <TabsContent value="budgets" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Budgets</CardTitle>
+              <CardDescription>
+                Manage all budgets for this startup call
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {budgets.length === 0 ? (
+                <div className="text-center py-6">
+                  <p className="text-muted-foreground mb-4">
+                    No budgets have been created yet.
+                  </p>
+                  <Button onClick={() => openBudgetDialog()}>
+                    <PlusCircle className="mr-2 h-4 w-4" /> Create Your First
+                    Budget
+                  </Button>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Title</TableHead>
+                      <TableHead>Fiscal Year</TableHead>
+                      <TableHead>Amount</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Categories</TableHead>
+                      <TableHead>Created</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {budgets.map((budget) => (
+                      <TableRow key={budget.id}>
+                        <TableCell className="font-medium">
+                          {budget.title}
+                        </TableCell>
+                        <TableCell>{budget.fiscalYear}</TableCell>
+                        <TableCell>
+                          {formatCurrency(budget.totalAmount, budget.currency)}
+                        </TableCell>
+                        <TableCell>
+                          <span
+                            className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                              budget.status === "active"
+                                ? "bg-green-100 text-green-800"
+                                : budget.status === "draft"
+                                ? "bg-yellow-100 text-yellow-800"
+                                : budget.status === "closed"
+                                ? "bg-red-100 text-red-800"
+                                : "bg-gray-100 text-gray-800"
+                            }`}
+                          >
+                            {budget.status}
+                          </span>
+                        </TableCell>
+                        <TableCell>{budget.categories.length}</TableCell>
+                        <TableCell>
+                          {format(new Date(budget.createdAt), "MMM d, yyyy")}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => openBudgetDialog(budget)}
+                            >
+                              Edit
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                              onClick={() => deleteBudget(budget.id)}
+                            >
+                              <Trash className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="expenses" className="space-y-4">
+          <BudgetExpenses
+            startupCallId={startupCallId as string}
+            budgets={budgets}
+            onExpenseChange={fetchBudgets}
+          />
+        </TabsContent>
+
+        <TabsContent value="reports" className="space-y-4">
+          <BudgetReports
+            startupCallId={startupCallId as string}
+            budgets={budgets}
+          />
+        </TabsContent>
+      </Tabs>
 
       {/* Budget Form Dialog */}
       <Dialog open={budgetDialogOpen} onOpenChange={setBudgetDialogOpen}>
@@ -699,7 +685,7 @@ const BudgetManagement = () => {
           </form>
         </DialogContent>
       </Dialog>
-    </AdminLayout>
+    </div>
   );
 };
 
