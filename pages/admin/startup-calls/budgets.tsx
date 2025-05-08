@@ -22,7 +22,6 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
-import AdminLayout from "@/components/layouts/AdminLayout";
 import {
   Search,
   FileText,
@@ -93,153 +92,150 @@ export default function BudgetManagement() {
   };
 
   return (
-    <AdminLayout>
-      <div className="space-y-6">
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-3xl font-bold">Budget Management</h1>
-            <p className="text-muted-foreground">
-              Manage budgets for all startup calls
-            </p>
-          </div>
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold">Budget Management</h1>
+          <p className="text-muted-foreground">
+            Manage budgets for all startup calls
+          </p>
         </div>
+      </div>
 
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle>Startup Calls with Budgets</CardTitle>
-              <div className="relative w-64">
-                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search startup calls..."
-                  className="pl-8"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-              </div>
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle>Startup Calls with Budgets</CardTitle>
+            <div className="relative w-64">
+              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search startup calls..."
+                className="pl-8"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
             </div>
-            <CardDescription>
-              Select a startup call to manage its budgets
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <div className="py-8 text-center">Loading startup calls...</div>
-            ) : (
-              <Table>
-                <TableHeader>
+          </div>
+          <CardDescription>
+            Select a startup call to manage its budgets
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div className="py-8 text-center">Loading startup calls...</div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Startup Call</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Period</TableHead>
+                  <TableHead>Budgets</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredCalls.length === 0 ? (
                   <TableRow>
-                    <TableHead>Startup Call</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Period</TableHead>
-                    <TableHead>Budgets</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
+                    <TableCell colSpan={5} className="text-center py-8">
+                      No startup calls found.
+                    </TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredCalls.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={5} className="text-center py-8">
-                        No startup calls found.
+                ) : (
+                  filteredCalls.map((call) => (
+                    <TableRow key={call.id}>
+                      <TableCell className="font-medium">
+                        {call.title}
+                      </TableCell>
+                      <TableCell>
+                        <Badge className={getStatusColor(call.status)}>
+                          {call.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {call.startDate && call.endDate
+                          ? `${format(
+                              new Date(call.startDate),
+                              "MMM dd, yyyy"
+                            )} - ${format(
+                              new Date(call.endDate),
+                              "MMM dd, yyyy"
+                            )}`
+                          : "N/A"}
+                      </TableCell>
+                      <TableCell>
+                        {call.budgetsCount} budget
+                        {call.budgetsCount !== 1 ? "s" : ""}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="default"
+                          size="sm"
+                          onClick={() =>
+                            router.push(
+                              `/admin/startup-calls/${call.id}/budgets`
+                            )
+                          }
+                        >
+                          <DollarSign className="h-4 w-4 mr-1" /> Manage Budgets
+                        </Button>
                       </TableCell>
                     </TableRow>
-                  ) : (
-                    filteredCalls.map((call) => (
-                      <TableRow key={call.id}>
-                        <TableCell className="font-medium">
-                          {call.title}
-                        </TableCell>
-                        <TableCell>
-                          <Badge className={getStatusColor(call.status)}>
-                            {call.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          {call.startDate && call.endDate
-                            ? `${format(
-                                new Date(call.startDate),
-                                "MMM dd, yyyy"
-                              )} - ${format(
-                                new Date(call.endDate),
-                                "MMM dd, yyyy"
-                              )}`
-                            : "N/A"}
-                        </TableCell>
-                        <TableCell>
-                          {call.budgetsCount} budget
-                          {call.budgetsCount !== 1 ? "s" : ""}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Button
-                            variant="default"
-                            size="sm"
-                            onClick={() =>
-                              router.push(
-                                `/admin/startup-calls/${call.id}/budgets`
-                              )
-                            }
-                          >
-                            <DollarSign className="h-4 w-4 mr-1" /> Manage
-                            Budgets
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            )}
-          </CardContent>
-        </Card>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Budget Reports</CardTitle>
-            <CardDescription>
-              Generate and download budget reports
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-4 md:grid-cols-3">
-              <Button
-                variant="outline"
-                className="h-24 flex flex-col items-center justify-center"
-                onClick={() => router.push("/admin?section=financials")}
-              >
-                <Calculator className="h-8 w-8 mb-2" />
-                Overview Reports
-              </Button>
-              <Button
-                variant="outline"
-                className="h-24 flex flex-col items-center justify-center"
-                onClick={() => {
-                  // In a real app, this would generate a report
-                  alert(
-                    "This would generate a detailed budget report. The functionality is in progress."
-                  );
-                }}
-              >
-                <FileText className="h-8 w-8 mb-2" />
-                Detailed Reports
-              </Button>
-              <Button
-                variant="outline"
-                className="h-24 flex flex-col items-center justify-center"
-                onClick={() => {
-                  // In a real app, this would export to Excel
-                  alert(
-                    "This would export budget data to Excel. The functionality is in progress."
-                  );
-                }}
-              >
-                <DollarSign className="h-8 w-8 mb-2" />
-                Export to Excel
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    </AdminLayout>
+      <Card>
+        <CardHeader>
+          <CardTitle>Budget Reports</CardTitle>
+          <CardDescription>
+            Generate and download budget reports
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 md:grid-cols-3">
+            <Button
+              variant="outline"
+              className="h-24 flex flex-col items-center justify-center"
+              onClick={() => router.push("/admin?section=financials")}
+            >
+              <Calculator className="h-8 w-8 mb-2" />
+              Overview Reports
+            </Button>
+            <Button
+              variant="outline"
+              className="h-24 flex flex-col items-center justify-center"
+              onClick={() => {
+                // In a real app, this would generate a report
+                alert(
+                  "This would generate a detailed budget report. The functionality is in progress."
+                );
+              }}
+            >
+              <FileText className="h-8 w-8 mb-2" />
+              Detailed Reports
+            </Button>
+            <Button
+              variant="outline"
+              className="h-24 flex flex-col items-center justify-center"
+              onClick={() => {
+                // In a real app, this would export to Excel
+                alert(
+                  "This would export budget data to Excel. The functionality is in progress."
+                );
+              }}
+            >
+              <DollarSign className="h-8 w-8 mb-2" />
+              Export to Excel
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 
