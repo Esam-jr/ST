@@ -1,61 +1,56 @@
-import React, { useState } from 'react';
-import { 
-  Card, 
-  CardContent, 
-  CardHeader, 
-  CardTitle 
-} from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Input } from '@/components/ui/input';
-import { 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableHead, 
-  TableHeader, 
-  TableRow 
-} from '@/components/ui/table';
-import { Button } from '@/components/ui/button';
-import { 
-  Select, 
-  SelectContent, 
-  SelectItem, 
-  SelectTrigger, 
-  SelectValue 
-} from '@/components/ui/select';
-import { 
-  BarChart, 
-  Bar, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  Legend, 
-  ResponsiveContainer, 
-  PieChart, 
-  Pie, 
-  Cell 
-} from 'recharts';
-import { 
-  Download, 
-  Upload, 
-  Search, 
-  Filter, 
-  DollarSign, 
-  TrendingUp, 
+import React, { useState } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+} from "recharts";
+import {
+  Download,
+  Upload,
+  Search,
+  Filter,
+  DollarSign,
+  TrendingUp,
   TrendingDown,
   Calendar,
-  FileText
-} from 'lucide-react';
+  FileText,
+} from "lucide-react";
 
 type Transaction = {
   id: string;
   date: string;
   description: string;
   amount: number;
-  type: 'income' | 'expense';
+  type: "income" | "expense";
   category: string;
-  status: 'completed' | 'pending' | 'failed';
+  status: "completed" | "pending" | "failed";
 };
 
 type Budget = {
@@ -72,132 +67,166 @@ type PieLabelProps = {
 };
 
 const AdminFinancials: React.FC = () => {
-  const [activeTab, setActiveTab] = useState('overview');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterCategory, setFilterCategory] = useState('all');
-  const [filterType, setFilterType] = useState('all');
-  const [dateRange, setDateRange] = useState('month');
+  const [activeTab, setActiveTab] = useState("overview");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filterCategory, setFilterCategory] = useState("all");
+  const [filterType, setFilterType] = useState("all");
+  const [dateRange, setDateRange] = useState("month");
 
   // Mock data
   const transactions: Transaction[] = [
-    { 
-      id: 'txn-001', 
-      date: '2023-10-15', 
-      description: 'Sponsor payment from Tech Corp', 
-      amount: 5000, 
-      type: 'income', 
-      category: 'sponsorship', 
-      status: 'completed' 
+    {
+      id: "txn-001",
+      date: "2023-10-15",
+      description: "Sponsor payment from Tech Corp",
+      amount: 5000,
+      type: "income",
+      category: "sponsorship",
+      status: "completed",
     },
-    { 
-      id: 'txn-002', 
-      date: '2023-10-18', 
-      description: 'Office supplies', 
-      amount: 250, 
-      type: 'expense', 
-      category: 'operations', 
-      status: 'completed' 
+    {
+      id: "txn-002",
+      date: "2023-10-18",
+      description: "Office supplies",
+      amount: 250,
+      type: "expense",
+      category: "operations",
+      status: "completed",
     },
-    { 
-      id: 'txn-003', 
-      date: '2023-10-22', 
-      description: 'Startup grant payment', 
-      amount: 2000, 
-      type: 'expense', 
-      category: 'grants', 
-      status: 'completed' 
+    {
+      id: "txn-003",
+      date: "2023-10-22",
+      description: "Startup grant payment",
+      amount: 2000,
+      type: "expense",
+      category: "grants",
+      status: "completed",
     },
-    { 
-      id: 'txn-004', 
-      date: '2023-10-25', 
-      description: 'Event sponsorship', 
-      amount: 3000, 
-      type: 'income', 
-      category: 'events', 
-      status: 'pending' 
+    {
+      id: "txn-004",
+      date: "2023-10-25",
+      description: "Event sponsorship",
+      amount: 3000,
+      type: "income",
+      category: "events",
+      status: "pending",
     },
-    { 
-      id: 'txn-005', 
-      date: '2023-10-28', 
-      description: 'Marketing campaign', 
-      amount: 1500, 
-      type: 'expense', 
-      category: 'marketing', 
-      status: 'completed' 
+    {
+      id: "txn-005",
+      date: "2023-10-28",
+      description: "Marketing campaign",
+      amount: 1500,
+      type: "expense",
+      category: "marketing",
+      status: "completed",
     },
-    { 
-      id: 'txn-006', 
-      date: '2023-11-02', 
-      description: 'Annual membership fees', 
-      amount: 4000, 
-      type: 'income', 
-      category: 'membership', 
-      status: 'completed' 
+    {
+      id: "txn-006",
+      date: "2023-11-02",
+      description: "Annual membership fees",
+      amount: 4000,
+      type: "income",
+      category: "membership",
+      status: "completed",
     },
-    { 
-      id: 'txn-007', 
-      date: '2023-11-05', 
-      description: 'Staff salaries', 
-      amount: 7500, 
-      type: 'expense', 
-      category: 'payroll', 
-      status: 'pending' 
+    {
+      id: "txn-007",
+      date: "2023-11-05",
+      description: "Staff salaries",
+      amount: 7500,
+      type: "expense",
+      category: "payroll",
+      status: "pending",
     },
   ];
 
   const budgets: Budget[] = [
-    { category: 'Operations', allocated: 10000, spent: 6500, remaining: 3500, percentUsed: 65 },
-    { category: 'Marketing', allocated: 5000, spent: 3200, remaining: 1800, percentUsed: 64 },
-    { category: 'Events', allocated: 8000, spent: 6800, remaining: 1200, percentUsed: 85 },
-    { category: 'Grants', allocated: 20000, spent: 12000, remaining: 8000, percentUsed: 60 },
-    { category: 'Payroll', allocated: 30000, spent: 21000, remaining: 9000, percentUsed: 70 },
+    {
+      category: "Operations",
+      allocated: 10000,
+      spent: 6500,
+      remaining: 3500,
+      percentUsed: 65,
+    },
+    {
+      category: "Marketing",
+      allocated: 5000,
+      spent: 3200,
+      remaining: 1800,
+      percentUsed: 64,
+    },
+    {
+      category: "Events",
+      allocated: 8000,
+      spent: 6800,
+      remaining: 1200,
+      percentUsed: 85,
+    },
+    {
+      category: "Grants",
+      allocated: 20000,
+      spent: 12000,
+      remaining: 8000,
+      percentUsed: 60,
+    },
+    {
+      category: "Payroll",
+      allocated: 30000,
+      spent: 21000,
+      remaining: 9000,
+      percentUsed: 70,
+    },
   ];
 
   const monthlyData = [
-    { month: 'Jan', income: 12000, expenses: 10000 },
-    { month: 'Feb', income: 15000, expenses: 12000 },
-    { month: 'Mar', income: 18000, expenses: 14000 },
-    { month: 'Apr', income: 16000, expenses: 15000 },
-    { month: 'May', income: 17000, expenses: 13000 },
-    { month: 'Jun', income: 19000, expenses: 14500 },
-    { month: 'Jul', income: 21000, expenses: 16000 },
-    { month: 'Aug', income: 22000, expenses: 17000 },
-    { month: 'Sep', income: 20000, expenses: 15500 },
-    { month: 'Oct', income: 23000, expenses: 18000 },
-    { month: 'Nov', income: 25000, expenses: 19000 },
-    { month: 'Dec', income: 28000, expenses: 21000 },
+    { month: "Jan", income: 12000, expenses: 10000 },
+    { month: "Feb", income: 15000, expenses: 12000 },
+    { month: "Mar", income: 18000, expenses: 14000 },
+    { month: "Apr", income: 16000, expenses: 15000 },
+    { month: "May", income: 17000, expenses: 13000 },
+    { month: "Jun", income: 19000, expenses: 14500 },
+    { month: "Jul", income: 21000, expenses: 16000 },
+    { month: "Aug", income: 22000, expenses: 17000 },
+    { month: "Sep", income: 20000, expenses: 15500 },
+    { month: "Oct", income: 23000, expenses: 18000 },
+    { month: "Nov", income: 25000, expenses: 19000 },
+    { month: "Dec", income: 28000, expenses: 21000 },
   ];
 
   const incomeByCategory = [
-    { name: 'Sponsorships', value: 45000 },
-    { name: 'Memberships', value: 32000 },
-    { name: 'Events', value: 18000 },
-    { name: 'Grants', value: 15000 },
-    { name: 'Other', value: 5000 },
+    { name: "Sponsorships", value: 45000 },
+    { name: "Memberships", value: 32000 },
+    { name: "Events", value: 18000 },
+    { name: "Grants", value: 15000 },
+    { name: "Other", value: 5000 },
   ];
 
-  const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8'];
+  const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042", "#8884D8"];
 
   // Calculate totals
   const totalIncome = transactions
-    .filter(t => t.type === 'income')
+    .filter((t) => t.type === "income")
     .reduce((sum, transaction) => sum + transaction.amount, 0);
-  
+
   const totalExpenses = transactions
-    .filter(t => t.type === 'expense')
+    .filter((t) => t.type === "expense")
     .reduce((sum, transaction) => sum + transaction.amount, 0);
-  
+
   const netBalance = totalIncome - totalExpenses;
 
   // Filtering and searching transactions
-  const filteredTransactions = transactions.filter(transaction => {
-    const matchesSearch = searchTerm === '' || 
-      transaction.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+  const filteredTransactions = transactions.filter((transaction) => {
+    const matchesSearch =
+      searchTerm === "" ||
+      transaction.description
+        .toLowerCase()
+        .includes(searchTerm.toLowerCase()) ||
       transaction.id.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchesCategory = filterCategory === 'all' || transaction.category === filterCategory;
-    const matchesType = filterType === 'all' || transaction.type === filterType;
-    
+
+    const matchesCategory =
+      filterCategory === "all" || transaction.category === filterCategory;
+    const matchesType = filterType === "all" || transaction.type === filterType;
+
     return matchesSearch && matchesCategory && matchesType;
   });
 
@@ -228,23 +257,31 @@ const AdminFinancials: React.FC = () => {
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">${totalIncome.toLocaleString()}</div>
+            <div className="text-2xl font-bold">
+              ${totalIncome.toLocaleString()}
+            </div>
             <p className="text-xs text-muted-foreground">
               <TrendingUp className="inline h-4 w-4 text-green-500 mr-1" />
-              <span className="text-green-500 font-medium">8%</span> from last month
+              <span className="text-green-500 font-medium">8%</span> from last
+              month
             </p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Total Expenses</CardTitle>
+            <CardTitle className="text-sm font-medium">
+              Total Expenses
+            </CardTitle>
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">${totalExpenses.toLocaleString()}</div>
+            <div className="text-2xl font-bold">
+              ${totalExpenses.toLocaleString()}
+            </div>
             <p className="text-xs text-muted-foreground">
               <TrendingDown className="inline h-4 w-4 text-red-500 mr-1" />
-              <span className="text-red-500 font-medium">3%</span> from last month
+              <span className="text-red-500 font-medium">3%</span> from last
+              month
             </p>
           </CardContent>
         </Card>
@@ -254,17 +291,25 @@ const AdminFinancials: React.FC = () => {
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">${netBalance.toLocaleString()}</div>
+            <div className="text-2xl font-bold">
+              ${netBalance.toLocaleString()}
+            </div>
             <p className="text-xs text-muted-foreground">
               {netBalance > 0 ? (
                 <>
                   <TrendingUp className="inline h-4 w-4 text-green-500 mr-1" />
-                  <span className="text-green-500 font-medium">Positive</span> balance
+                  <span className="text-green-500 font-medium">
+                    Positive
+                  </span>{" "}
+                  balance
                 </>
               ) : (
                 <>
                   <TrendingDown className="inline h-4 w-4 text-red-500 mr-1" />
-                  <span className="text-red-500 font-medium">Negative</span> balance
+                  <span className="text-red-500 font-medium">
+                    Negative
+                  </span>{" "}
+                  balance
                 </>
               )}
             </p>
@@ -272,7 +317,64 @@ const AdminFinancials: React.FC = () => {
         </Card>
       </div>
 
-      <Tabs defaultValue="overview" className="space-y-4" onValueChange={setActiveTab}>
+      <div className="mt-4">
+        <Card>
+          <CardHeader>
+            <CardTitle>Budget Management</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex justify-between items-center">
+              <div>
+                <p className="text-sm text-muted-foreground mb-2">
+                  Manage budgets for all your startup calls. Track expenses,
+                  allocate funds, and generate detailed reports.
+                </p>
+                <div className="mt-4">
+                  <Button
+                    onClick={() =>
+                      (window.location.href =
+                        "/admin?section=budget-management")
+                    }
+                    variant="default"
+                  >
+                    <DollarSign className="mr-2 h-4 w-4" />
+                    Open Budget Management
+                  </Button>
+                </div>
+              </div>
+              <div className="w-1/3">
+                <ResponsiveContainer width="100%" height={120}>
+                  <PieChart>
+                    <Pie
+                      data={budgets}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={30}
+                      outerRadius={50}
+                      dataKey="allocated"
+                      nameKey="category"
+                    >
+                      {budgets.map((entry, index) => (
+                        <Cell
+                          key={`cell-${index}`}
+                          fill={COLORS[index % COLORS.length]}
+                        />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Tabs
+        defaultValue="overview"
+        className="space-y-4"
+        onValueChange={setActiveTab}
+      >
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="transactions">Transactions</TabsTrigger>
@@ -302,7 +404,7 @@ const AdminFinancials: React.FC = () => {
                 </div>
               </CardContent>
             </Card>
-            
+
             <Card>
               <CardHeader>
                 <CardTitle>Income by Category</CardTitle>
@@ -319,13 +421,22 @@ const AdminFinancials: React.FC = () => {
                         outerRadius={80}
                         fill="#8884d8"
                         dataKey="value"
-                        label={({ name, percent }: PieLabelProps) => `${name} ${(percent * 100).toFixed(0)}%`}
+                        label={({ name, percent }: PieLabelProps) =>
+                          `${name} ${(percent * 100).toFixed(0)}%`
+                        }
                       >
                         {incomeByCategory.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                          <Cell
+                            key={`cell-${index}`}
+                            fill={COLORS[index % COLORS.length]}
+                          />
                         ))}
                       </Pie>
-                      <Tooltip formatter={(value: number) => `$${value.toLocaleString()}`} />
+                      <Tooltip
+                        formatter={(value: number) =>
+                          `$${value.toLocaleString()}`
+                        }
+                      />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
@@ -354,29 +465,42 @@ const AdminFinancials: React.FC = () => {
                     <TableRow key={transaction.id}>
                       <TableCell>{transaction.date}</TableCell>
                       <TableCell>{transaction.description}</TableCell>
-                      <TableCell className="capitalize">{transaction.category}</TableCell>
+                      <TableCell className="capitalize">
+                        {transaction.category}
+                      </TableCell>
                       <TableCell>
-                        <span className={`px-2 py-1 rounded-full text-xs ${
-                          transaction.type === 'income' 
-                            ? 'bg-green-100 text-green-800' 
-                            : 'bg-red-100 text-red-800'
-                        }`}>
+                        <span
+                          className={`px-2 py-1 rounded-full text-xs ${
+                            transaction.type === "income"
+                              ? "bg-green-100 text-green-800"
+                              : "bg-red-100 text-red-800"
+                          }`}
+                        >
                           {transaction.type}
                         </span>
                       </TableCell>
                       <TableCell className="text-right">
-                        <span className={transaction.type === 'income' ? 'text-green-600' : 'text-red-600'}>
-                          {transaction.type === 'income' ? '+' : '-'}${transaction.amount.toLocaleString()}
+                        <span
+                          className={
+                            transaction.type === "income"
+                              ? "text-green-600"
+                              : "text-red-600"
+                          }
+                        >
+                          {transaction.type === "income" ? "+" : "-"}$
+                          {transaction.amount.toLocaleString()}
                         </span>
                       </TableCell>
                       <TableCell>
-                        <span className={`px-2 py-1 rounded-full text-xs ${
-                          transaction.status === 'completed' 
-                            ? 'bg-green-100 text-green-800' 
-                            : transaction.status === 'pending'
-                            ? 'bg-yellow-100 text-yellow-800'
-                            : 'bg-red-100 text-red-800'
-                        }`}>
+                        <span
+                          className={`px-2 py-1 rounded-full text-xs ${
+                            transaction.status === "completed"
+                              ? "bg-green-100 text-green-800"
+                              : transaction.status === "pending"
+                              ? "bg-yellow-100 text-yellow-800"
+                              : "bg-red-100 text-red-800"
+                          }`}
+                        >
                           {transaction.status}
                         </span>
                       </TableCell>
@@ -412,7 +536,10 @@ const AdminFinancials: React.FC = () => {
                     <SelectItem value="expense">Expense</SelectItem>
                   </SelectContent>
                 </Select>
-                <Select value={filterCategory} onValueChange={setFilterCategory}>
+                <Select
+                  value={filterCategory}
+                  onValueChange={setFilterCategory}
+                >
                   <SelectTrigger className="w-[150px]">
                     <SelectValue placeholder="Filter by category" />
                   </SelectTrigger>
@@ -458,29 +585,42 @@ const AdminFinancials: React.FC = () => {
                       <TableCell>{transaction.id}</TableCell>
                       <TableCell>{transaction.date}</TableCell>
                       <TableCell>{transaction.description}</TableCell>
-                      <TableCell className="capitalize">{transaction.category}</TableCell>
+                      <TableCell className="capitalize">
+                        {transaction.category}
+                      </TableCell>
                       <TableCell>
-                        <span className={`px-2 py-1 rounded-full text-xs ${
-                          transaction.type === 'income' 
-                            ? 'bg-green-100 text-green-800' 
-                            : 'bg-red-100 text-red-800'
-                        }`}>
+                        <span
+                          className={`px-2 py-1 rounded-full text-xs ${
+                            transaction.type === "income"
+                              ? "bg-green-100 text-green-800"
+                              : "bg-red-100 text-red-800"
+                          }`}
+                        >
                           {transaction.type}
                         </span>
                       </TableCell>
                       <TableCell className="text-right">
-                        <span className={transaction.type === 'income' ? 'text-green-600' : 'text-red-600'}>
-                          {transaction.type === 'income' ? '+' : '-'}${transaction.amount.toLocaleString()}
+                        <span
+                          className={
+                            transaction.type === "income"
+                              ? "text-green-600"
+                              : "text-red-600"
+                          }
+                        >
+                          {transaction.type === "income" ? "+" : "-"}$
+                          {transaction.amount.toLocaleString()}
                         </span>
                       </TableCell>
                       <TableCell>
-                        <span className={`px-2 py-1 rounded-full text-xs ${
-                          transaction.status === 'completed' 
-                            ? 'bg-green-100 text-green-800' 
-                            : transaction.status === 'pending'
-                            ? 'bg-yellow-100 text-yellow-800'
-                            : 'bg-red-100 text-red-800'
-                        }`}>
+                        <span
+                          className={`px-2 py-1 rounded-full text-xs ${
+                            transaction.status === "completed"
+                              ? "bg-green-100 text-green-800"
+                              : transaction.status === "pending"
+                              ? "bg-yellow-100 text-yellow-800"
+                              : "bg-red-100 text-red-800"
+                          }`}
+                        >
                           {transaction.status}
                         </span>
                       </TableCell>
@@ -518,24 +658,32 @@ const AdminFinancials: React.FC = () => {
                   {budgets.map((budget) => (
                     <TableRow key={budget.category}>
                       <TableCell>{budget.category}</TableCell>
-                      <TableCell className="text-right">${budget.allocated.toLocaleString()}</TableCell>
-                      <TableCell className="text-right">${budget.spent.toLocaleString()}</TableCell>
-                      <TableCell className="text-right">${budget.remaining.toLocaleString()}</TableCell>
+                      <TableCell className="text-right">
+                        ${budget.allocated.toLocaleString()}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        ${budget.spent.toLocaleString()}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        ${budget.remaining.toLocaleString()}
+                      </TableCell>
                       <TableCell>
                         <div className="flex items-center">
                           <div className="w-full bg-gray-200 rounded-full h-2.5 mr-2">
-                            <div 
+                            <div
                               className={`h-2.5 rounded-full ${
-                                budget.percentUsed > 90 
-                                  ? 'bg-red-600' 
-                                  : budget.percentUsed > 70 
-                                  ? 'bg-yellow-400' 
-                                  : 'bg-green-500'
-                              }`} 
+                                budget.percentUsed > 90
+                                  ? "bg-red-600"
+                                  : budget.percentUsed > 70
+                                  ? "bg-yellow-400"
+                                  : "bg-green-500"
+                              }`}
                               style={{ width: `${budget.percentUsed}%` }}
                             ></div>
                           </div>
-                          <span className="text-sm text-gray-700">{budget.percentUsed}%</span>
+                          <span className="text-sm text-gray-700">
+                            {budget.percentUsed}%
+                          </span>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -553,27 +701,45 @@ const AdminFinancials: React.FC = () => {
             </CardHeader>
             <CardContent>
               <div className="grid gap-4 md:grid-cols-3">
-                <Button variant="outline" className="h-24 flex flex-col items-center justify-center">
+                <Button
+                  variant="outline"
+                  className="h-24 flex flex-col items-center justify-center"
+                >
                   <FileText className="h-8 w-8 mb-2" />
                   Monthly Income Statement
                 </Button>
-                <Button variant="outline" className="h-24 flex flex-col items-center justify-center">
+                <Button
+                  variant="outline"
+                  className="h-24 flex flex-col items-center justify-center"
+                >
                   <FileText className="h-8 w-8 mb-2" />
                   Quarterly Expense Report
                 </Button>
-                <Button variant="outline" className="h-24 flex flex-col items-center justify-center">
+                <Button
+                  variant="outline"
+                  className="h-24 flex flex-col items-center justify-center"
+                >
                   <FileText className="h-8 w-8 mb-2" />
                   Annual Budget Analysis
                 </Button>
-                <Button variant="outline" className="h-24 flex flex-col items-center justify-center">
+                <Button
+                  variant="outline"
+                  className="h-24 flex flex-col items-center justify-center"
+                >
                   <FileText className="h-8 w-8 mb-2" />
                   Cash Flow Statement
                 </Button>
-                <Button variant="outline" className="h-24 flex flex-col items-center justify-center">
+                <Button
+                  variant="outline"
+                  className="h-24 flex flex-col items-center justify-center"
+                >
                   <FileText className="h-8 w-8 mb-2" />
                   Tax Documentation
                 </Button>
-                <Button variant="outline" className="h-24 flex flex-col items-center justify-center">
+                <Button
+                  variant="outline"
+                  className="h-24 flex flex-col items-center justify-center"
+                >
                   <FileText className="h-8 w-8 mb-2" />
                   Funding Allocation Report
                 </Button>
@@ -586,4 +752,4 @@ const AdminFinancials: React.FC = () => {
   );
 };
 
-export default AdminFinancials; 
+export default AdminFinancials;
