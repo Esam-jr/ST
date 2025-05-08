@@ -41,6 +41,7 @@ import {
   SendIcon,
   CheckCircle,
   X,
+  ExternalLink,
 } from "lucide-react";
 
 interface Advertisement {
@@ -838,6 +839,19 @@ export default function AdvertisementManager() {
                             </span>
                           </div>
                           <p className="ml-6">{result.message}</p>
+                          {result.success && result.postUrl && (
+                            <p className="ml-6 mt-1">
+                              <a
+                                href={result.postUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-600 hover:underline inline-flex items-center"
+                              >
+                                <ExternalLink className="h-3 w-3 mr-1" />
+                                View Post
+                              </a>
+                            </p>
+                          )}
                         </div>
                       ))}
                     </div>
