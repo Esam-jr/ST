@@ -1,50 +1,55 @@
-import { useState } from 'react';
-import Layout from '@/components/layout/Layout';
-import Link from 'next/link';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Search, Calendar, ExternalLink } from 'lucide-react';
-import useSWR from 'swr';
-import axios from 'axios';
+import { useState } from "react";
+import Layout from "@/components/layout/Layout";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Search, Calendar, ExternalLink } from "lucide-react";
+import useSWR from "swr";
+import axios from "axios";
 
 // Date formatter helper
 const formatDate = (dateString: string) => {
   const date = new Date(dateString);
-  return date.toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
+  return date.toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
   });
 };
 
 // Fetcher function for SWR
-const fetcher = (url: string) => axios.get(url).then(res => res.data);
+const fetcher = (url: string) => axios.get(url).then((res) => res.data);
 
-// Define Announcement type
+// Define Announcement type based on Advertisement model
 interface Announcement {
   id: string;
   title: string;
-  description: string;
+  content: string; // Changed from description
   imageUrl?: string;
-  linkUrl?: string;
-  startDate?: string;
-  endDate?: string;
+  scheduledDate: string; // Changed from startDate/endDate
+  platforms: string[];
+  status: string;
   createdAt: string;
 }
 
 export default function AnnouncementsPage() {
-  const [searchTerm, setSearchTerm] = useState('');
-  
+  const [searchTerm, setSearchTerm] = useState("");
+
   // Use SWR for data fetching with auto-revalidation
-  const { data: announcements = [], error } = useSWR<Announcement[]>('/api/public/announcements', fetcher, {
-    refreshInterval: 60000, // Refresh every minute
-    revalidateOnFocus: true,
-  });
-  
+  const { data: announcements = [], error } = useSWR<Announcement[]>(
+    "/api/public/announcements",
+    fetcher,
+    {
+      refreshInterval: 60000, // Refresh every minute
+      revalidateOnFocus: true,
+    }
+  );
+
   // Filter announcements based on search term
-  const filteredAnnouncements = announcements.filter((announcement) => 
-    announcement.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    announcement.description.toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredAnnouncements = announcements.filter(
+    (announcement) =>
+      announcement.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      announcement.content.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
@@ -53,7 +58,8 @@ export default function AnnouncementsPage() {
         <div className="text-center mb-12">
           <h1 className="text-4xl font-bold mb-4">Announcements</h1>
           <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-            Stay updated with the latest news and updates from our startup community.
+            Stay updated with the latest news and updates from our startup
+            community.
           </p>
         </div>
 
@@ -76,7 +82,9 @@ export default function AnnouncementsPage() {
           </div>
         ) : announcements.length === 0 ? (
           <div className="text-center py-10">
-            <p className="text-gray-500">No announcements at the moment. Please check back soon!</p>
+            <p className="text-gray-500">
+              No announcements at the moment. Please check back soon!
+            </p>
           </div>
         ) : filteredAnnouncements.length === 0 ? (
           <div className="text-center py-10">
@@ -85,45 +93,48 @@ export default function AnnouncementsPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
             {filteredAnnouncements.map((announcement) => (
-              <div key={announcement.id} className="bg-white rounded-lg shadow-md overflow-hidden flex flex-col">
+              <div
+                key={announcement.id}
+                className="bg-white rounded-lg shadow-md overflow-hidden flex flex-col"
+              >
                 {announcement.imageUrl && (
                   <div className="h-48 overflow-hidden">
-                    <img 
-                      src={announcement.imageUrl} 
-                      alt={announcement.title} 
+                    <img
+                      src={announcement.imageUrl}
+                      alt={announcement.title}
                       className="w-full h-full object-cover"
                     />
                   </div>
                 )}
                 <div className="p-6 flex-grow flex flex-col">
-                  {(announcement.startDate || announcement.endDate) && (
+                  {announcement.scheduledDate && (
                     <div className="flex items-center text-sm text-blue-600 mb-3">
                       <Calendar className="h-4 w-4 mr-2" />
-                      <span>
-                        {announcement.startDate && formatDate(announcement.startDate)}
-                        {announcement.startDate && announcement.endDate && ' - '}
-                        {announcement.endDate && formatDate(announcement.endDate)}
-                      </span>
+                      <span>{formatDate(announcement.scheduledDate)}</span>
                     </div>
                   )}
-                  
-                  <h3 className="text-xl font-bold mb-3">{announcement.title}</h3>
-                  <p className="text-gray-600 mb-4 flex-grow">{announcement.description}</p>
-                  
-                  {announcement.linkUrl && (
-                    <div className="mt-4">
-                      <a 
-                        href={announcement.linkUrl} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center text-blue-600 hover:text-blue-800"
-                      >
-                        Learn more
-                        <ExternalLink className="ml-2 h-4 w-4" />
-                      </a>
-                    </div>
-                  )}
-                  
+
+                  <h3 className="text-xl font-bold mb-3">
+                    {announcement.title}
+                  </h3>
+                  <p className="text-gray-600 mb-4 flex-grow">
+                    {announcement.content}
+                  </p>
+
+                  {announcement.platforms &&
+                    announcement.platforms.length > 0 && (
+                      <div className="flex flex-wrap gap-2 mt-2 mb-3">
+                        {announcement.platforms.map((platform) => (
+                          <span
+                            key={platform}
+                            className="inline-flex items-center rounded-full bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700"
+                          >
+                            {platform}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
                   <div className="text-xs text-gray-500 mt-4">
                     Posted on {formatDate(announcement.createdAt)}
                   </div>
@@ -135,4 +146,4 @@ export default function AnnouncementsPage() {
       </div>
     </Layout>
   );
-} 
+}

@@ -76,6 +76,12 @@ export default function AdvertisementManager() {
     status: "draft",
   });
 
+  const [publishDialogOpen, setPublishDialogOpen] = useState(false);
+  const [publishingAd, setPublishingAd] = useState<Advertisement | null>(null);
+  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
+  const [publishResults, setPublishResults] = useState<any[] | null>(null);
+  const [publishLoading, setPublishLoading] = useState(false);
+
   useEffect(() => {
     fetchAdvertisements();
   }, []);
@@ -331,6 +337,69 @@ export default function AdvertisementManager() {
     }
   };
 
+  const handlePublishToSocialMedia = async () => {
+    if (!publishingAd || selectedPlatforms.length === 0) return;
+
+    setPublishLoading(true);
+    setPublishResults(null);
+
+    try {
+      const response = await fetch("/api/advertisements/publish", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          adId: publishingAd.id,
+          platforms: selectedPlatforms,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to publish advertisement");
+      }
+
+      // Update the advertisement in the local state with new platforms
+      setAdvertisements((ads) =>
+        ads.map((ad) =>
+          ad.id === publishingAd.id
+            ? {
+                ...ad,
+                platforms: data.advertisement.platforms,
+              }
+            : ad
+        )
+      );
+
+      setPublishResults(data.results);
+      toast({
+        title: "Success",
+        description: data.message || "Advertisement published to social media",
+      });
+    } catch (error) {
+      console.error("Error publishing to social media:", error);
+      toast({
+        title: "Error",
+        description:
+          error instanceof Error
+            ? error.message
+            : "Failed to publish advertisement",
+        variant: "destructive",
+      });
+    } finally {
+      setPublishLoading(false);
+    }
+  };
+
+  const openPublishDialog = (ad: Advertisement) => {
+    setPublishingAd(ad);
+    setSelectedPlatforms([]);
+    setPublishResults(null);
+    setPublishDialogOpen(true);
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">Loading...</div>
@@ -512,6 +581,18 @@ export default function AdvertisementManager() {
                     </Button>
                   )}
 
+                  {ad.status === "published" && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => openPublishDialog(ad)}
+                      className="bg-green-50 text-green-700 border-green-200 hover:bg-green-100"
+                    >
+                      <Share2 className="h-4 w-4 mr-1" />
+                      Share
+                    </Button>
+                  )}
+
                   <Button
                     variant="outline"
                     size="sm"
@@ -668,6 +749,141 @@ export default function AdvertisementManager() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add this Social Media Publishing Dialog */}
+      <Dialog open={publishDialogOpen} onOpenChange={setPublishDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Share to Social Media</DialogTitle>
+            <DialogDescription>
+              Publish this advertisement to social media platforms.
+            </DialogDescription>
+          </DialogHeader>
+
+          {publishingAd && (
+            <div className="py-4">
+              <h3 className="font-medium mb-2">{publishingAd.title}</h3>
+              <p className="text-sm text-gray-500 mb-4">
+                {publishingAd.content}
+              </p>
+
+              <div className="space-y-4">
+                <div>
+                  <h4 className="text-sm font-medium mb-2">Select Platforms</h4>
+                  <div className="grid grid-cols-2 gap-2">
+                    {PLATFORMS.map((platform) => (
+                      <div
+                        key={platform}
+                        className="flex items-center space-x-2"
+                      >
+                        <Checkbox
+                          id={`platform-${platform}`}
+                          checked={selectedPlatforms.includes(platform)}
+                          onCheckedChange={(checked) => {
+                            if (checked) {
+                              setSelectedPlatforms((prev) => [
+                                ...prev,
+                                platform,
+                              ]);
+                            } else {
+                              setSelectedPlatforms((prev) =>
+                                prev.filter((p) => p !== platform)
+                              );
+                            }
+                          }}
+                          disabled={publishingAd.platforms.includes(platform)}
+                        />
+                        <Label
+                          htmlFor={`platform-${platform}`}
+                          className={`font-normal ${
+                            publishingAd.platforms.includes(platform)
+                              ? "text-gray-400"
+                              : ""
+                          }`}
+                        >
+                          {platform}
+                          {publishingAd.platforms.includes(platform) &&
+                            " (Already shared)"}
+                        </Label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {publishResults && (
+                  <div className="mt-4 border-t pt-4">
+                    <h4 className="text-sm font-medium mb-2">
+                      Publishing Results
+                    </h4>
+                    <div className="space-y-2 max-h-40 overflow-y-auto">
+                      {publishResults.map((result, index) => (
+                        <div
+                          key={index}
+                          className={`p-2 rounded text-sm ${
+                            result.success
+                              ? "bg-green-50 text-green-700"
+                              : "bg-red-50 text-red-700"
+                          }`}
+                        >
+                          <div className="flex items-center">
+                            {result.success ? (
+                              <CheckCircle className="h-4 w-4 mr-2" />
+                            ) : (
+                              <X className="h-4 w-4 mr-2" />
+                            )}
+                            <span className="font-medium">
+                              {result.platform}:
+                            </span>
+                          </div>
+                          <p className="ml-6">{result.message}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setPublishDialogOpen(false)}>
+              Close
+            </Button>
+            <Button
+              onClick={handlePublishToSocialMedia}
+              disabled={selectedPlatforms.length === 0 || publishLoading}
+            >
+              {publishLoading ? (
+                <>
+                  <svg
+                    className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    ></circle>
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    ></path>
+                  </svg>
+                  Publishing...
+                </>
+              ) : (
+                "Publish Now"
+              )}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
