@@ -620,7 +620,7 @@ export default function AdvertisementManager() {
 
       {/* Create/Edit Advertisement Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {editingId ? "Edit Advertisement" : "Create New Advertisement"}
@@ -755,7 +755,7 @@ export default function AdvertisementManager() {
 
       {/* Add this Social Media Publishing Dialog */}
       <Dialog open={publishDialogOpen} onOpenChange={setPublishDialogOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Share to Social Media</DialogTitle>
             <DialogDescription>
