@@ -66,7 +66,7 @@ const fetcher = (url: string) => axios.get(url).then((res) => res.data);
 
 export default function EventsPage() {
   const [searchTerm, setSearchTerm] = useState("");
-  const [filterType, setFilterType] = useState("");
+  const [filterType, setFilterType] = useState("all");
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [view, setView] = useState<"grid" | "list">("grid");
 
@@ -85,7 +85,8 @@ export default function EventsPage() {
     const matchesSearch =
       event.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       event.description.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesType = filterType ? event.type === filterType : true;
+    const matchesType =
+      filterType === "all" || !filterType ? true : event.type === filterType;
     return matchesSearch && matchesType;
   });
 
@@ -225,7 +226,7 @@ export default function EventsPage() {
                       </div>
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">All Types</SelectItem>
+                      <SelectItem value="all">All Types</SelectItem>
                       <SelectItem value="WORKSHOP">Workshop</SelectItem>
                       <SelectItem value="WEBINAR">Webinar</SelectItem>
                       <SelectItem value="DEADLINE">Deadline</SelectItem>
@@ -299,18 +300,20 @@ export default function EventsPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-2">
-                {Object.entries(typeCounts).map(([type, count]) => (
-                  <div
-                    key={type}
-                    className="flex justify-between items-center text-sm"
-                  >
-                    <div className="flex items-center">
-                      <div className="w-2 h-2 rounded-full bg-primary mr-2"></div>
-                      {type}
+                {Object.entries(typeCounts).map(
+                  ([type, count]: [string, number]) => (
+                    <div
+                      key={type}
+                      className="flex justify-between items-center text-sm"
+                    >
+                      <div className="flex items-center">
+                        <div className="w-2 h-2 rounded-full bg-primary mr-2"></div>
+                        {type}
+                      </div>
+                      <span className="font-medium">{count}</span>
                     </div>
-                    <span className="font-medium">{count}</span>
-                  </div>
-                ))}
+                  )
+                )}
               </div>
             </CardContent>
           </Card>

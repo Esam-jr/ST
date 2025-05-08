@@ -1,6 +1,47 @@
-import { useState, useEffect } from 'react';
-import { useSession } from 'next-auth/react';
-import { toast } from 'react-hot-toast';
+import { useState, useEffect } from "react";
+import { useSession } from "next-auth/react";
+import { toast } from "@/hooks/use-toast";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  PlusCircle,
+  Edit,
+  Trash2,
+  Calendar,
+  Share2,
+  ImageIcon,
+  SendIcon,
+  CheckCircle,
+  X,
+} from "lucide-react";
 
 interface Advertisement {
   id: string;
@@ -10,20 +51,29 @@ interface Advertisement {
   scheduledDate: string;
   platforms: string[];
   status: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
-const PLATFORMS = ['Twitter', 'LinkedIn', 'Facebook'];
+const PLATFORMS = ["Twitter", "LinkedIn", "Facebook", "Instagram", "Email"];
+const STATUSES = ["draft", "scheduled", "published", "cancelled"];
 
 export default function AdvertisementManager() {
   const { data: session } = useSession();
   const [advertisements, setAdvertisements] = useState<Advertisement[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState("all");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
+
   const [formData, setFormData] = useState({
-    title: '',
-    content: '',
-    imageUrl: '',
-    scheduledDate: '',
+    title: "",
+    content: "",
+    imageUrl: "",
+    scheduledDate: "",
     platforms: [] as string[],
+    status: "draft",
   });
 
   useEffect(() => {
@@ -32,49 +82,176 @@ export default function AdvertisementManager() {
 
   const fetchAdvertisements = async () => {
     try {
-      const response = await fetch('/api/advertisements');
-      if (!response.ok) throw new Error('Failed to fetch advertisements');
+      setLoading(true);
+      const response = await fetch("/api/advertisements");
+      if (!response.ok) throw new Error("Failed to fetch advertisements");
       const data = await response.json();
       setAdvertisements(data);
     } catch (error) {
-      console.error('Error fetching advertisements:', error);
-      toast.error('Failed to load advertisements');
+      console.error("Error fetching advertisements:", error);
+      toast({
+        title: "Error",
+        description: "Failed to load advertisements",
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
   };
 
+  const resetForm = () => {
+    setFormData({
+      title: "",
+      content: "",
+      imageUrl: "",
+      scheduledDate: "",
+      platforms: [],
+      status: "draft",
+    });
+    setEditingId(null);
+  };
+
+  const handleFormOpen = (ad?: Advertisement) => {
+    if (ad) {
+      // Format the date for datetime-local input
+      const date = new Date(ad.scheduledDate);
+      const formattedDate = date.toISOString().slice(0, 16);
+
+      setFormData({
+        title: ad.title,
+        content: ad.content,
+        imageUrl: ad.imageUrl || "",
+        scheduledDate: formattedDate,
+        platforms: ad.platforms,
+        status: ad.status,
+      });
+      setEditingId(ad.id);
+    } else {
+      resetForm();
+    }
+    setIsDialogOpen(true);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!session?.user || session.user.role !== 'ADMIN') {
-      toast.error('Unauthorized');
+    if (!session?.user || session.user.role !== "ADMIN") {
+      toast({
+        title: "Unauthorized",
+        description: "You do not have permission to perform this action",
+        variant: "destructive",
+      });
       return;
     }
 
     try {
-      const response = await fetch('/api/advertisements', {
-        method: 'POST',
+      const url = editingId
+        ? `/api/advertisements/${editingId}`
+        : "/api/advertisements";
+
+      const method = editingId ? "PUT" : "POST";
+
+      const response = await fetch(url, {
+        method,
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify(formData),
       });
 
-      if (!response.ok) throw new Error('Failed to create advertisement');
+      if (!response.ok)
+        throw new Error(
+          `Failed to ${editingId ? "update" : "create"} advertisement`
+        );
 
-      const newAdvertisement = await response.json();
-      setAdvertisements([newAdvertisement, ...advertisements]);
-      setFormData({
-        title: '',
-        content: '',
-        imageUrl: '',
-        scheduledDate: '',
-        platforms: [],
-      });
-      toast.success('Advertisement created successfully');
+      const updatedAd = await response.json();
+
+      if (editingId) {
+        setAdvertisements((ads) =>
+          ads.map((ad) => (ad.id === editingId ? updatedAd : ad))
+        );
+        toast({
+          title: "Success",
+          description: "Advertisement updated successfully",
+        });
+      } else {
+        setAdvertisements((ads) => [updatedAd, ...ads]);
+        toast({
+          title: "Success",
+          description: "Advertisement created successfully",
+        });
+      }
+      resetForm();
+      setIsDialogOpen(false);
     } catch (error) {
-      console.error('Error creating advertisement:', error);
-      toast.error('Failed to create advertisement');
+      console.error(
+        `Error ${editingId ? "updating" : "creating"} advertisement:`,
+        error
+      );
+      toast({
+        title: "Error",
+        description: `Failed to ${
+          editingId ? "update" : "create"
+        } advertisement`,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this advertisement?")) return;
+
+    try {
+      const response = await fetch(`/api/advertisements/${id}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) throw new Error("Failed to delete advertisement");
+
+      setAdvertisements((ads) => ads.filter((ad) => ad.id !== id));
+      toast({
+        title: "Success",
+        description: "Advertisement deleted successfully",
+      });
+    } catch (error) {
+      console.error("Error deleting advertisement:", error);
+      toast({
+        title: "Error",
+        description: "Failed to delete advertisement",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleStatusChange = async (id: string, newStatus: string) => {
+    try {
+      const response = await fetch(`/api/advertisements/${id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ status: newStatus }),
+      });
+
+      if (!response.ok)
+        throw new Error("Failed to update advertisement status");
+
+      setAdvertisements((ads) =>
+        ads.map((ad) => (ad.id === id ? { ...ad, status: newStatus } : ad))
+      );
+
+      toast({
+        title: "Success",
+        description: `Advertisement ${
+          newStatus === "published" ? "published" : "status updated"
+        }`,
+      });
+    } catch (error) {
+      console.error("Error updating advertisement status:", error);
+      toast({
+        title: "Error",
+        description: "Failed to update advertisement status",
+        variant: "destructive",
+      });
     }
   };
 
@@ -93,119 +270,406 @@ export default function AdvertisementManager() {
         : [...prev.platforms, platform],
     }));
   };
-  
+
+  const handleStatusSelect = (value: string) => {
+    setFormData((prev) => ({ ...prev, status: value }));
+  };
+
+  // Filter advertisements based on tab and search
+  const filteredAds = advertisements
+    .filter((ad) => {
+      if (activeTab === "all") return true;
+      return ad.status === activeTab;
+    })
+    .filter(
+      (ad) =>
+        ad.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        ad.content.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+
+  // Group statistics
+  const stats = {
+    draft: advertisements.filter((ad) => ad.status === "draft").length,
+    scheduled: advertisements.filter((ad) => ad.status === "scheduled").length,
+    published: advertisements.filter((ad) => ad.status === "published").length,
+    cancelled: advertisements.filter((ad) => ad.status === "cancelled").length,
+    total: advertisements.length,
+  };
+
+  const renderStatusBadge = (status: string) => {
+    switch (status) {
+      case "draft":
+        return (
+          <span className="bg-gray-100 text-gray-800 text-xs px-2 py-1 rounded-full">
+            Draft
+          </span>
+        );
+      case "scheduled":
+        return (
+          <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">
+            Scheduled
+          </span>
+        );
+      case "published":
+        return (
+          <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full">
+            Published
+          </span>
+        );
+      case "cancelled":
+        return (
+          <span className="bg-red-100 text-red-800 text-xs px-2 py-1 rounded-full">
+            Cancelled
+          </span>
+        );
+      default:
+        return (
+          <span className="bg-gray-100 text-gray-800 text-xs px-2 py-1 rounded-full">
+            {status}
+          </span>
+        );
+    }
+  };
+
   if (loading) {
-    return <div className="flex justify-center items-center h-64">Loading...</div>;
+    return (
+      <div className="flex justify-center items-center h-64">Loading...</div>
+    );
   }
-  
+
   return (
-    <div className="max-w-4xl mx-auto p-4">
-      <h1 className="text-2xl font-bold mb-6">Advertisement Management</h1>
-
-      {session?.user?.role === 'ADMIN' && (
-        <form onSubmit={handleSubmit} className="mb-8 space-y-4">
+    <div className="space-y-6">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-            <label className="block text-sm font-medium mb-1">Title</label>
-            <input
-              type="text"
-                  name="title"
-                  value={formData.title}
-                  onChange={handleInputChange}
-                  required
-              className="w-full p-2 border rounded"
-                />
-              </div>
-              
-          <div>
-            <label className="block text-sm font-medium mb-1">Content</label>
-            <textarea
-              name="content"
-              value={formData.content}
-                  onChange={handleInputChange}
-                  required
-              rows={4}
-              className="w-full p-2 border rounded"
-                />
-              </div>
-              
-          <div>
-            <label className="block text-sm font-medium mb-1">Image URL</label>
-            <input
-              type="url"
-              name="imageUrl"
-              value={formData.imageUrl}
-                  onChange={handleInputChange}
-              className="w-full p-2 border rounded"
-                />
-              </div>
-              
-          <div>
-            <label className="block text-sm font-medium mb-1">
-              Scheduled Date
-            </label>
-            <input
-              type="datetime-local"
-              name="scheduledDate"
-              value={formData.scheduledDate}
-                  onChange={handleInputChange}
-              required
-              className="w-full p-2 border rounded"
-                />
-              </div>
-              
-          <div>
-            <label className="block text-sm font-medium mb-1">Platforms</label>
-            <div className="space-x-4">
-              {PLATFORMS.map((platform) => (
-                <label key={platform} className="inline-flex items-center">
-                  <input
-                      type="checkbox"
-                    checked={formData.platforms.includes(platform)}
-                    onChange={() => handlePlatformChange(platform)}
-                    className="mr-2"
-                  />
-                  {platform}
-                </label>
-              ))}
-                </div>
-              </div>
-              
-          <button
-            type="submit"
-            className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
-          >
-            Create Advertisement
-          </button>
-        </form>
-      )}
+          <h1 className="text-2xl font-bold">Advertisement Management</h1>
+          <p className="text-gray-500">
+            Create and manage advertisements across different platforms
+          </p>
+        </div>
 
-      <div className="space-y-4">
-        {advertisements.map((ad) => (
-          <div
-            key={ad.id}
-            className="border rounded p-4 space-y-2"
-          >
-            <h2 className="text-xl font-semibold">{ad.title}</h2>
-            <p className="text-gray-600">{ad.content}</p>
-            {ad.imageUrl && (
-              <img
-                src={ad.imageUrl}
-                alt={ad.title}
-                className="max-w-xs rounded"
-              />
-            )}
-            <div className="text-sm text-gray-500">
-              Scheduled for: {new Date(ad.scheduledDate).toLocaleString()}
-                </div>
-            <div className="text-sm">
-              Platforms: {ad.platforms.join(', ')}
-                </div>
-            <div className="text-sm">
-              Status: {ad.status}
-            </div>
-          </div>
-        ))}
+        <Button onClick={() => handleFormOpen()} className="flex items-center">
+          <PlusCircle className="mr-2 h-4 w-4" />
+          Create Advertisement
+        </Button>
       </div>
+
+      {/* Stats cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-center">
+              <p className="text-sm font-medium text-gray-500">Total Ads</p>
+              <p className="text-3xl font-bold">{stats.total}</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-center">
+              <p className="text-sm font-medium text-gray-500">Drafts</p>
+              <p className="text-3xl font-bold">{stats.draft}</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-center">
+              <p className="text-sm font-medium text-gray-500">Scheduled</p>
+              <p className="text-3xl font-bold">{stats.scheduled}</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-center">
+              <p className="text-sm font-medium text-gray-500">Published</p>
+              <p className="text-3xl font-bold">{stats.published}</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-center">
+              <p className="text-sm font-medium text-gray-500">Cancelled</p>
+              <p className="text-3xl font-bold">{stats.cancelled}</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Search and filter */}
+      <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
+        <Tabs
+          value={activeTab}
+          onValueChange={setActiveTab}
+          className="w-full sm:w-auto"
+        >
+          <TabsList>
+            <TabsTrigger value="all">All</TabsTrigger>
+            <TabsTrigger value="draft">Drafts</TabsTrigger>
+            <TabsTrigger value="scheduled">Scheduled</TabsTrigger>
+            <TabsTrigger value="published">Published</TabsTrigger>
+          </TabsList>
+        </Tabs>
+
+        <div className="w-full sm:w-auto sm:min-w-[300px]">
+          <Input
+            placeholder="Search advertisements..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full"
+          />
+        </div>
+      </div>
+
+      {/* Advertisements list */}
+      <div className="space-y-4">
+        {filteredAds.length === 0 ? (
+          <div className="text-center py-10 bg-gray-50 rounded-lg">
+            <p className="text-gray-500">No advertisements found</p>
+            {searchTerm && (
+              <p className="text-gray-400 text-sm mt-1">
+                Try adjusting your search criteria
+              </p>
+            )}
+            {!searchTerm && activeTab !== "all" && (
+              <p className="text-gray-400 text-sm mt-1">
+                No advertisements with {activeTab} status
+              </p>
+            )}
+          </div>
+        ) : (
+          filteredAds.map((ad) => (
+            <Card key={ad.id} className="overflow-hidden">
+              <CardHeader className="pb-2">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <CardTitle>{ad.title}</CardTitle>
+                    <CardDescription className="mt-1">
+                      Scheduled for{" "}
+                      {new Date(ad.scheduledDate).toLocaleString()}
+                    </CardDescription>
+                  </div>
+                  <div>{renderStatusBadge(ad.status)}</div>
+                </div>
+              </CardHeader>
+              <CardContent className="pb-2">
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                  <div className="md:col-span-3">
+                    <p className="text-gray-700 whitespace-pre-line">
+                      {ad.content}
+                    </p>
+                    <div className="flex flex-wrap gap-2 mt-3">
+                      {ad.platforms.map((platform) => (
+                        <span
+                          key={platform}
+                          className="bg-gray-100 text-gray-700 text-xs px-2 py-1 rounded-full flex items-center"
+                        >
+                          <Share2 className="h-3 w-3 mr-1" />
+                          {platform}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  {ad.imageUrl && (
+                    <div className="md:col-span-2">
+                      <div className="relative h-32 rounded-md overflow-hidden">
+                        <img
+                          src={ad.imageUrl}
+                          alt={ad.title}
+                          className="object-cover w-full h-full"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+              <CardFooter className="border-t pt-4 flex justify-between">
+                <div className="text-xs text-gray-500">
+                  Created {new Date(ad.createdAt).toLocaleDateString()}
+                </div>
+                <div className="flex space-x-2">
+                  {ad.status === "draft" && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleStatusChange(ad.id, "scheduled")}
+                    >
+                      <Calendar className="h-4 w-4 mr-1" />
+                      Schedule
+                    </Button>
+                  )}
+
+                  {(ad.status === "draft" || ad.status === "scheduled") && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleStatusChange(ad.id, "published")}
+                      className="bg-green-50 text-green-700 border-green-200 hover:bg-green-100"
+                    >
+                      <SendIcon className="h-4 w-4 mr-1" />
+                      Publish
+                    </Button>
+                  )}
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleFormOpen(ad)}
+                  >
+                    <Edit className="h-4 w-4 mr-1" />
+                    Edit
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleDelete(ad.id)}
+                    className="border-red-200 text-red-700 hover:bg-red-50"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              </CardFooter>
+            </Card>
+          ))
+        )}
+      </div>
+
+      {/* Create/Edit Advertisement Dialog */}
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              {editingId ? "Edit Advertisement" : "Create New Advertisement"}
+            </DialogTitle>
+            <DialogDescription>
+              {editingId
+                ? "Update the details below to modify this advertisement."
+                : "Fill in the details below to create a new advertisement."}
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="title">Title</Label>
+              <Input
+                id="title"
+                name="title"
+                value={formData.title}
+                onChange={handleInputChange}
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="content">Content</Label>
+              <Textarea
+                id="content"
+                name="content"
+                value={formData.content}
+                onChange={handleInputChange}
+                required
+                rows={4}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="imageUrl">Image URL</Label>
+              <div className="flex space-x-2">
+                <Input
+                  id="imageUrl"
+                  name="imageUrl"
+                  value={formData.imageUrl}
+                  onChange={handleInputChange}
+                  placeholder="https://example.com/image.jpg"
+                  className="flex-1"
+                />
+                {formData.imageUrl && (
+                  <div className="h-10 w-10 rounded overflow-hidden border">
+                    <img
+                      src={formData.imageUrl}
+                      alt="Preview"
+                      className="h-full w-full object-cover"
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement;
+                        target.src =
+                          "https://via.placeholder.com/40?text=Error";
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="scheduledDate">Scheduled Date</Label>
+              <Input
+                id="scheduledDate"
+                name="scheduledDate"
+                type="datetime-local"
+                value={formData.scheduledDate}
+                onChange={handleInputChange}
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Status</Label>
+              <Select
+                value={formData.status}
+                onValueChange={handleStatusSelect}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select status" />
+                </SelectTrigger>
+                <SelectContent>
+                  {STATUSES.map((status) => (
+                    <SelectItem key={status} value={status}>
+                      {status.charAt(0).toUpperCase() + status.slice(1)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Platforms</Label>
+              <div className="grid grid-cols-2 gap-2">
+                {PLATFORMS.map((platform) => (
+                  <div key={platform} className="flex items-center space-x-2">
+                    <Checkbox
+                      id={`platform-${platform}`}
+                      checked={formData.platforms.includes(platform)}
+                      onCheckedChange={() => handlePlatformChange(platform)}
+                    />
+                    <Label
+                      htmlFor={`platform-${platform}`}
+                      className="font-normal"
+                    >
+                      {platform}
+                    </Label>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <DialogFooter className="pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsDialogOpen(false)}
+              >
+                <X className="h-4 w-4 mr-1" />
+                Cancel
+              </Button>
+              <Button type="submit">
+                {editingId ? "Update Advertisement" : "Create Advertisement"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
-} 
+}

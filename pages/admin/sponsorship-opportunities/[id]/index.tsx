@@ -900,7 +900,7 @@ export default function SponsorshipOpportunityDetail() {
                     <div className="flex items-center">
                       <Globe className="h-4 w-4 mr-2 text-gray-400" />
                       <a
-                        href={
+                        ref={
                           selectedApplication.website ||
                           selectedApplication.sponsor?.website
                         }
