@@ -1,8 +1,15 @@
-import React, { ReactNode } from 'react';
-import { LayoutDashboard, Users, Rocket, FileText, DollarSign } from 'lucide-react';
-import Link from 'next/link';
-import { useRouter } from 'next/router';
-import { cn } from '@/lib/utils';
+import React, { ReactNode } from "react";
+import {
+  LayoutDashboard,
+  Users,
+  Rocket,
+  FileText,
+  DollarSign,
+  Calculator,
+} from "lucide-react";
+import Link from "next/link";
+import { useRouter } from "next/router";
+import { cn } from "@/lib/utils";
 
 interface AdminLayoutProps {
   children: ReactNode;
@@ -10,29 +17,34 @@ interface AdminLayoutProps {
 
 const navigationItems = [
   {
-    title: 'Dashboard',
-    href: '/admin/dashboard',
+    title: "Dashboard",
+    href: "/admin/dashboard",
     icon: <LayoutDashboard className="h-5 w-5" />,
   },
   {
-    title: 'Users',
-    href: '/admin/users',
+    title: "Users",
+    href: "/admin/users",
     icon: <Users className="h-5 w-5" />,
   },
   {
-    title: 'Startups',
-    href: '/admin/startups',
+    title: "Startups",
+    href: "/admin/startups",
     icon: <Rocket className="h-5 w-5" />,
   },
   {
-    title: 'Startup Calls',
-    href: '/admin/startup-calls',
+    title: "Startup Calls",
+    href: "/admin/startup-calls",
     icon: <FileText className="h-5 w-5" />,
   },
   {
-    title: 'Sponsorship',
-    href: '/admin/sponsorship-opportunities',
+    title: "Sponsorship",
+    href: "/admin/sponsorship-opportunities",
     icon: <DollarSign className="h-5 w-5" />,
+  },
+  {
+    title: "Budget Management",
+    href: "/admin/startup-calls",
+    icon: <Calculator className="h-5 w-5" />,
   },
   // ... any other existing items
 ];
@@ -54,10 +66,10 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
                 <Link
                   href={item.href}
                   className={cn(
-                    'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
+                    "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
                     router.pathname.startsWith(item.href)
-                      ? 'bg-gray-100 text-gray-900'
-                      : 'text-gray-500 hover:bg-gray-100 hover:text-gray-900'
+                      ? "bg-gray-100 text-gray-900"
+                      : "text-gray-500 hover:bg-gray-100 hover:text-gray-900"
                   )}
                 >
                   {item.icon}
@@ -68,13 +80,11 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
           </ul>
         </nav>
       </div>
-      
+
       {/* Main content */}
       <div className="pl-64 w-full">
-        <main className="p-6">
-          {children}
-        </main>
+        <main className="p-6">{children}</main>
       </div>
     </div>
   );
-} 
+}
