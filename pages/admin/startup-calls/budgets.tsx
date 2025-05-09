@@ -21,15 +21,15 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Separator } from "@/components/ui/separator";
 import {
   Search,
   FileText,
   DollarSign,
   Calculator,
-  ArrowRight,
+  RefreshCw,
 } from "lucide-react";
 import { format } from "date-fns";
+import { BudgetProvider } from "@/contexts/BudgetContext";
 
 interface StartupCall {
   id: string;
@@ -55,14 +55,28 @@ export default function BudgetManagement() {
       setLoading(true);
       const response = await axios.get("/api/startup-calls");
 
-      // Add mock budget counts for demonstration purposes
-      // In a real application, you would fetch this data from the API
-      const callsWithBudgetCount = response.data.map((call: StartupCall) => ({
-        ...call,
-        budgetsCount: Math.floor(Math.random() * 5) + 1, // Random count between 1-5
-      }));
+      // Fetch budget counts for each startup call
+      const callsWithBudgets = await Promise.all(
+        response.data.map(async (call: StartupCall) => {
+          try {
+            const budgetsResponse = await axios.get(
+              `/api/startup-calls/${call.id}/budgets`
+            );
+            return {
+              ...call,
+              budgetsCount: budgetsResponse.data.length,
+            };
+          } catch (error) {
+            console.error(`Error fetching budgets for call ${call.id}:`, error);
+            return {
+              ...call,
+              budgetsCount: 0,
+            };
+          }
+        })
+      );
 
-      setStartupCalls(callsWithBudgetCount);
+      setStartupCalls(callsWithBudgets);
     } catch (error) {
       console.error("Error fetching startup calls:", error);
     } finally {
@@ -92,150 +106,162 @@ export default function BudgetManagement() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold">Budget Management</h1>
-          <p className="text-muted-foreground">
-            Manage budgets for all startup calls
-          </p>
-        </div>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>Startup Calls with Budgets</CardTitle>
-            <div className="relative w-64">
-              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search startup calls..."
-                className="pl-8"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
+    <BudgetProvider>
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-3xl font-bold">Budget Management</h1>
+            <p className="text-muted-foreground">
+              Manage budgets for all startup calls
+            </p>
           </div>
-          <CardDescription>
-            Select a startup call to manage its budgets
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="py-8 text-center">Loading startup calls...</div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Startup Call</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Period</TableHead>
-                  <TableHead>Budgets</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredCalls.length === 0 ? (
+          <Button
+            variant="outline"
+            onClick={fetchStartupCalls}
+            className="flex items-center gap-2"
+          >
+            <RefreshCw className="h-4 w-4" />
+            Refresh
+          </Button>
+        </div>
+
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle>Startup Calls with Budgets</CardTitle>
+              <div className="relative w-64">
+                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search startup calls..."
+                  className="pl-8"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
+            </div>
+            <CardDescription>
+              Select a startup call to manage its budgets
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {loading ? (
+              <div className="py-8 text-center">
+                <div className="flex flex-col items-center">
+                  <RefreshCw className="h-8 w-8 animate-spin text-primary" />
+                  <p className="mt-4 text-muted-foreground">
+                    Loading startup calls...
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center py-8">
-                      No startup calls found.
-                    </TableCell>
+                    <TableHead>Startup Call</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Period</TableHead>
+                    <TableHead>Budgets</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
-                ) : (
-                  filteredCalls.map((call) => (
-                    <TableRow key={call.id}>
-                      <TableCell className="font-medium">
-                        {call.title}
-                      </TableCell>
-                      <TableCell>
-                        <Badge className={getStatusColor(call.status)}>
-                          {call.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {call.startDate && call.endDate
-                          ? `${format(
-                              new Date(call.startDate),
-                              "MMM dd, yyyy"
-                            )} - ${format(
-                              new Date(call.endDate),
-                              "MMM dd, yyyy"
-                            )}`
-                          : "N/A"}
-                      </TableCell>
-                      <TableCell>
-                        {call.budgetsCount} budget
-                        {call.budgetsCount !== 1 ? "s" : ""}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button
-                          variant="default"
-                          size="sm"
-                          onClick={() =>
-                            router.push(
-                              `/admin/startup-calls/${call.id}/budgets`
-                            )
-                          }
-                        >
-                          <DollarSign className="h-4 w-4 mr-1" /> Manage Budgets
-                        </Button>
+                </TableHeader>
+                <TableBody>
+                  {filteredCalls.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center py-8">
+                        No startup calls found.
                       </TableCell>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+                  ) : (
+                    filteredCalls.map((call) => (
+                      <TableRow key={call.id}>
+                        <TableCell className="font-medium">
+                          {call.title}
+                        </TableCell>
+                        <TableCell>
+                          <Badge className={getStatusColor(call.status)}>
+                            {call.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {call.startDate && call.endDate
+                            ? `${format(
+                                new Date(call.startDate),
+                                "MMM dd, yyyy"
+                              )} - ${format(
+                                new Date(call.endDate),
+                                "MMM dd, yyyy"
+                              )}`
+                            : "N/A"}
+                        </TableCell>
+                        <TableCell>
+                          {call.budgetsCount} budget
+                          {call.budgetsCount !== 1 ? "s" : ""}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            variant="default"
+                            size="sm"
+                            onClick={() =>
+                              router.push(
+                                `/admin/startup-calls/${call.id}/budgets`
+                              )
+                            }
+                          >
+                            <DollarSign className="h-4 w-4 mr-1" /> Manage
+                            Budgets
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Budget Reports</CardTitle>
-          <CardDescription>
-            Generate and download budget reports
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-4 md:grid-cols-3">
-            <Button
-              variant="outline"
-              className="h-24 flex flex-col items-center justify-center"
-              onClick={() => router.push("/admin?section=financials")}
-            >
-              <Calculator className="h-8 w-8 mb-2" />
-              Overview Reports
-            </Button>
-            <Button
-              variant="outline"
-              className="h-24 flex flex-col items-center justify-center"
-              onClick={() => {
-                // In a real app, this would generate a report
-                alert(
-                  "This would generate a detailed budget report. The functionality is in progress."
-                );
-              }}
-            >
-              <FileText className="h-8 w-8 mb-2" />
-              Detailed Reports
-            </Button>
-            <Button
-              variant="outline"
-              className="h-24 flex flex-col items-center justify-center"
-              onClick={() => {
-                // In a real app, this would export to Excel
-                alert(
-                  "This would export budget data to Excel. The functionality is in progress."
-                );
-              }}
-            >
-              <DollarSign className="h-8 w-8 mb-2" />
-              Export to Excel
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>Budget Reports</CardTitle>
+            <CardDescription>
+              Generate and download budget reports
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4 md:grid-cols-3">
+              <Button
+                variant="outline"
+                className="h-24 flex flex-col items-center justify-center"
+                onClick={() => router.push("/admin?section=financials")}
+              >
+                <Calculator className="h-8 w-8 mb-2" />
+                Financial Overview
+              </Button>
+              <Button
+                variant="outline"
+                className="h-24 flex flex-col items-center justify-center"
+                onClick={() => {
+                  router.push("/admin?section=budget-management");
+                }}
+              >
+                <DollarSign className="h-8 w-8 mb-2" />
+                Budget Dashboard
+              </Button>
+              <Button
+                variant="outline"
+                className="h-24 flex flex-col items-center justify-center"
+                onClick={() => {
+                  router.push("/admin?section=reports");
+                }}
+              >
+                <FileText className="h-8 w-8 mb-2" />
+                All Reports
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </BudgetProvider>
   );
 }
 
@@ -252,9 +278,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
     };
   }
 
-  const user = session.user as { role?: string };
-
-  if (user.role !== "ADMIN") {
+  if (session.user.role !== "ADMIN") {
     return {
       redirect: {
         destination: "/dashboard",
