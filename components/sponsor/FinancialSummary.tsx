@@ -34,6 +34,8 @@ interface SponsorStats {
 }
 
 export function FinancialSummary() {
+  console.log("FinancialSummary component mounting");
+
   const [stats, setStats] = useState<SponsorStats>({
     totalInvestment: 0,
     activeSponshorships: 0,
@@ -45,18 +47,23 @@ export function FinancialSummary() {
   const { toast } = useToast();
 
   useEffect(() => {
+    console.log("FinancialSummary useEffect running");
     fetchStats();
   }, []);
 
   const fetchStats = async () => {
+    console.log("FinancialSummary fetchStats starting");
     try {
       setLoading(true);
       setError(null);
 
       // Fetch sponsorships
+      console.log("Fetching sponsorships");
       const sponsorshipsResponse = await axios.get(
         "/api/sponsors/me/sponsorships"
       );
+
+      console.log("Sponsorships fetched:", sponsorshipsResponse.data);
       const sponsorships: Sponsorship[] = sponsorshipsResponse.data;
 
       // Fetch applications

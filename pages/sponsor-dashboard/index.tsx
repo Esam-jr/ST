@@ -41,6 +41,14 @@ export default function Dashboard() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState("overview");
 
+  // Debug session information
+  useEffect(() => {
+    if (session) {
+      console.log("User session:", session);
+      console.log("User role:", session.user?.role);
+    }
+  }, [session]);
+
   // Redirect if not authenticated
   useEffect(() => {
     if (status === "unauthenticated") {
