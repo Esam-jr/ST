@@ -97,6 +97,7 @@ interface Budget {
     allocatedAmount: number;
     budgetId: string;
   }[];
+  expenses?: Expense[];
 }
 
 interface BudgetExpensesProps {
@@ -136,15 +137,34 @@ const BudgetExpenses: React.FC<BudgetExpensesProps> = ({
   const fetchExpenses = async () => {
     setLoading(true);
     try {
-      const response = await axios.get(
-        `/api/startup-calls/${startupCallId}/expenses`
-      );
-      setExpenses(response.data);
+      // Instead of relying on a separate API endpoint, we'll use the budget data that's already passed in
+      // This avoids additional API calls that might fail
+      const allExpenses: Expense[] = [];
+
+      // Extract expenses from all budgets
+      budgets.forEach((budget) => {
+        if (budget.expenses && Array.isArray(budget.expenses)) {
+          budget.expenses.forEach((expense) => {
+            // Ensure the expense has the category data if it exists
+            const enrichedExpense = {
+              ...expense,
+              category: expense.categoryId
+                ? budget.categories.find(
+                    (cat) => cat.id === expense.categoryId
+                  ) || null
+                : null,
+            };
+            allExpenses.push(enrichedExpense);
+          });
+        }
+      });
+
+      setExpenses(allExpenses);
     } catch (error) {
-      console.error("Error fetching expenses:", error);
+      console.error("Error processing expenses:", error);
       toast({
         title: "Error",
-        description: "Failed to fetch expense data",
+        description: "Failed to process expense data",
         variant: "destructive",
       });
     } finally {
@@ -152,9 +172,10 @@ const BudgetExpenses: React.FC<BudgetExpensesProps> = ({
     }
   };
 
+  // If budgets change, update expenses
   useEffect(() => {
     fetchExpenses();
-  }, [startupCallId]);
+  }, [budgets]);
 
   // Filter expenses
   const filteredExpenses = expenses.filter((expense) => {
@@ -262,14 +283,19 @@ const BudgetExpenses: React.FC<BudgetExpensesProps> = ({
         });
       }
 
-      // Refresh expenses and close dialog
+      // Call the callback to refresh the parent component
+      if (onExpenseChange) {
+        await onExpenseChange();
+      }
+
+      // Refresh expenses
       fetchExpenses();
       setExpenseDialogOpen(false);
     } catch (error) {
       console.error("Error saving expense:", error);
       toast({
         title: "Error",
-        description: "Failed to save expense",
+        description: "Failed to save expense. Please try again.",
         variant: "destructive",
       });
     }
