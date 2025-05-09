@@ -38,14 +38,21 @@ interface SponsorshipOpportunity {
   startupCall?: {
     id: string;
     title: string;
+    industry?: string;
   };
 }
 
 interface OpportunityExplorerProps {
   limit?: number;
+  initialSearchQuery?: string;
+  industryFilter?: string;
 }
 
-export function OpportunityExplorer({ limit }: OpportunityExplorerProps) {
+export function OpportunityExplorer({
+  limit,
+  initialSearchQuery = "",
+  industryFilter,
+}: OpportunityExplorerProps) {
   const [opportunities, setOpportunities] = useState<SponsorshipOpportunity[]>(
     []
   );
@@ -54,32 +61,57 @@ export function OpportunityExplorer({ limit }: OpportunityExplorerProps) {
   >([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState(initialSearchQuery);
   const { toast } = useToast();
 
   useEffect(() => {
     fetchOpportunities();
   }, []);
 
-  // Filter opportunities when search query changes
+  // Update internal search when initialSearchQuery changes
+  useEffect(() => {
+    setSearchQuery(initialSearchQuery);
+  }, [initialSearchQuery]);
+
+  // Filter opportunities when search query or industry filter changes
   useEffect(() => {
     if (opportunities.length > 0) {
-      const filtered = opportunities.filter(
-        (opportunity) =>
-          opportunity.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          opportunity.description
-            .toLowerCase()
-            .includes(searchQuery.toLowerCase())
-      );
+      let filtered = opportunities;
+
+      // Apply search filter
+      if (searchQuery) {
+        filtered = filtered.filter(
+          (opportunity) =>
+            opportunity.title
+              .toLowerCase()
+              .includes(searchQuery.toLowerCase()) ||
+            opportunity.description
+              .toLowerCase()
+              .includes(searchQuery.toLowerCase())
+        );
+      }
+
+      // Apply industry filter if specified
+      if (industryFilter) {
+        filtered = filtered.filter((opportunity) =>
+          opportunity.startupCall?.industry
+            ?.toLowerCase()
+            .includes(industryFilter.toLowerCase())
+        );
+      }
+
       setFilteredOpportunities(filtered);
     }
-  }, [searchQuery, opportunities]);
+  }, [searchQuery, industryFilter, opportunities]);
 
   const fetchOpportunities = async () => {
     try {
       setLoading(true);
       setError(null);
+      console.log("Fetching sponsorship opportunities");
       const response = await axios.get("/api/public/sponsorship-opportunities");
+      console.log("Sponsorship opportunities response:", response.data);
+
       let data = response.data;
 
       // Filter to only show open opportunities
@@ -87,6 +119,9 @@ export function OpportunityExplorer({ limit }: OpportunityExplorerProps) {
         (opp: SponsorshipOpportunity) =>
           opp.status.toLowerCase() === "open" &&
           (!opp.deadline || new Date(opp.deadline) > new Date())
+      );
+      console.log(
+        `Found ${data.length} active opportunities with valid deadlines`
       );
 
       // Apply limit if specified
@@ -183,15 +218,17 @@ export function OpportunityExplorer({ limit }: OpportunityExplorerProps) {
               Discover opportunities that match your sponsorship goals.
             </CardDescription>
           </div>
-          <div className="relative w-full md:w-64">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground pointer-events-none" />
-            <Input
-              placeholder="Search opportunities..."
-              className="pl-8"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-          </div>
+          {/* Only show the search input if not provided via props */}
+          {!initialSearchQuery && (
+            <div className="relative w-full md:w-64">
+              <Input
+                placeholder="Search opportunities..."
+                className="pl-8"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+          )}
         </div>
       </CardHeader>
       <CardContent>
@@ -210,15 +247,16 @@ export function OpportunityExplorer({ limit }: OpportunityExplorerProps) {
                     <CardTitle className="text-lg">
                       {opportunity.title}
                     </CardTitle>
-                    {opportunity.deadline && (
-                      <Badge
-                        variant="outline"
-                        className="flex items-center ml-2"
-                      >
-                        <CalendarIcon className="mr-1 h-3 w-3" />
-                        {getDaysUntil(opportunity.deadline)} days left
-                      </Badge>
-                    )}
+                    {opportunity.deadline &&
+                      getDaysUntil(opportunity.deadline) && (
+                        <Badge
+                          variant="outline"
+                          className="flex items-center ml-2"
+                        >
+                          <CalendarIcon className="mr-1 h-3 w-3" />
+                          {getDaysUntil(opportunity.deadline)} days left
+                        </Badge>
+                      )}
                   </div>
                   {opportunity.startupCall && (
                     <CardDescription className="flex items-center mt-1">
@@ -250,7 +288,7 @@ export function OpportunityExplorer({ limit }: OpportunityExplorerProps) {
                         Deadline
                       </p>
                       <p className="font-medium flex items-center">
-                        <Calendar className="h-3 w-3 mr-1 text-primary" />
+                        <CalendarIcon className="h-3 w-3 mr-1 text-primary" />
                         {formatDate(opportunity.deadline)}
                       </p>
                     </div>
@@ -275,7 +313,10 @@ export function OpportunityExplorer({ limit }: OpportunityExplorerProps) {
       {limit && opportunities.length > limit && (
         <CardFooter className="flex justify-center border-t pt-6">
           <Button variant="outline">
-            <Link href="/sponsorship-opportunities">
+            <Link
+              href="/sponsorship-opportunities"
+              className="flex items-center"
+            >
               View All Opportunities
             </Link>
           </Button>

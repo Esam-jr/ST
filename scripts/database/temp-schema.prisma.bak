@@ -1,0 +1,429 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Account {
+  id                String  @id
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  User              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model ApplicationReview {
+  id                     String                 @id
+  applicationId          String
+  reviewerId             String
+  score                  Float?
+  innovationScore        Float?
+  marketScore            Float?
+  teamScore              Float?
+  executionScore         Float?
+  feedback               String?
+  status                 ReviewStatus           @default(PENDING)
+  assignedAt             DateTime               @default(now())
+  dueDate                DateTime?
+  completedAt            DateTime?
+  createdAt              DateTime               @default(now())
+  updatedAt              DateTime
+  StartupCallApplication StartupCallApplication @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  User                   User                   @relation(fields: [reviewerId], references: [id])
+
+  @@unique([applicationId, reviewerId])
+}
+
+model Comment {
+  id            String    @id
+  startupId     String
+  userId        String
+  content       String
+  parentId      String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime
+  Comment       Comment?  @relation("CommentToComment", fields: [parentId], references: [id])
+  other_Comment Comment[] @relation("CommentToComment")
+  Startup       Startup   @relation(fields: [startupId], references: [id])
+  User          User      @relation(fields: [userId], references: [id])
+}
+
+model Document {
+  id          String   @id
+  startupId   String
+  name        String
+  description String?
+  fileUrl     String
+  fileType    String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime
+  Startup     Startup  @relation(fields: [startupId], references: [id])
+}
+
+model Event {
+  id          String   @id
+  title       String
+  description String?
+  startDate   DateTime
+  endDate     DateTime
+  location    String?
+  eventUrl    String?
+  isPublic    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime
+}
+
+model Financial {
+  id          String   @id
+  startupId   String
+  type        String
+  category    String
+  amount      Float
+  currency    String
+  description String?
+  date        DateTime
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime
+  Startup     Startup  @relation(fields: [startupId], references: [id])
+}
+
+model Meeting {
+  id          String   @id
+  startupId   String
+  userId      String
+  title       String
+  description String?
+  startTime   DateTime
+  endTime     DateTime
+  location    String?
+  meetingUrl  String?
+  status      String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime
+  Startup     Startup  @relation(fields: [startupId], references: [id])
+  User        User     @relation(fields: [userId], references: [id])
+}
+
+model Milestone {
+  id            String    @id
+  startupId     String
+  title         String
+  description   String
+  dueDate       DateTime
+  completedDate DateTime?
+  status        String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime
+  Startup       Startup   @relation(fields: [startupId], references: [id])
+  Task          Task[]
+}
+
+model Notification {
+  id        String   @id
+  userId    String
+  title     String
+  message   String
+  type      String
+  read      Boolean  @default(false)
+  link      String?
+  createdAt DateTime @default(now())
+  User      User     @relation(fields: [userId], references: [id])
+}
+
+model Review {
+  id             String   @id
+  startupId      String
+  reviewerId     String
+  score          Float
+  feedback       String
+  recommendation String
+  status         String
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime
+  User           User     @relation(fields: [reviewerId], references: [id])
+  Startup        Startup  @relation(fields: [startupId], references: [id])
+}
+
+model Session {
+  id           String   @id
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  User         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model SponsorCampaign {
+  id             String         @id
+  sponsorId      String
+  title          String
+  description    String
+  fundingGoal    Float
+  minimumAmount  Float?
+  maximumAmount  Float?
+  status         CampaignStatus @default(ACTIVE)
+  startDate      DateTime
+  endDate        DateTime?
+  industry       String[]
+  eligibility    String?
+  benefits       String[]
+  applicationUrl String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime
+  SponsorProfile SponsorProfile @relation(fields: [sponsorId], references: [id])
+  Sponsorship    Sponsorship[]
+}
+
+model SponsorProfile {
+  id                  String            @id
+  userId              String            @unique
+  organizationName    String
+  organizationType    String
+  logo                String?
+  industry            String[]
+  websiteUrl          String?
+  description         String?
+  foundedYear         Int?
+  size                String?
+  focusAreas          String[]
+  minimumInvestment   Float?
+  maximumInvestment   Float?
+  preferredStages     String[]
+  geographicFocus     String[]
+  investmentCriteria  String?
+  onboardingCompleted Boolean           @default(false)
+  totalSponsored      Float?
+  activeSponsored     Float?
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime
+  SponsorCampaign     SponsorCampaign[]
+  User                User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Sponsorship {
+  id              String            @id
+  startupId       String
+  sponsorId       String
+  amount          Float
+  currency        String            @default("USD")
+  description     String?
+  startDate       DateTime
+  endDate         DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime
+  campaignId      String?
+  sponsorshipType String?
+  status          SponsorshipStatus @default(ACTIVE)
+  SponsorCampaign SponsorCampaign?  @relation(fields: [campaignId], references: [id])
+  User            User              @relation(fields: [sponsorId], references: [id])
+  Startup         Startup           @relation(fields: [startupId], references: [id])
+}
+
+model Startup {
+  id                     String                   @id
+  name                   String
+  description            String
+  pitch                  String
+  industry               String[]
+  stage                  String
+  website                String?
+  logo                   String?
+  founderId              String
+  status                 Status                   @default(SUBMITTED)
+  score                  Float?
+  createdAt              DateTime                 @default(now())
+  updatedAt              DateTime
+  Comment                Comment[]
+  Document               Document[]
+  Financial              Financial[]
+  Meeting                Meeting[]
+  Milestone              Milestone[]
+  Review                 Review[]
+  Sponsorship            Sponsorship[]
+  User                   User                     @relation(fields: [founderId], references: [id])
+  StartupCallApplication StartupCallApplication[]
+  Task                   Task[]
+}
+
+model StartupCall {
+  id                     String                   @id
+  title                  String
+  description            String
+  status                 StartupCallStatus        @default(DRAFT)
+  applicationDeadline    DateTime
+  publishedDate          DateTime?
+  industry               String
+  location               String
+  fundingAmount          String?
+  requirements           String[]
+  eligibilityCriteria    String[]
+  selectionProcess       String[]
+  aboutSponsor           String?
+  applicationProcess     String
+  createdById            String
+  createdAt              DateTime                 @default(now())
+  updatedAt              DateTime
+  User                   User                     @relation(fields: [createdById], references: [id])
+  StartupCallApplication StartupCallApplication[]
+}
+
+model StartupCallApplication {
+  id                   String                       @id
+  callId               String
+  startupId            String?
+  userId               String
+  startupName          String
+  website              String?
+  foundingDate         DateTime
+  teamSize             String
+  industry             String
+  stage                String
+  description          String
+  problem              String
+  solution             String
+  traction             String?
+  businessModel        String
+  funding              String?
+  useOfFunds           String
+  competitiveAdvantage String
+  founderBio           String
+  pitchDeckUrl         String?
+  financialsUrl        String?
+  status               StartupCallApplicationStatus @default(SUBMITTED)
+  reviewsCompleted     Int                          @default(0)
+  reviewsTotal         Int                          @default(3)
+  submittedAt          DateTime                     @default(now())
+  updatedAt            DateTime
+  ApplicationReview    ApplicationReview[]
+  StartupCall          StartupCall                  @relation(fields: [callId], references: [id])
+  Startup              Startup?                     @relation(fields: [startupId], references: [id])
+  User                 User                         @relation(fields: [userId], references: [id])
+}
+
+model Task {
+  id                         String     @id
+  title                      String
+  description                String
+  status                     String
+  priority                   String
+  startDate                  DateTime
+  dueDate                    DateTime
+  completedDate              DateTime?
+  startupId                  String
+  milestoneId                String?
+  assigneeId                 String?
+  creatorId                  String
+  createdAt                  DateTime   @default(now())
+  updatedAt                  DateTime
+  User_Task_assigneeIdToUser User?      @relation("Task_assigneeIdToUser", fields: [assigneeId], references: [id])
+  User_Task_creatorIdToUser  User       @relation("Task_creatorIdToUser", fields: [creatorId], references: [id])
+  Milestone                  Milestone? @relation(fields: [milestoneId], references: [id])
+  Startup                    Startup    @relation(fields: [startupId], references: [id])
+}
+
+model User {
+  id                         String                   @id
+  name                       String?
+  email                      String                   @unique
+  emailVerified              DateTime?
+  image                      String?
+  password                   String?
+  role                       Role                     @default(USER)
+  createdAt                  DateTime                 @default(now())
+  updatedAt                  DateTime
+  bio                        String?
+  company                    String?
+  location                   String?
+  phone                      String?
+  title                      String?
+  website                    String?
+  Account                    Account[]
+  ApplicationReview          ApplicationReview[]
+  Comment                    Comment[]
+  Meeting                    Meeting[]
+  Notification               Notification[]
+  Review                     Review[]
+  Session                    Session[]
+  SponsorProfile             SponsorProfile?
+  Sponsorship                Sponsorship[]
+  Startup                    Startup[]
+  StartupCall                StartupCall[]
+  StartupCallApplication     StartupCallApplication[]
+  Task_Task_assigneeIdToUser Task[]                   @relation("Task_assigneeIdToUser")
+  Task_Task_creatorIdToUser  Task[]                   @relation("Task_creatorIdToUser")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+enum CampaignStatus {
+  DRAFT
+  ACTIVE
+  COMPLETED
+  CANCELLED
+  PAUSED
+}
+
+enum ReviewStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  OVERDUE
+}
+
+enum Role {
+  USER
+  ENTREPRENEUR
+  REVIEWER
+  SPONSOR
+  ADMIN
+}
+
+enum SponsorshipStatus {
+  ACTIVE
+  COMPLETED
+  CANCELLED
+  PENDING
+}
+
+enum StartupCallApplicationStatus {
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  WITHDRAWN
+}
+
+enum StartupCallStatus {
+  DRAFT
+  PUBLISHED
+  CLOSED
+  ARCHIVED
+}
+
+enum Status {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  ACCEPTED
+  REJECTED
+  COMPLETED
+}

@@ -5,9 +5,9 @@ import {
   Card,
   CardContent,
   CardDescription,
+  CardFooter,
   CardHeader,
   CardTitle,
-  CardFooter,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,27 +17,35 @@ import {
   DollarSign,
   Calendar,
   Building,
-  Rocket,
+  LucideIcon,
+  Briefcase,
+  Cpu,
+  Leaf,
+  ShoppingBag,
+  Wrench,
+  Globe,
+  Heart,
+  BookOpen,
+  Brain,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import Link from "next/link";
+import { format } from "date-fns";
 
 // Define types
 interface Sponsorship {
   id: string;
   amount: number;
   currency: string;
-  date: string;
-  startup: {
-    id: string;
-    name: string;
-    logo?: string;
-    industry?: string;
-    stage?: string;
-  };
+  createdAt: string;
+  startDate?: string;
+  endDate?: string;
+  status?: string;
+  startupCallId: string;
   startupCall?: {
     id: string;
     title: string;
+    industry?: string;
   };
 }
 
@@ -59,8 +67,17 @@ export function ActiveSponsorships({ limit }: ActiveSponsorshipsProps) {
     try {
       setLoading(true);
       setError(null);
+      console.log("Fetching sponsorships for the current sponsor");
       const response = await axios.get("/api/sponsors/me/sponsorships");
+      console.log("Sponsorships response:", response.data);
+
       let data = response.data;
+
+      // Filter sponsorships to only show active ones
+      data = data.filter(
+        (s: Sponsorship) => !s.status || s.status.toLowerCase() === "active"
+      );
+      console.log(`Found ${data.length} active sponsorships`);
 
       // Apply limit if specified
       if (limit && data.length > limit) {
@@ -73,7 +90,8 @@ export function ActiveSponsorships({ limit }: ActiveSponsorshipsProps) {
       setError("Failed to load sponsorships");
       toast({
         title: "Error",
-        description: "Could not load your sponsorships. Please try again.",
+        description:
+          "Could not load your active sponsorships. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -81,21 +99,56 @@ export function ActiveSponsorships({ limit }: ActiveSponsorshipsProps) {
     }
   };
 
-  // Format date
+  // Format date to readable format
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
+    try {
+      return format(new Date(dateString), "MMM d, yyyy");
+    } catch (e) {
+      console.error("Error formatting date:", e);
+      return "Invalid date";
+    }
   };
 
-  // Get appropriate icon for industry
-  const getIndustryIcon = (industry?: string) => {
-    if (!industry) return <Building className="h-4 w-4" />;
+  // Get industry icon
+  const getIndustryIcon = (industry?: string): LucideIcon => {
+    if (!industry) return Briefcase;
 
-    // You can expand this with more industry-specific icons
-    return <Building className="h-4 w-4" />;
+    const industryLower = industry.toLowerCase();
+
+    if (industryLower.includes("tech") || industryLower.includes("software")) {
+      return Cpu;
+    } else if (
+      industryLower.includes("health") ||
+      industryLower.includes("medical")
+    ) {
+      return Heart;
+    } else if (industryLower.includes("edu")) {
+      return BookOpen;
+    } else if (
+      industryLower.includes("green") ||
+      industryLower.includes("sustain")
+    ) {
+      return Leaf;
+    } else if (
+      industryLower.includes("retail") ||
+      industryLower.includes("commerce")
+    ) {
+      return ShoppingBag;
+    } else if (industryLower.includes("manufacturing")) {
+      return Wrench;
+    } else if (
+      industryLower.includes("ai") ||
+      industryLower.includes("intelligence")
+    ) {
+      return Brain;
+    } else if (
+      industryLower.includes("global") ||
+      industryLower.includes("international")
+    ) {
+      return Globe;
+    }
+
+    return Briefcase;
   };
 
   if (loading) {
@@ -123,118 +176,103 @@ export function ActiveSponsorships({ limit }: ActiveSponsorshipsProps) {
     );
   }
 
-  if (sponsorships.length === 0) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Active Sponsorships</CardTitle>
-          <CardDescription>
-            Your current sponsorships will appear here.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col items-center justify-center py-6 text-center">
-          <p className="mb-4 text-muted-foreground">
-            You don't have any active sponsorships yet.
-          </p>
-          <Button>
-            <Link
-              href="/sponsorship-opportunities"
-              className="flex items-center"
-            >
-              Browse Opportunities
-              <ExternalLink className="ml-2 h-4 w-4" />
-            </Link>
-          </Button>
-        </CardContent>
-      </Card>
-    );
-  }
-
   return (
     <Card>
       <CardHeader>
         <CardTitle>Active Sponsorships</CardTitle>
-        <CardDescription>Your current active sponsorships.</CardDescription>
+        <CardDescription>
+          Your current active sponsorship commitments
+        </CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="grid gap-4 md:grid-cols-2">
-          {sponsorships.map((sponsorship) => (
-            <Card key={sponsorship.id} className="overflow-hidden">
-              <div className="bg-gradient-to-r from-primary/10 to-primary/5 p-4">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h3 className="font-semibold">
-                      {sponsorship.startup.name}
-                    </h3>
-                    {sponsorship.startup.industry && (
-                      <div className="flex items-center mt-1 text-sm text-muted-foreground">
-                        {getIndustryIcon(sponsorship.startup.industry)}
-                        <span className="ml-1">
-                          {sponsorship.startup.industry}
-                        </span>
+        {sponsorships.length === 0 ? (
+          <div className="text-center py-6">
+            <p className="text-muted-foreground">
+              No active sponsorships found
+            </p>
+            <Button variant="outline" size="sm" className="mt-4">
+              <Link
+                href="/sponsorship-opportunities"
+                className="flex items-center"
+              >
+                Explore Opportunities
+              </Link>
+            </Button>
+          </div>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2">
+            {sponsorships.map((sponsorship) => {
+              const IndustryIcon = getIndustryIcon(
+                sponsorship.startupCall?.industry
+              );
+
+              return (
+                <Card key={sponsorship.id} className="overflow-hidden">
+                  <CardHeader className="pb-2">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <CardTitle className="text-lg">
+                          {sponsorship.startupCall?.title ||
+                            "Unnamed Startup Call"}
+                        </CardTitle>
+                        {sponsorship.startupCall?.industry && (
+                          <CardDescription className="flex items-center mt-1">
+                            <IndustryIcon className="h-3 w-3 mr-1" />
+                            {sponsorship.startupCall.industry}
+                          </CardDescription>
+                        )}
                       </div>
-                    )}
-                  </div>
-                  {sponsorship.startup.stage && (
-                    <Badge variant="outline" className="flex items-center">
-                      <Rocket className="mr-1 h-3 w-3" />
-                      {sponsorship.startup.stage}
-                    </Badge>
-                  )}
-                </div>
-              </div>
-              <CardContent className="pt-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground">
-                      Amount
-                    </p>
-                    <p className="font-medium flex items-center">
-                      <DollarSign className="h-4 w-4 text-primary mr-1" />
-                      {formatCurrency(sponsorship.amount, sponsorship.currency)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground">
-                      Date
-                    </p>
-                    <p className="font-medium flex items-center">
-                      <Calendar className="h-4 w-4 text-primary mr-1" />
-                      {formatDate(sponsorship.date)}
-                    </p>
-                  </div>
-                </div>
-                {sponsorship.startupCall && (
-                  <div className="mt-4 pt-4 border-t">
-                    <p className="text-sm font-medium text-muted-foreground">
-                      Startup Call
-                    </p>
-                    <p className="text-sm">{sponsorship.startupCall.title}</p>
-                  </div>
-                )}
-              </CardContent>
-              <CardFooter className="bg-muted/20 p-4">
-                <Button variant="outline" size="sm" className="w-full">
-                  <Link
-                    href={`/startups/${sponsorship.startup.id}`}
-                    className="flex items-center justify-center w-full"
-                  >
-                    View Startup Details
-                    <ExternalLink className="ml-2 h-3 w-3" />
-                  </Link>
-                </Button>
-              </CardFooter>
-            </Card>
-          ))}
-        </div>
+                      <Badge variant="outline" className="ml-2">
+                        Active
+                      </Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="pb-2">
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div>
+                        <p className="text-xs font-medium text-muted-foreground">
+                          Amount
+                        </p>
+                        <p className="font-medium flex items-center">
+                          <DollarSign className="h-3 w-3 mr-1 text-primary" />
+                          {formatCurrency(
+                            sponsorship.amount,
+                            sponsorship.currency
+                          )}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium text-muted-foreground">
+                          Date
+                        </p>
+                        <p className="font-medium flex items-center">
+                          <Calendar className="h-3 w-3 mr-1 text-primary" />
+                          {formatDate(sponsorship.createdAt)}
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                  <CardFooter className="bg-muted/20 p-3">
+                    <Button variant="default" size="sm" className="w-full">
+                      <Link
+                        href={`/sponsorships/${sponsorship.id}`}
+                        className="flex items-center justify-center w-full"
+                      >
+                        View Details
+                        <ExternalLink className="ml-2 h-3 w-3" />
+                      </Link>
+                    </Button>
+                  </CardFooter>
+                </Card>
+              );
+            })}
+          </div>
+        )}
       </CardContent>
-      {limit && sponsorships.length >= limit && (
+      {limit && sponsorships.length > limit && (
         <CardFooter className="flex justify-center border-t pt-6">
           <Button variant="outline">
-            <Link
-              href="/sponsor-dashboard/sponsorships"
-              className="flex items-center"
-            >
+            <Link href="/sponsorships" className="flex items-center">
               View All Sponsorships
             </Link>
           </Button>

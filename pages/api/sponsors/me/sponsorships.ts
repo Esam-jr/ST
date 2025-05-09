@@ -27,6 +27,8 @@ export default async function handler(
   }
 
   try {
+    console.log("Fetching sponsorships for user:", session.user.id);
+
     // Get all sponsorships for the logged-in sponsor
     const sponsorships = await prisma.sponsorship.findMany({
       where: {
@@ -51,10 +53,11 @@ export default async function handler(
         },
       },
       orderBy: {
-        date: "desc",
+        createdAt: "desc",
       },
     });
 
+    console.log(`Found ${sponsorships.length} sponsorships`);
     return res.status(200).json(sponsorships);
   } catch (error) {
     console.error("Error fetching sponsor sponsorships:", error);

@@ -7,7 +7,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import {
@@ -23,21 +22,27 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { CalendarIcon, DownloadIcon, FileTextIcon } from "lucide-react";
+import { CalendarIcon, Download, FileText } from "lucide-react";
 import { format } from "date-fns";
-import { toast } from "@/components/ui/use-toast";
-import { Spinner } from "@/components/ui/spinner";
+import { useToast } from "@/components/ui/use-toast";
+import { useBudget } from "@/contexts/BudgetContext";
 
 interface BudgetReportDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   startupCallId: string;
-  budgets: any[];
+  startupCallTitle?: string;
 }
 
 export default function BudgetReportDialog({
+  open,
+  onOpenChange,
   startupCallId,
-  budgets,
+  startupCallTitle,
 }: BudgetReportDialogProps) {
-  const [open, setOpen] = useState(false);
+  const { toast } = useToast();
+  const { budgets } = useBudget();
+
   const [isLoading, setIsLoading] = useState(false);
   const [selectedBudget, setSelectedBudget] = useState<string | null>(null);
   const [dateFrom, setDateFrom] = useState<Date | undefined>(undefined);
@@ -82,10 +87,9 @@ export default function BudgetReportDialog({
       toast({
         title: "Report Generated",
         description: "Your budget report has been downloaded.",
-        variant: "default",
       });
 
-      setOpen(false);
+      onOpenChange(false);
     } catch (error) {
       console.error("Error generating report:", error);
       toast({
@@ -106,19 +110,15 @@ export default function BudgetReportDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button variant="outline" className="flex items-center gap-2">
-          <FileTextIcon className="h-4 w-4" />
-          Generate Report
-        </Button>
-      </DialogTrigger>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>Generate Budget Report</DialogTitle>
           <DialogDescription>
-            Create a detailed budget report with expense breakdowns. Select the
-            options below to customize your report.
+            {startupCallTitle
+              ? `Create a detailed budget report for ${startupCallTitle}.`
+              : "Create a detailed budget report with expense breakdowns."}
+            Select the options below to customize your report.
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 py-4">
@@ -243,13 +243,13 @@ export default function BudgetReportDialog({
           >
             {isLoading ? (
               <>
-                <Spinner className="h-4 w-4" />
+                <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
                 Generating...
               </>
             ) : (
               <>
-                <DownloadIcon className="h-4 w-4" />
-                Generate Report
+                <Download className="h-4 w-4" />
+                Download Report
               </>
             )}
           </Button>

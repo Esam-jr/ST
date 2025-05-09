@@ -1,6 +1,6 @@
-import { NextApiRequest, NextApiResponse } from 'next';
-import prisma from '@/lib/prisma';
-import { Prisma } from '@prisma/client';
+import { NextApiRequest, NextApiResponse } from "next";
+import prisma from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 
 // Define interface to match Prisma schema
 interface SponsorshipOpportunity {
@@ -30,40 +30,44 @@ export default async function handler(
   res: NextApiResponse
 ) {
   // Only allow GET requests
-  if (req.method !== 'GET') {
-    return res.status(405).json({ message: 'Method not allowed' });
+  if (req.method !== "GET") {
+    return res.status(405).json({ message: "Method not allowed" });
   }
 
   try {
-    // Fetch active sponsorship opportunities
+    console.log("Fetching public sponsorship opportunities");
+
+    // Get all available sponsorship opportunities
     const opportunities = await prisma.sponsorshipOpportunity.findMany({
+      where: {
+        status: "OPEN",
+        // Only include opportunities where the deadline hasn't passed
+        OR: [{ deadline: null }, { deadline: { gt: new Date() } }],
+      },
       include: {
         startupCall: {
           select: {
             id: true,
             title: true,
+            industry: true,
           },
         },
       },
+      orderBy: {
+        createdAt: "desc",
+      },
     });
 
-    console.log(`Found ${opportunities.length} total opportunities`);
+    console.log(
+      `Found ${opportunities.length} active sponsorship opportunities`
+    );
 
-    // Filter opportunities to only include those with ACTIVE status (case insensitive)
-    // and deadlines that haven't passed
-    const now = new Date();
-    const activeOpportunities = opportunities.filter(opportunity => {
-      const isActive = opportunity.status.toUpperCase() === 'ACTIVE';
-      const deadlineNotPassed = !opportunity.deadline || new Date(opportunity.deadline) > now;
-      return isActive && deadlineNotPassed;
-    });
-
-    console.log(`Found ${activeOpportunities.length} active opportunities with valid deadlines`);
-
-    // Return the filtered opportunities
-    return res.status(200).json(activeOpportunities);
+    // Return the opportunities
+    return res.status(200).json(opportunities);
   } catch (error) {
-    console.error('Error fetching sponsorship opportunities:', error);
-    return res.status(500).json({ message: 'Failed to fetch sponsorship opportunities' });
+    console.error("Error fetching sponsorship opportunities:", error);
+    return res
+      .status(500)
+      .json({ message: "Error fetching sponsorship opportunities" });
   }
-} 
+}

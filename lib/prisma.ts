@@ -1,10 +1,10 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from "@prisma/client";
 
 /**
  * PrismaClient Singleton Implementation for Next.js with Supabase
- * 
+ *
  * This solution addresses performance issues and the "prepared statement does not exist" error
- * by optimizing connection pooling and disabling prepared statements when necessary
+ * by optimizing connection pooling and connection handling
  */
 
 // PrismaClient is attached to the `global` object in development to prevent
@@ -16,8 +16,8 @@ const globalForPrisma = global as unknown as { prisma: PrismaClient };
 // Configure Prisma Client with better connection handling
 const prismaClientSingleton = () => {
   return new PrismaClient({
-    log: ['error', 'warn'],
-    errorFormat: 'pretty',
+    log: ["error", "warn"],
+    errorFormat: "pretty",
     // Add connection pooling settings
     datasources: {
       db: {
@@ -31,15 +31,22 @@ const prismaClientSingleton = () => {
         const startTime = Date.now();
         return query(args).catch(async (error) => {
           console.error(`Prisma ${model}.${operation} error:`, error);
-          
+
           // Retry once for connection reset errors
-          if (error.message?.includes('ConnectionReset') && Date.now() - startTime < 3000) {
-            console.log(`Retrying ${model}.${operation} after connection error...`);
+          if (
+            (error.message?.includes("ConnectionReset") ||
+              error.message?.includes("prepared statement") ||
+              error.message?.includes("statement does not exist")) &&
+            Date.now() - startTime < 3000
+          ) {
+            console.log(
+              `Retrying ${model}.${operation} after connection error...`
+            );
             // Wait 500ms before retry
-            await new Promise(resolve => setTimeout(resolve, 500));
+            await new Promise((resolve) => setTimeout(resolve, 500));
             return query(args);
           }
-          
+
           throw error;
         });
       },
@@ -47,8 +54,9 @@ const prismaClientSingleton = () => {
   });
 };
 
+// Check if we already have an instance of PrismaClient and reuse it if we're in development
 const prisma = globalForPrisma.prisma || prismaClientSingleton();
 
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma;
+if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
 
 export default prisma;

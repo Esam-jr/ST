@@ -26,16 +26,16 @@ export default async function handler(
   const { id } = req.query;
 
   if (!id || typeof id !== "string") {
-    return res.status(400).json({ message: "Missing application ID" });
+    return res.status(400).json({ message: "Missing sponsorship ID" });
   }
 
   try {
     console.log(
-      `Fetching application with ID: ${id} for sponsor ID: ${user.id}`
+      `Fetching sponsorship with ID: ${id} for sponsor ID: ${user.id}`
     );
 
-    // Get application by ID and verify it belongs to the current sponsor
-    const application = await prisma.sponsorshipApplication.findUnique({
+    // Get sponsorship by ID and verify it belongs to the current sponsor
+    const sponsorship = await prisma.sponsorship.findUnique({
       where: {
         id: id,
       },
@@ -51,42 +51,39 @@ export default async function handler(
             status: true,
           },
         },
-        opportunity: {
+        startupFounder: {
           select: {
             id: true,
-            title: true,
-            description: true,
-            minAmount: true,
-            maxAmount: true,
-            benefits: true,
+            name: true,
+            email: true,
           },
         },
       },
     });
 
-    if (!application) {
-      console.log(`No application found with ID: ${id}`);
-      return res.status(404).json({ message: "Application not found" });
+    if (!sponsorship) {
+      console.log(`No sponsorship found with ID: ${id}`);
+      return res.status(404).json({ message: "Sponsorship not found" });
     }
 
-    // Verify the application belongs to the current sponsor
-    if (application.sponsorId !== user.id) {
+    // Verify the sponsorship belongs to the current sponsor
+    if (sponsorship.sponsorId !== user.id) {
       console.log(
-        `Application ID: ${id} does not belong to sponsor ID: ${user.id}`
+        `Sponsorship ID: ${id} does not belong to sponsor ID: ${user.id}`
       );
       return res
         .status(403)
         .json({
-          message: "Forbidden - Not authorized to access this application",
+          message: "Forbidden - Not authorized to access this sponsorship",
         });
     }
 
-    console.log(`Found application with ID: ${id} for sponsor ID: ${user.id}`);
+    console.log(`Found sponsorship with ID: ${id} for sponsor ID: ${user.id}`);
 
-    // Return the application
-    return res.status(200).json(application);
+    // Return the sponsorship
+    return res.status(200).json(sponsorship);
   } catch (error) {
-    console.error("Error fetching application:", error);
-    return res.status(500).json({ message: "Error fetching application" });
+    console.error("Error fetching sponsorship:", error);
+    return res.status(500).json({ message: "Error fetching sponsorship" });
   }
 }
