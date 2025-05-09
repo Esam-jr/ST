@@ -1,19 +1,31 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from 'react';
-import { useSession } from 'next-auth/react';
-import { useRouter } from 'next/router';
-import Link from 'next/link';
-import Layout from '@/components/layout/Layout';
-import DashboardStats from '../../components/dashboard/DashboardStats';
-import StartupList from '../../components/dashboard/StartupList';
-import TasksList from '../../components/dashboard/TasksList';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Button } from '@/components/ui/button';
-import { PlusCircle } from 'lucide-react';
-import LoadingSpinner from '@/components/ui/LoadingSpinner';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { ArrowRight } from 'lucide-react';
+import { useState, useEffect } from "react";
+import { useSession } from "next-auth/react";
+import { useRouter } from "next/router";
+import Link from "next/link";
+import Layout from "@/components/layout/Layout";
+import DashboardStats from "../../components/dashboard/DashboardStats";
+import StartupList from "../../components/dashboard/StartupList";
+import TasksList from "../../components/dashboard/TasksList";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
+import { PlusCircle } from "lucide-react";
+import LoadingSpinner from "@/components/ui/LoadingSpinner";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { ArrowRight } from "lucide-react";
+
+// Import new sponsor components
+import { FinancialSummary } from "@/components/sponsor/FinancialSummary";
+import { SponsorshipApplicationsTable } from "@/components/sponsor/SponsorshipApplicationsTable";
+import { ActiveSponsorships } from "@/components/sponsor/ActiveSponsorships";
+import { OpportunityExplorer } from "@/components/sponsor/OpportunityExplorer";
 
 // Define extended session user type
 interface ExtendedUser {
@@ -27,16 +39,16 @@ interface ExtendedUser {
 export default function Dashboard() {
   const { data: session, status } = useSession();
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState('overview');
-  
+  const [activeTab, setActiveTab] = useState("overview");
+
   // Redirect if not authenticated
   useEffect(() => {
-    if (status === 'unauthenticated') {
-      router.push('/auth/signin?callbackUrl=/dashboard');
+    if (status === "unauthenticated") {
+      router.push("/auth/signin?callbackUrl=/dashboard");
     }
   }, [status, router]);
 
-  if (status === 'loading') {
+  if (status === "loading") {
     return (
       <Layout title="Loading | Dashboard">
         <div className="flex min-h-screen items-center justify-center">
@@ -54,7 +66,7 @@ export default function Dashboard() {
   }
 
   const user = session.user as ExtendedUser;
-  const userRole = user?.role || 'USER';
+  const userRole = user?.role || "USER";
 
   return (
     <Layout title="Dashboard | Startup Call Management System">
@@ -74,45 +86,59 @@ export default function Dashboard() {
         </header>
 
         <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-          <Tabs defaultValue="overview" value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+          <Tabs
+            defaultValue="overview"
+            value={activeTab}
+            onValueChange={setActiveTab}
+            className="space-y-6"
+          >
             <TabsList className="bg-muted/50 backdrop-blur-sm grid w-full grid-cols-2 md:w-auto md:grid-cols-5 lg:grid-cols-6">
               <TabsTrigger value="overview">Overview</TabsTrigger>
-              <TabsTrigger value="startups">{userRole === 'ENTREPRENEUR' ? 'My Startups' : 'Startups'}</TabsTrigger>
+              <TabsTrigger value="startups">
+                {userRole === "ENTREPRENEUR" ? "My Startups" : "Startups"}
+              </TabsTrigger>
               <TabsTrigger value="tasks">Tasks</TabsTrigger>
-              {userRole === 'SPONSOR' && (
+              {userRole === "SPONSOR" && (
                 <TabsTrigger value="sponsorships">Sponsorships</TabsTrigger>
               )}
-              {userRole === 'REVIEWER' && (
+              {userRole === "REVIEWER" && (
                 <TabsTrigger value="reviews">Review Assignments</TabsTrigger>
               )}
             </TabsList>
-            
+
             <TabsContent value="overview" className="space-y-4">
               <DashboardStats userRole={userRole} />
             </TabsContent>
-            
+
             <TabsContent value="startups" className="space-y-4">
               <StartupList userRole={userRole} userId={user?.id} />
             </TabsContent>
-            
+
             <TabsContent value="tasks" className="space-y-4">
               <TasksList userId={user?.id} />
             </TabsContent>
-            
-            {userRole === 'SPONSOR' && (
-              <TabsContent value="sponsorships" className="space-y-4">
-                <div className="rounded-lg bg-card p-6 shadow">
-                  <h2 className="text-xl font-semibold">Your Sponsorships</h2>
-                  <p className="text-muted-foreground mt-2">Coming soon. We're working on implementing sponsorship management features.</p>
+
+            {userRole === "SPONSOR" && (
+              <TabsContent value="sponsorships" className="space-y-6">
+                <FinancialSummary />
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <ActiveSponsorships limit={4} />
+                  <SponsorshipApplicationsTable limit={4} />
                 </div>
+
+                <OpportunityExplorer limit={4} />
               </TabsContent>
             )}
-            
-            {userRole === 'REVIEWER' && (
+
+            {userRole === "REVIEWER" && (
               <TabsContent value="reviews" className="space-y-4">
                 <div className="rounded-lg bg-card p-6 shadow">
                   <h2 className="text-xl font-semibold">Review Assignments</h2>
-                  <p className="text-muted-foreground mt-2">Coming soon. We're working on implementing review assignment features.</p>
+                  <p className="text-muted-foreground mt-2">
+                    Coming soon. We're working on implementing review assignment
+                    features.
+                  </p>
                 </div>
               </TabsContent>
             )}
