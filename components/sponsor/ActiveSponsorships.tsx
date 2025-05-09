@@ -136,8 +136,11 @@ export function ActiveSponsorships({ limit }: ActiveSponsorshipsProps) {
           <p className="mb-4 text-muted-foreground">
             You don't have any active sponsorships yet.
           </p>
-          <Button asChild>
-            <Link href="/sponsorship-opportunities">
+          <Button>
+            <Link
+              href="/sponsorship-opportunities"
+              className="flex items-center"
+            >
               Browse Opportunities
               <ExternalLink className="ml-2 h-4 w-4" />
             </Link>
@@ -211,8 +214,11 @@ export function ActiveSponsorships({ limit }: ActiveSponsorshipsProps) {
                 )}
               </CardContent>
               <CardFooter className="bg-muted/20 p-4">
-                <Button variant="outline" size="sm" asChild className="w-full">
-                  <Link href={`/startups/${sponsorship.startup.id}`}>
+                <Button variant="outline" size="sm" className="w-full">
+                  <Link
+                    href={`/startups/${sponsorship.startup.id}`}
+                    className="flex items-center justify-center w-full"
+                  >
                     View Startup Details
                     <ExternalLink className="ml-2 h-3 w-3" />
                   </Link>
@@ -224,8 +230,11 @@ export function ActiveSponsorships({ limit }: ActiveSponsorshipsProps) {
       </CardContent>
       {limit && sponsorships.length >= limit && (
         <CardFooter className="flex justify-center border-t pt-6">
-          <Button variant="outline" asChild>
-            <Link href="/sponsor-dashboard/sponsorships">
+          <Button variant="outline">
+            <Link
+              href="/sponsor-dashboard/sponsorships"
+              className="flex items-center"
+            >
               View All Sponsorships
             </Link>
           </Button>

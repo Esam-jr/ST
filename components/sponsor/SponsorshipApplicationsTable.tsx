@@ -151,8 +151,11 @@ export function SponsorshipApplicationsTable({
           <p className="mb-4 text-muted-foreground">
             You haven't submitted any sponsorship applications yet.
           </p>
-          <Button asChild>
-            <Link href="/sponsorship-opportunities">
+          <Button>
+            <Link
+              href="/sponsorship-opportunities"
+              className="flex items-center"
+            >
               Browse Opportunities
               <ExternalLink className="ml-2 h-4 w-4" />
             </Link>
@@ -198,9 +201,10 @@ export function SponsorshipApplicationsTable({
                 <TableCell>{formatDate(application.createdAt)}</TableCell>
                 <TableCell>{getStatusBadge(application.status)}</TableCell>
                 <TableCell className="text-right">
-                  <Button variant="ghost" size="sm" asChild>
+                  <Button variant="ghost" size="sm">
                     <Link
                       href={`/sponsorship-opportunities/${application.opportunityId}`}
+                      className="flex items-center"
                     >
                       <Eye className="h-4 w-4 mr-1" />
                       View
@@ -214,8 +218,11 @@ export function SponsorshipApplicationsTable({
       </CardContent>
       {limit && applications.length >= limit && (
         <CardFooter className="flex justify-center border-t pt-6">
-          <Button variant="outline" asChild>
-            <Link href="/sponsor-dashboard/applications">
+          <Button variant="outline">
+            <Link
+              href="/sponsor-dashboard/applications"
+              className="flex items-center"
+            >
               View All Applications
             </Link>
           </Button>
