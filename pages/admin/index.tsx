@@ -47,6 +47,7 @@ import AdminReports from "@/components/admin/AdminReports";
 import AdminNotificationManagement from "@/components/admin/AdminNotificationManagement";
 import AdminReviewerManagement from "@/components/admin/AdminReviewerManagement";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
+import { BudgetProvider } from "@/contexts/BudgetContext";
 
 export default function AdminDashboard() {
   const { data: session, status } = useSession();
@@ -228,10 +229,86 @@ export default function AdminDashboard() {
         return <AdminSettings />;
       case "budget-management":
         return (
-          <iframe
-            src="/admin/startup-calls/budgets"
-            className="w-full h-[calc(100vh-8rem)] border-none"
-          />
+          <BudgetProvider>
+            <div className="space-y-6">
+              <div className="flex justify-between items-center mb-6">
+                <div>
+                  <h1 className="text-3xl font-bold">Budget Management</h1>
+                  <p className="text-muted-foreground">
+                    Manage budgets for all startup calls
+                  </p>
+                </div>
+                <Button
+                  variant="default"
+                  onClick={() => router.push("/admin/startup-calls/budgets")}
+                >
+                  View All Budgets
+                </Button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-lg">Total Budgets</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-3xl font-bold">
+                      <DollarSign className="inline-block h-5 w-5 text-muted-foreground" />
+                      <span id="budget-count">--</span>
+                    </div>
+                    <p className="text-sm text-muted-foreground mt-2">
+                      Across all startup calls
+                    </p>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-lg">
+                      Active Budget Calls
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-3xl font-bold">
+                      <span id="active-calls">--</span>
+                    </div>
+                    <p className="text-sm text-muted-foreground mt-2">
+                      Calls with active budgets
+                    </p>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-lg">Total Allocated</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-3xl font-bold">
+                      <span id="total-allocated">--</span>
+                    </div>
+                    <p className="text-sm text-muted-foreground mt-2">
+                      Total budget allocated
+                    </p>
+                  </CardContent>
+                </Card>
+              </div>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Recent Budgets</CardTitle>
+                  <CardDescription>
+                    Recently created or updated budgets across all startup calls
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <iframe
+                    src="/admin/startup-calls/budgets"
+                    className="w-full h-[500px] border-none"
+                  />
+                </CardContent>
+              </Card>
+            </div>
+          </BudgetProvider>
         );
       default:
         return <AdminSystemOverview />;
