@@ -1,73 +1,104 @@
-import { NextApiRequest, NextApiResponse } from 'next';
-import { getServerSession } from 'next-auth/next';
-import { authOptions } from '../../auth/[...nextauth]';
-import prisma from '@/lib/prisma';
-import withPrisma from '@/lib/prisma-wrapper';
+import { NextApiRequest, NextApiResponse } from "next";
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "../../../auth/[...nextauth]";
+import prisma from "@/lib/prisma";
+import withPrisma from "@/lib/prisma-wrapper";
 
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
+  // Only allow GET requests for this endpoint
+  if (req.method !== "GET") {
+    return res.status(405).json({ message: "Method not allowed" });
+  }
+
   try {
     // Get session and check if user is authenticated
     const session = await getServerSession(req, res, authOptions);
-    
+
     if (!session || !session.user) {
-      return res.status(401).json({ message: 'Not authenticated' });
+      return res.status(401).json({ message: "Not authenticated" });
     }
 
     // Check if the user is a reviewer
     const user = await withPrisma(() =>
       prisma.user.findUnique({
         where: { id: session.user.id },
-        select: { id: true, role: true }
+        select: { id: true, role: true },
       })
     );
 
-    if (!user || user.role !== 'REVIEWER') {
-      return res.status(403).json({ message: 'Only reviewers can access review assignments' });
+    if (!user || user.role !== "REVIEWER") {
+      return res
+        .status(403)
+        .json({ message: "Only reviewers can access their assignments" });
     }
 
-    // Get assignment ID from route
+    // Get review ID from route
     const { id } = req.query;
-    const assignmentId = Array.isArray(id) ? id[0] : id;
+    const reviewId = Array.isArray(id) ? id[0] : id;
 
-    // Fetch the review assignment using raw SQL to avoid schema issues
-    const query = `
-      SELECT ar.*, a.id as "applicationId"
-      FROM "ApplicationReview" ar
-      JOIN "StartupCallApplication" a ON ar."applicationId" = a.id
-      WHERE ar.id = $1 AND ar."reviewerId" = $2
-    `;
+    // Fetch the review with complete application data
+    const review = await withPrisma(() =>
+      prisma.applicationReview.findUnique({
+        where: { id: reviewId },
+        include: {
+          application: {
+            include: {
+              call: {
+                select: {
+                  id: true,
+                  title: true,
+                },
+              },
+            },
+          },
+        },
+      })
+    );
 
-    const reviewAssignments = await withPrisma(() =>
-      prisma.$queryRawUnsafe(query, assignmentId, user.id)
-    ) as any[];
-
-    if (!reviewAssignments || reviewAssignments.length === 0) {
-      return res.status(404).json({ message: 'Review assignment not found' });
+    if (!review) {
+      return res.status(404).json({ message: "Review assignment not found" });
     }
 
-    const reviewAssignment = reviewAssignments[0];
+    // Check if the review belongs to the current reviewer
+    if (review.reviewerId !== session.user.id) {
+      return res
+        .status(403)
+        .json({ message: "You do not have permission to access this review" });
+    }
 
-    // Send the review assignment with the applicationId
-    return res.status(200).json({
-      id: reviewAssignment.id,
-      applicationId: reviewAssignment.applicationId,
-      status: reviewAssignment.status,
-      assignedAt: reviewAssignment.assignedAt,
-      dueDate: reviewAssignment.dueDate,
-      completedAt: reviewAssignment.completedAt,
-      score: reviewAssignment.score,
-      innovationScore: reviewAssignment.innovationScore,
-      marketScore: reviewAssignment.marketScore,
-      teamScore: reviewAssignment.teamScore,
-      executionScore: reviewAssignment.executionScore,
-      feedback: reviewAssignment.feedback,
-    });
-    
+    // Format the response
+    const formattedReview = {
+      id: review.id,
+      status: review.status,
+      assignedAt: review.assignedAt,
+      dueDate: review.dueDate,
+      completedAt: review.completedAt,
+      score: review.score,
+      innovationScore: review.innovationScore,
+      marketScore: review.marketScore,
+      teamScore: review.teamScore,
+      executionScore: review.executionScore,
+      feedback: review.feedback,
+      application: {
+        id: review.application.id,
+        startupName: review.application.startupName,
+        industry: review.application.industry,
+        stage: review.application.stage,
+        status: review.application.status,
+        submittedAt: review.application.submittedAt,
+        call: {
+          id: review.application.call.id,
+          title: review.application.call.title,
+        },
+      },
+    };
+
+    return res.status(200).json(formattedReview);
   } catch (error) {
-    console.error('Error fetching review assignment:', error);
-    return res.status(500).json({ message: 'Internal server error' });
+    console.error("Error fetching review assignment:", error);
+    return res.status(500).json({ message: "Internal server error" });
   }
-} 
+}

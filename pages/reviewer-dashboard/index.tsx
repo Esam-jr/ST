@@ -24,12 +24,19 @@ import {
   CheckCircle,
   XCircle,
   AlertCircle,
+  ClipboardList,
+  Loader2,
 } from "lucide-react";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import { useToast } from "@/hooks/use-toast";
 
 // Define types
-type ReviewStatus = "PENDING" | "IN_PROGRESS" | "COMPLETED" | "OVERDUE";
+type ReviewStatus =
+  | "PENDING"
+  | "IN_PROGRESS"
+  | "COMPLETED"
+  | "REJECTED"
+  | "WITHDRAWN";
 
 interface ReviewAssignment {
   id: string;
@@ -86,17 +93,15 @@ export default function ReviewerDashboard() {
 
   // Fetch review assignments
   useEffect(() => {
-    if (sessionStatus !== "authenticated" || session?.user?.role !== "REVIEWER")
-      return;
+    if (sessionStatus !== "authenticated") return;
 
     const fetchAssignments = async () => {
       setLoading(true);
       try {
-        // This endpoint needs to be created
         const response = await axios.get("/api/reviewer/assignments");
         setAssignments(response.data);
       } catch (error) {
-        console.error("Error fetching review assignments:", error);
+        console.error("Error fetching assignments:", error);
         toast({
           title: "Error",
           description: "Failed to load review assignments",
@@ -108,7 +113,7 @@ export default function ReviewerDashboard() {
     };
 
     fetchAssignments();
-  }, [sessionStatus, session, toast]);
+  }, [sessionStatus, toast]);
 
   // Helper functions
   const formatDate = (date: string) => {
@@ -130,29 +135,15 @@ export default function ReviewerDashboard() {
   const getStatusBadge = (status: ReviewStatus) => {
     switch (status) {
       case "PENDING":
-        return (
-          <Badge className="bg-blue-50 text-blue-600 hover:bg-blue-50">
-            Pending
-          </Badge>
-        );
+        return <Badge variant="outline">Pending</Badge>;
       case "IN_PROGRESS":
-        return (
-          <Badge className="bg-amber-50 text-amber-600 hover:bg-amber-50">
-            In Progress
-          </Badge>
-        );
+        return <Badge variant="secondary">In Progress</Badge>;
       case "COMPLETED":
-        return (
-          <Badge className="bg-green-50 text-green-600 hover:bg-green-50">
-            Completed
-          </Badge>
-        );
-      case "OVERDUE":
-        return (
-          <Badge className="bg-red-50 text-red-600 hover:bg-red-50">
-            Overdue
-          </Badge>
-        );
+        return <Badge variant="success">Completed</Badge>;
+      case "REJECTED":
+        return <Badge variant="destructive">Rejected</Badge>;
+      case "WITHDRAWN":
+        return <Badge variant="outline">Withdrawn</Badge>;
       default:
         return <Badge variant="outline">Unknown</Badge>;
     }
@@ -211,7 +202,7 @@ export default function ReviewerDashboard() {
   }
 
   return (
-    <Layout title="Reviewer Dashboard">
+    <Layout title="Reviewer Dashboard | Startup Call Management System">
       <div className="min-h-screen bg-muted/10">
         <header className="bg-card/80 backdrop-blur-sm shadow">
           <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
@@ -224,157 +215,156 @@ export default function ReviewerDashboard() {
           </div>
         </header>
 
-        <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-          <Tabs
-            defaultValue={activeTab}
-            onValueChange={setActiveTab}
-            className="space-y-8"
-          >
-            <TabsList>
-              <TabsTrigger value="pending">Pending Reviews</TabsTrigger>
-              <TabsTrigger value="completed">Completed</TabsTrigger>
-              <TabsTrigger value="overdue">Overdue</TabsTrigger>
-            </TabsList>
+        <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+          <div className="space-y-6">
+            {/* Stats Overview */}
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">
+                    Total Assignments
+                  </CardTitle>
+                  <ClipboardList className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{assignments.length}</div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">
+                    Pending Reviews
+                  </CardTitle>
+                  <Clock className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">
+                    {assignments.filter((a) => a.status === "PENDING").length}
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">
+                    In Progress
+                  </CardTitle>
+                  <Loader2 className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">
+                    {
+                      assignments.filter((a) => a.status === "IN_PROGRESS")
+                        .length
+                    }
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">
+                    Completed
+                  </CardTitle>
+                  <CheckCircle className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">
+                    {assignments.filter((a) => a.status === "COMPLETED").length}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
 
-            <TabsContent value={activeTab} className="space-y-6">
-              {/* Statistics */}
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                <Card>
-                  <CardContent className="pt-6">
-                    <div className="text-center">
-                      <div className="text-2xl font-bold">
-                        {
-                          assignments.filter((a) =>
-                            ["PENDING", "IN_PROGRESS"].includes(a.status)
-                          ).length
-                        }
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        Pending Reviews
-                      </p>
-                    </div>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="pt-6">
-                    <div className="text-center">
-                      <div className="text-2xl font-bold text-green-600">
-                        {
-                          assignments.filter((a) => a.status === "COMPLETED")
-                            .length
-                        }
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        Completed Reviews
-                      </p>
-                    </div>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="pt-6">
-                    <div className="text-center">
-                      <div className="text-2xl font-bold text-red-600">
-                        {
-                          assignments.filter((a) => a.status === "OVERDUE")
-                            .length
-                        }
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        Overdue Reviews
-                      </p>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-
-              {/* Assignments List */}
-              {filteredAssignments.length === 0 ? (
-                <Card>
-                  <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-                    <FileText className="h-16 w-16 text-muted-foreground opacity-50" />
-                    <h3 className="mt-4 text-lg font-medium">
-                      No Reviews Found
-                    </h3>
-                    <p className="mt-2 text-muted-foreground max-w-md">
-                      {activeTab === "pending"
-                        ? "You don't have any pending reviews at the moment."
-                        : activeTab === "completed"
-                        ? "You haven't completed any reviews yet."
-                        : "You don't have any overdue reviews."}
+            {/* Review Assignments */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Review Assignments</CardTitle>
+                <CardDescription>
+                  Manage your assigned startup reviews
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {loading ? (
+                  <div className="flex justify-center py-8">
+                    <LoadingSpinner />
+                  </div>
+                ) : assignments.length === 0 ? (
+                  <div className="text-center py-8">
+                    <p className="text-muted-foreground">
+                      No review assignments found
                     </p>
-                  </CardContent>
-                </Card>
-              ) : (
-                <div className="space-y-4">
-                  {filteredAssignments.map((assignment: ReviewAssignment) => (
-                    <Card
-                      key={assignment.id}
-                      className="hover:shadow-md transition-shadow"
-                    >
-                      <CardHeader className="pb-2">
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <CardTitle className="text-base">
-                              {assignment.application?.startupName ||
-                                "Unnamed Startup"}
-                            </CardTitle>
-                            <CardDescription>
-                              {assignment.application?.call?.title ||
-                                "Untitled Call"}
-                            </CardDescription>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {filteredAssignments.map((assignment: ReviewAssignment) => (
+                      <Card
+                        key={assignment.id}
+                        className="hover:shadow-md transition-shadow"
+                      >
+                        <CardHeader className="pb-2">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <CardTitle className="text-base">
+                                {assignment.application?.startupName ||
+                                  "Unnamed Startup"}
+                              </CardTitle>
+                              <CardDescription>
+                                {assignment.application?.call?.title ||
+                                  "Untitled Call"}
+                              </CardDescription>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {getStatusBadge(assignment.status)}
+                              {assignment.dueDate && (
+                                <div className="text-xs flex items-center">
+                                  <Clock className="h-3 w-3 mr-1 text-muted-foreground" />
+                                  <span>
+                                    Due: {formatDate(assignment.dueDate)}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
                           </div>
-                          <div className="flex items-center gap-2">
-                            {getStatusBadge(assignment.status)}
-                            {assignment.dueDate && (
-                              <div className="text-xs flex items-center">
-                                <Clock className="h-3 w-3 mr-1 text-muted-foreground" />
-                                <span>
-                                  Due: {formatDate(assignment.dueDate)}
-                                </span>
-                              </div>
-                            )}
+                        </CardHeader>
+                        <CardContent>
+                          <div className="grid grid-cols-2 gap-4 text-sm">
+                            <div>
+                              <span className="text-muted-foreground">
+                                Industry:
+                              </span>
+                              <span className="ml-2">
+                                {assignment.application?.industry || "N/A"}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">
+                                Stage:
+                              </span>
+                              <span className="ml-2">
+                                {assignment.application?.stage || "N/A"}
+                              </span>
+                            </div>
                           </div>
-                        </div>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="grid grid-cols-2 gap-4 text-sm">
-                          <div>
-                            <span className="text-muted-foreground">
-                              Industry:
-                            </span>
-                            <span className="ml-2">
-                              {assignment.application?.industry || "N/A"}
-                            </span>
-                          </div>
-                          <div>
-                            <span className="text-muted-foreground">
-                              Stage:
-                            </span>
-                            <span className="ml-2">
-                              {assignment.application?.stage || "N/A"}
-                            </span>
-                          </div>
-                        </div>
-                      </CardContent>
-                      <CardFooter>
-                        <Button
-                          variant="outline"
-                          className="w-full"
-                          onClick={() =>
-                            router.push(`/reviewer/review/${assignment.id}`)
-                          }
-                        >
-                          {assignment.status === "COMPLETED"
-                            ? "View Review"
-                            : "Start Review"}
-                        </Button>
-                      </CardFooter>
-                    </Card>
-                  ))}
-                </div>
-              )}
-            </TabsContent>
-          </Tabs>
+                        </CardContent>
+                        <CardFooter>
+                          <Button
+                            variant="outline"
+                            className="w-full"
+                            onClick={() =>
+                              router.push(`/reviewer/review/${assignment.id}`)
+                            }
+                          >
+                            {assignment.status === "COMPLETED"
+                              ? "View Review"
+                              : "Start Review"}
+                          </Button>
+                        </CardFooter>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         </main>
       </div>
     </Layout>

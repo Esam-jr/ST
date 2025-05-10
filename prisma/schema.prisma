@@ -33,6 +33,7 @@ model User {
   tasks                   Task[]                   @relation("AssigneeToTask")
   createdTasks            Task[]                   @relation("CreatorToTask")
   createdSponsorshipOpportunities SponsorshipOpportunity[]
+  reviewerAssignments     ReviewAssignment[]         @relation("ReviewerAssignments")
 }
 
 model Account {
@@ -274,6 +275,7 @@ model StartupCallApplication {
   call                 StartupCall                  @relation(fields: [callId], references: [id])
   startup              Startup?                     @relation(fields: [startupId], references: [id])
   user                 User                         @relation(fields: [userId], references: [id])
+  reviewAssignments    ReviewAssignment[]
 }
 
 model ApplicationReview {
@@ -449,6 +451,22 @@ model Event {
   virtualLink   String?
   imageUrl      String?
   StartupCall   StartupCall? @relation(fields: [startupCallId], references: [id])
+}
+
+model ReviewAssignment {
+  id            String      @id @default(cuid())
+  status        ReviewStatus @default(PENDING)
+  assignedAt    DateTime    @default(now())
+  dueDate       DateTime?
+  completedAt   DateTime?
+  reviewerId    String
+  applicationId String
+  reviewer      User        @relation("ReviewerAssignments", fields: [reviewerId], references: [id])
+  application   StartupCallApplication @relation(fields: [applicationId], references: [id])
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@unique([reviewerId, applicationId])
 }
 
 enum Role {

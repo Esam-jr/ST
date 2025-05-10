@@ -32,6 +32,20 @@ import ErrorAlert from "@/components/ui/ErrorAlert";
 import { useToast } from "@/hooks/use-toast";
 import { ConfirmationDialog } from "@/components/ui/confirmation-dialog";
 import { debounce } from "lodash";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 // Define types
 type ApplicationStatus =
@@ -59,6 +73,18 @@ interface ApplicationReview {
   teamScore?: number;
   executionScore?: number;
   feedback?: string;
+  application: {
+    id: string;
+    startupName: string;
+    industry: string;
+    stage: string;
+    status: ApplicationStatus;
+    submittedAt: string;
+    call: {
+      id: string;
+      title: string;
+    };
+  };
 }
 
 interface Application {
@@ -102,19 +128,19 @@ export default function ReviewerReview() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [application, setApplication] = useState<Application | null>(null);
-  const [reviewAssignment, setReviewAssignment] =
-    useState<ApplicationReview | null>(null);
+  const [review, setReview] = useState<ApplicationReview | null>(null);
   const [error, setError] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
 
   // Review form state
-  const [innovationScore, setInnovationScore] = useState(5);
-  const [marketScore, setMarketScore] = useState(5);
-  const [teamScore, setTeamScore] = useState(5);
-  const [executionScore, setExecutionScore] = useState(5);
-  const [feedback, setFeedback] = useState("");
+  const [score, setScore] = useState<number>(0);
+  const [innovationScore, setInnovationScore] = useState<number>(0);
+  const [marketScore, setMarketScore] = useState<number>(0);
+  const [teamScore, setTeamScore] = useState<number>(0);
+  const [executionScore, setExecutionScore] = useState<number>(0);
+  const [feedback, setFeedback] = useState<string>("");
 
   const { toast } = useToast();
 
@@ -125,14 +151,10 @@ export default function ReviewerReview() {
 
   // Save draft to localStorage
   const saveDraft = () => {
-    if (
-      !id ||
-      isViewMode ||
-      (reviewAssignment && reviewAssignment.status === "COMPLETED")
-    )
-      return;
+    if (!id || isViewMode || (review && review.status === "COMPLETED")) return;
 
     const draftData = {
+      score,
       innovationScore,
       marketScore,
       teamScore,
@@ -158,12 +180,7 @@ export default function ReviewerReview() {
 
   // Load draft from localStorage
   const loadDraft = () => {
-    if (
-      !id ||
-      isViewMode ||
-      (reviewAssignment && reviewAssignment.status === "COMPLETED")
-    )
-      return;
+    if (!id || isViewMode || (review && review.status === "COMPLETED")) return;
 
     try {
       const savedDraft = localStorage.getItem(getStorageKey());
@@ -171,6 +188,7 @@ export default function ReviewerReview() {
         const draftData = JSON.parse(savedDraft);
 
         // Only load if there's actual data
+        if (draftData.score) setScore(draftData.score);
         if (draftData.innovationScore)
           setInnovationScore(draftData.innovationScore);
         if (draftData.marketScore) setMarketScore(draftData.marketScore);
@@ -221,60 +239,43 @@ export default function ReviewerReview() {
     }
   }, [sessionStatus, session, router, toast]);
 
-  // Fetch review assignment and application data
+  // Fetch review data
   useEffect(() => {
-    if (
-      !id ||
-      sessionStatus !== "authenticated" ||
-      session?.user?.role !== "REVIEWER"
-    )
-      return;
+    if (!id || sessionStatus !== "authenticated") return;
 
-    const fetchData = async () => {
+    const fetchReview = async () => {
       setLoading(true);
       try {
-        // Fetch the review assignment
-        const assignmentResponse = await axios.get(
-          `/api/reviewer/assignments/${id}`
-        );
-        const reviewData = assignmentResponse.data;
-        setReviewAssignment(reviewData);
+        const response = await axios.get(`/api/reviewer/assignments/${id}`);
+        setReview(response.data);
 
-        // Fetch the application details
-        const applicationResponse = await axios.get(
-          `/api/applications/${reviewData.applicationId}`
-        );
-        setApplication(applicationResponse.data);
-
-        // If we're looking at a completed review, populate the form with existing review data
-        if (reviewData.status === "COMPLETED") {
-          setInnovationScore(reviewData.innovationScore || 5);
-          setMarketScore(reviewData.marketScore || 5);
-          setTeamScore(reviewData.teamScore || 5);
-          setExecutionScore(reviewData.executionScore || 5);
-          setFeedback(reviewData.feedback || "");
-        } else {
-          // Otherwise, try to load draft data
-          loadDraft();
+        // Set form values if review exists
+        if (response.data) {
+          setScore(response.data.score || 0);
+          setInnovationScore(response.data.innovationScore || 0);
+          setMarketScore(response.data.marketScore || 0);
+          setTeamScore(response.data.teamScore || 0);
+          setExecutionScore(response.data.executionScore || 0);
+          setFeedback(response.data.feedback || "");
         }
-      } catch (error: any) {
-        console.error("Error fetching review data:", error);
-        setError(error.response?.data?.message || "Failed to load review data");
+      } catch (error) {
+        console.error("Error fetching review:", error);
+        toast({
+          title: "Error",
+          description: "Failed to load review data",
+          variant: "destructive",
+        });
       } finally {
         setLoading(false);
       }
     };
 
-    fetchData();
-  }, [id, sessionStatus, session, toast]);
+    fetchReview();
+  }, [id, sessionStatus, toast]);
 
   // Auto-save effect
   useEffect(() => {
-    if (
-      isViewMode ||
-      (reviewAssignment && reviewAssignment.status === "COMPLETED")
-    )
-      return;
+    if (isViewMode || (review && review.status === "COMPLETED")) return;
 
     debouncedSaveDraft();
 
@@ -282,7 +283,14 @@ export default function ReviewerReview() {
     return () => {
       debouncedSaveDraft.cancel();
     };
-  }, [innovationScore, marketScore, teamScore, executionScore, feedback]);
+  }, [
+    score,
+    innovationScore,
+    marketScore,
+    teamScore,
+    executionScore,
+    feedback,
+  ]);
 
   // Helper functions
   const formatDate = (date: string) => {
@@ -345,20 +353,14 @@ export default function ReviewerReview() {
 
   // Handle review submission after confirmation
   const handleSubmitReview = async () => {
-    if (!reviewAssignment || !application) return;
+    if (!review || !application) return;
 
     setError("");
     setSubmitting(true);
 
-    // Calculate overall score (average of all scores)
-    const averageScore =
-      Math.round(
-        ((innovationScore + marketScore + teamScore + executionScore) / 4) * 10
-      ) / 10;
-
     try {
       await axios.post(`/api/applications/${application.id}/submit-review`, {
-        score: averageScore,
+        score,
         innovationScore,
         marketScore,
         teamScore,
@@ -411,7 +413,7 @@ export default function ReviewerReview() {
     );
   }
 
-  if (!application || !reviewAssignment) {
+  if (!application || !review) {
     return (
       <Layout title="Application Review | Not Found">
         <div className="flex h-screen flex-col items-center justify-center">
@@ -464,10 +466,10 @@ export default function ReviewerReview() {
                   </span>
                   {getStatusBadge(application.status)}
                 </div>
-                {!isViewMode && reviewAssignment.dueDate && (
+                {!isViewMode && review.dueDate && (
                   <div className="flex items-center text-sm">
                     <Clock className="h-4 w-4 mr-1 text-muted-foreground" />
-                    <span>Due by: {formatDate(reviewAssignment.dueDate)}</span>
+                    <span>Due by: {formatDate(review.dueDate)}</span>
                   </div>
                 )}
               </div>
@@ -654,206 +656,118 @@ export default function ReviewerReview() {
             <Card>
               <CardHeader>
                 <CardTitle>
-                  {isViewMode || reviewAssignment.status === "COMPLETED"
+                  {isViewMode || review.status === "COMPLETED"
                     ? "Your Review"
                     : "Submit Your Review"}
                 </CardTitle>
-                {!isViewMode && reviewAssignment.status !== "COMPLETED" && (
+                {!isViewMode && review.status !== "COMPLETED" && (
                   <CardDescription>
                     Please evaluate this application based on the criteria below
                   </CardDescription>
                 )}
-                {!isViewMode &&
-                  reviewAssignment.status !== "COMPLETED" &&
-                  lastSaved && (
-                    <div className="flex items-center text-sm text-muted-foreground mt-2">
-                      <Save className="h-3.5 w-3.5 mr-1" />
-                      <span>
-                        {isSaving
-                          ? "Saving..."
-                          : `Draft saved at ${formatTime(lastSaved)}`}
-                      </span>
-                    </div>
-                  )}
+                {!isViewMode && review.status !== "COMPLETED" && lastSaved && (
+                  <div className="flex items-center text-sm text-muted-foreground mt-2">
+                    <Save className="h-3.5 w-3.5 mr-1" />
+                    <span>
+                      {isSaving
+                        ? "Saving..."
+                        : `Draft saved at ${formatTime(lastSaved)}`}
+                    </span>
+                  </div>
+                )}
               </CardHeader>
               <CardContent>
                 {error && <ErrorAlert message={error} title={""} />}
 
                 <form onSubmit={handleSubmitRequest} className="space-y-6">
                   <div className="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-2">
+                    {/* Overall Score */}
+                    <div>
+                      <Label htmlFor="score">Overall Score (0-100)</Label>
+                      <Input
+                        id="score"
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={score}
+                        onChange={(e) => setScore(Number(e.target.value))}
+                      />
+                    </div>
+
                     {/* Innovation Score */}
                     <div>
-                      <label
-                        htmlFor="innovation-score"
-                        className="block text-sm font-medium text-gray-700 dark:text-gray-300"
-                      >
-                        Innovation Score: {innovationScore}
-                      </label>
-                      <input
-                        type="range"
-                        id="innovation-score"
-                        name="innovation-score"
-                        min="1"
-                        max="10"
-                        step="0.5"
+                      <Label htmlFor="innovationScore">
+                        Innovation Score (0-100)
+                      </Label>
+                      <Input
+                        id="innovationScore"
+                        type="number"
+                        min="0"
+                        max="100"
                         value={innovationScore}
                         onChange={(e) =>
-                          setInnovationScore(parseFloat(e.target.value))
-                        }
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700"
-                        disabled={
-                          isViewMode || reviewAssignment.status === "COMPLETED"
+                          setInnovationScore(Number(e.target.value))
                         }
                       />
-                      <p className="mt-1 flex justify-between text-xs text-gray-500 dark:text-gray-400">
-                        <span>Low</span>
-                        <span>High</span>
-                      </p>
                     </div>
 
                     {/* Market Score */}
                     <div>
-                      <label
-                        htmlFor="market-score"
-                        className="block text-sm font-medium text-gray-700 dark:text-gray-300"
-                      >
-                        Market Potential Score: {marketScore}
-                      </label>
-                      <input
-                        type="range"
-                        id="market-score"
-                        name="market-score"
-                        min="1"
-                        max="10"
-                        step="0.5"
+                      <Label htmlFor="marketScore">Market Score (0-100)</Label>
+                      <Input
+                        id="marketScore"
+                        type="number"
+                        min="0"
+                        max="100"
                         value={marketScore}
-                        onChange={(e) =>
-                          setMarketScore(parseFloat(e.target.value))
-                        }
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700"
-                        disabled={
-                          isViewMode || reviewAssignment.status === "COMPLETED"
-                        }
+                        onChange={(e) => setMarketScore(Number(e.target.value))}
                       />
-                      <p className="mt-1 flex justify-between text-xs text-gray-500 dark:text-gray-400">
-                        <span>Low</span>
-                        <span>High</span>
-                      </p>
                     </div>
 
                     {/* Team Score */}
                     <div>
-                      <label
-                        htmlFor="team-score"
-                        className="block text-sm font-medium text-gray-700 dark:text-gray-300"
-                      >
-                        Team Score: {teamScore}
-                      </label>
-                      <input
-                        type="range"
-                        id="team-score"
-                        name="team-score"
-                        min="1"
-                        max="10"
-                        step="0.5"
+                      <Label htmlFor="teamScore">Team Score (0-100)</Label>
+                      <Input
+                        id="teamScore"
+                        type="number"
+                        min="0"
+                        max="100"
                         value={teamScore}
-                        onChange={(e) =>
-                          setTeamScore(parseFloat(e.target.value))
-                        }
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700"
-                        disabled={
-                          isViewMode || reviewAssignment.status === "COMPLETED"
-                        }
+                        onChange={(e) => setTeamScore(Number(e.target.value))}
                       />
-                      <p className="mt-1 flex justify-between text-xs text-gray-500 dark:text-gray-400">
-                        <span>Low</span>
-                        <span>High</span>
-                      </p>
                     </div>
 
                     {/* Execution Score */}
                     <div>
-                      <label
-                        htmlFor="execution-score"
-                        className="block text-sm font-medium text-gray-700 dark:text-gray-300"
-                      >
-                        Execution Score: {executionScore}
-                      </label>
-                      <input
-                        type="range"
-                        id="execution-score"
-                        name="execution-score"
-                        min="1"
-                        max="10"
-                        step="0.5"
+                      <Label htmlFor="executionScore">
+                        Execution Score (0-100)
+                      </Label>
+                      <Input
+                        id="executionScore"
+                        type="number"
+                        min="0"
+                        max="100"
                         value={executionScore}
                         onChange={(e) =>
-                          setExecutionScore(parseFloat(e.target.value))
-                        }
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700"
-                        disabled={
-                          isViewMode || reviewAssignment.status === "COMPLETED"
+                          setExecutionScore(Number(e.target.value))
                         }
                       />
-                      <p className="mt-1 flex justify-between text-xs text-gray-500 dark:text-gray-400">
-                        <span>Low</span>
-                        <span>High</span>
-                      </p>
                     </div>
                   </div>
 
                   {/* Feedback */}
                   <div>
-                    <label
-                      htmlFor="feedback"
-                      className="block text-sm font-medium text-gray-700 dark:text-gray-300"
-                    >
-                      Detailed Feedback
-                    </label>
-                    <div className="mt-1">
-                      <textarea
-                        id="feedback"
-                        name="feedback"
-                        rows={5}
-                        value={feedback}
-                        onChange={(e) => setFeedback(e.target.value)}
-                        placeholder="Please provide detailed feedback on the startup idea, including strengths, weaknesses, and suggestions for improvement."
-                        className="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-                        required
-                        disabled={
-                          isViewMode || reviewAssignment.status === "COMPLETED"
-                        }
-                      />
-                    </div>
-                  </div>
-
-                  {/* Overall score calculation */}
-                  <div className="rounded-md bg-gray-50 p-4 dark:bg-gray-700">
-                    <div className="flex">
-                      <div className="ml-3">
-                        <h3 className="text-sm font-medium text-gray-800 dark:text-gray-200">
-                          Overall Score:{" "}
-                          {Math.round(
-                            ((innovationScore +
-                              marketScore +
-                              teamScore +
-                              executionScore) /
-                              4) *
-                              10
-                          ) / 10}
-                        </h3>
-                        <div className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-                          <p>
-                            This is the average of all four scores and will be
-                            the main rating displayed for this application.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
+                    <Label htmlFor="feedback">Feedback</Label>
+                    <Textarea
+                      id="feedback"
+                      value={feedback}
+                      onChange={(e) => setFeedback(e.target.value)}
+                      rows={6}
+                    />
                   </div>
 
                   {/* Submit button */}
-                  {!isViewMode && reviewAssignment.status !== "COMPLETED" && (
+                  {!isViewMode && review.status !== "COMPLETED" && (
                     <div className="flex justify-end space-x-3">
                       <Button
                         type="button"
@@ -862,13 +776,32 @@ export default function ReviewerReview() {
                       >
                         Cancel
                       </Button>
-                      <Button type="submit" disabled={submitting}>
-                        {submitting ? "Submitting..." : "Submit Review"}
-                      </Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button disabled={submitting}>
+                            {submitting ? "Submitting..." : "Submit Review"}
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Submit Review</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Are you sure you want to submit this review? This
+                              action cannot be undone.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction onClick={handleSubmitReview}>
+                              Submit
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
                     </div>
                   )}
 
-                  {(isViewMode || reviewAssignment.status === "COMPLETED") && (
+                  {(isViewMode || review.status === "COMPLETED") && (
                     <div className="flex justify-end">
                       <Button
                         type="button"
@@ -884,17 +817,6 @@ export default function ReviewerReview() {
           </div>
         </main>
       </div>
-
-      {/* Confirmation Dialog */}
-      <ConfirmationDialog
-        isOpen={showConfirmDialog}
-        onClose={() => setShowConfirmDialog(false)}
-        onConfirm={handleSubmitReview}
-        title="Submit Review"
-        description="Are you sure you want to submit this review? Once submitted, it cannot be edited."
-        confirmText="Submit Review"
-        cancelText="Cancel"
-      />
     </Layout>
   );
 }
