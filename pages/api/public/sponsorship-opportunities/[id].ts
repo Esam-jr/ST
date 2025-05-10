@@ -18,12 +18,6 @@ interface SponsorshipOpportunity {
   startupCall?: {
     id: string;
     title: string;
-    description: string;
-    industry: string;
-    logo: string;
-    companyName: string;
-    website: string;
-    contactEmail: string;
   } | null;
   _count?: {
     applications: number;
@@ -43,37 +37,33 @@ export default async function handler(
 
   // Check if the ID is valid
   if (!id || typeof id !== "string") {
-    return res.status(400).json({ message: "Missing opportunity ID" });
+    return res.status(400).json({ message: "Invalid opportunity ID" });
   }
 
   try {
-    console.log(`Fetching sponsorship opportunity with ID: ${id}`);
-
-    // Get the sponsorship opportunity by ID
-    const opportunity = await prisma.sponsorshipOpportunity.findUnique({
-      where: {
-        id: id,
-      },
+    // Fetch the opportunity
+    const opportunity = (await prisma.sponsorshipOpportunity.findUnique({
+      where: { id },
       include: {
         startupCall: {
           select: {
             id: true,
             title: true,
-            description: true,
-            industry: true,
+          },
+        },
+        _count: {
+          select: {
+            applications: true,
           },
         },
       },
-    });
+    })) as SponsorshipOpportunity | null;
 
     if (!opportunity) {
-      console.log(`No opportunity found with ID: ${id}`);
       return res
         .status(404)
         .json({ message: "Sponsorship opportunity not found" });
     }
-
-    console.log(`Found opportunity: ${opportunity.title}`);
 
     // Only allow active opportunities to be viewed publicly (case insensitive)
     if (opportunity.status.toUpperCase() !== "ACTIVE") {
@@ -95,6 +85,6 @@ export default async function handler(
     console.error("Error fetching sponsorship opportunity:", error);
     return res
       .status(500)
-      .json({ message: "Error fetching sponsorship opportunity" });
+      .json({ message: "Failed to fetch sponsorship opportunity" });
   }
 }

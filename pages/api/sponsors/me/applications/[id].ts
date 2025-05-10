@@ -1,92 +1,73 @@
 import { NextApiRequest, NextApiResponse } from "next";
-import { getSession } from "next-auth/react";
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "../../../auth/[...nextauth]";
 import prisma from "@/lib/prisma";
 
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
-  const session = await getSession({ req });
+  const session = await getServerSession(req, res, authOptions);
 
-  // Check if user is authenticated
-  if (!session || !session.user) {
-    return res.status(401).json({ message: "Unauthorized" });
+  // Check authentication
+  if (!session) {
+    return res.status(401).json({ error: "Unauthorized" });
   }
 
-  // Check if user is a sponsor
-  const user = await prisma.user.findUnique({
-    where: { email: session.user.email as string },
-    select: { id: true, role: true },
-  });
+  // Only allow GET method
+  if (req.method !== "GET") {
+    return res.status(405).json({ error: "Method not allowed" });
+  }
 
-  if (!user || user.role !== "SPONSOR") {
-    return res.status(403).json({ message: "Forbidden - Not a sponsor" });
+  // Only sponsors can access their own applications
+  if (session.user.role !== "SPONSOR") {
+    return res
+      .status(403)
+      .json({ error: "Forbidden: Only sponsors can access this endpoint" });
   }
 
   const { id } = req.query;
 
   if (!id || typeof id !== "string") {
-    return res.status(400).json({ message: "Missing application ID" });
+    return res.status(400).json({ error: "Invalid opportunity ID" });
   }
 
   try {
-    console.log(
-      `Fetching application with ID: ${id} for sponsor ID: ${user.id}`
-    );
-
-    // Get application by ID and verify it belongs to the current sponsor
-    const application = await prisma.sponsorshipApplication.findUnique({
+    // Find the application for this opportunity submitted by the current sponsor
+    const application = await prisma.sponsorshipApplication.findFirst({
       where: {
-        id: id,
+        opportunityId: id,
+        sponsorId: session.user.id,
       },
       include: {
-        startupCall: {
-          select: {
-            id: true,
-            title: true,
-            description: true,
-            industry: true,
-            startDate: true,
-            endDate: true,
-            status: true,
-          },
-        },
         opportunity: {
           select: {
-            id: true,
             title: true,
             description: true,
             minAmount: true,
             maxAmount: true,
+            currency: true,
             benefits: true,
+            status: true,
+            deadline: true,
+            startupCallId: true,
+            startupCall: {
+              select: {
+                title: true,
+              },
+            },
           },
         },
       },
     });
 
     if (!application) {
-      console.log(`No application found with ID: ${id}`);
-      return res.status(404).json({ message: "Application not found" });
+      return res.status(404).json({ error: "Application not found" });
     }
 
-    // Verify the application belongs to the current sponsor
-    if (application.sponsorId !== user.id) {
-      console.log(
-        `Application ID: ${id} does not belong to sponsor ID: ${user.id}`
-      );
-      return res
-        .status(403)
-        .json({
-          message: "Forbidden - Not authorized to access this application",
-        });
-    }
-
-    console.log(`Found application with ID: ${id} for sponsor ID: ${user.id}`);
-
-    // Return the application
     return res.status(200).json(application);
   } catch (error) {
     console.error("Error fetching application:", error);
-    return res.status(500).json({ message: "Error fetching application" });
+    return res.status(500).json({ error: "Failed to fetch application" });
   }
 }

@@ -22,17 +22,11 @@ import {
   LogIn,
   Info,
   ArrowRight,
-  CalendarDays,
-  Loader2,
-  CheckCircle,
-  AlertCircle,
-  Clock,
 } from "lucide-react";
 import Link from "next/link";
 import { useToast } from "@/hooks/use-toast";
 import axios from "axios";
 import ApplySponsorshipForm from "@/components/sponsor/ApplySponsorshipForm";
-import Head from "next/head";
 
 // Define types
 interface SponsorshipOpportunity {
@@ -49,8 +43,6 @@ interface SponsorshipOpportunity {
   startupCallId: string | null;
   startupCall?: {
     title: string;
-    description: string;
-    industry?: string;
   };
 }
 
@@ -61,87 +53,45 @@ interface SessionUser {
   email: string;
 }
 
-export default function OpportunityDetails() {
+export default function PublicSponsorshipOpportunityDetailPage() {
   const router = useRouter();
   const { id } = router.query;
-  const { data: session, status } = useSession();
+  const { data: session, status: sessionStatus } = useSession();
+  const { toast } = useToast();
   const [opportunity, setOpportunity] = useState<SponsorshipOpportunity | null>(
     null
   );
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [applyLoading, setApplyLoading] = useState(false);
-  const { toast } = useToast();
 
   useEffect(() => {
     if (id) {
-      fetchOpportunity();
+      fetchOpportunityData();
     }
   }, [id]);
 
-  const fetchOpportunity = async () => {
+  const fetchOpportunityData = async () => {
     try {
       setLoading(true);
-      setError(null);
-      console.log(`Fetching opportunity with ID: ${id}`);
-      const response = await axios.get(
+
+      // Fetch opportunity details from the public API
+      const opportunityResponse = await axios.get(
         `/api/public/sponsorship-opportunities/${id}`
       );
-      console.log("Opportunity details:", response.data);
-      setOpportunity(response.data);
-    } catch (err: any) {
-      console.error("Error fetching opportunity:", err);
-      setError("Failed to load opportunity details");
+      setOpportunity(opportunityResponse.data);
+    } catch (error) {
+      console.error("Error fetching opportunity data:", error);
+
       toast({
         title: "Error",
-        description: "Could not load opportunity details. Please try again.",
+        description:
+          "Could not load the sponsorship opportunity. Please try again later.",
         variant: "destructive",
       });
+
+      // Navigate back to the opportunities list if we can't load this one
+      router.push("/sponsorship-opportunities");
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleApply = async () => {
-    // Only sponsors can apply
-    if (!session || session.user?.role !== "SPONSOR") {
-      router.push(`/login?callbackUrl=/sponsorship-opportunities/${id}`);
-      return;
-    }
-
-    try {
-      setApplyLoading(true);
-
-      // In a real application, this would have a form to collect the amount
-      // For this demo, we'll use the minimum amount
-      const amount = opportunity?.minAmount || 0;
-      const currency = opportunity?.currency || "USD";
-
-      // Submit application
-      await axios.post("/api/sponsors/me/applications", {
-        opportunityId: id,
-        amount,
-        currency,
-      });
-
-      toast({
-        title: "Application Submitted",
-        description:
-          "Your sponsorship application has been submitted successfully.",
-        variant: "default",
-      });
-
-      // Redirect to applications page
-      router.push("/sponsor-dashboard?tab=applications");
-    } catch (err: any) {
-      console.error("Error submitting application:", err);
-      toast({
-        title: "Error",
-        description: "Failed to submit application. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setApplyLoading(false);
     }
   };
 
@@ -177,265 +127,232 @@ export default function OpportunityDetails() {
 
   if (loading) {
     return (
-      <Layout>
-        <div className="flex h-[50vh] items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <span className="ml-2">Loading opportunity details...</span>
+      <Layout title="Sponsorship Opportunity Details">
+        <div className="container mx-auto py-8 px-4">
+          <div className="flex items-center mb-6">
+            <Link href="/sponsorship-opportunities" className="mr-4">
+              <Button variant="ghost" size="sm">
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Back
+              </Button>
+            </Link>
+            <h1 className="text-3xl font-bold">Loading...</h1>
+          </div>
+          <div className="flex items-center justify-center h-64">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+          </div>
         </div>
       </Layout>
     );
   }
 
-  if (error || !opportunity) {
+  if (!opportunity) {
     return (
-      <Layout>
-        <div className="flex flex-col items-center justify-center h-[50vh]">
-          <AlertCircle className="h-12 w-12 text-destructive mb-4" />
-          <h2 className="text-xl font-bold mb-2">Error Loading Opportunity</h2>
-          <p className="text-muted-foreground mb-4">
-            {error || "Opportunity not found"}
-          </p>
-          <Button onClick={() => router.back()}>
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Go Back
-          </Button>
+      <Layout title="Opportunity Not Found">
+        <div className="container mx-auto py-8 px-4">
+          <div className="flex items-center mb-6">
+            <Link href="/sponsorship-opportunities" className="mr-4">
+              <Button variant="ghost" size="sm">
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Back
+              </Button>
+            </Link>
+            <h1 className="text-3xl font-bold">Opportunity Not Found</h1>
+          </div>
+          <Card>
+            <CardContent className="flex flex-col items-center justify-center py-12">
+              <p className="text-gray-500 mb-4">
+                The sponsorship opportunity you are looking for could not be
+                found.
+              </p>
+              <Link href="/sponsorship-opportunities">
+                <Button>Return to All Opportunities</Button>
+              </Link>
+            </CardContent>
+          </Card>
         </div>
       </Layout>
     );
   }
 
   return (
-    <>
-      <Head>
-        <title>{opportunity.title} | Sponsorship Opportunity</title>
-        <meta
-          name="description"
-          content={opportunity.description.substring(0, 160)}
-        />
-      </Head>
-
-      <Layout>
-        <div className="container mx-auto py-6 px-4 space-y-8">
-          <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
-            <div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => router.back()}
-                className="mb-4"
-              >
+    <Layout title={`${opportunity.title} | Sponsorship Opportunity`}>
+      <div className="container mx-auto py-8 px-4">
+        <div className="flex flex-col md:flex-row items-start justify-between mb-6 gap-4">
+          <div className="flex items-center">
+            <Link href="/sponsorship-opportunities" className="mr-4">
+              <Button variant="ghost" size="sm">
                 <ArrowLeft className="mr-2 h-4 w-4" />
-                Back to Opportunities
+                Back
               </Button>
-
-              <div className="flex items-center gap-2 mb-2">
-                <h1 className="text-3xl font-bold">{opportunity.title}</h1>
-                {isDeadlinePassed(opportunity.deadline) ? (
-                  <Badge variant="destructive" className="ml-2">
-                    Deadline Passed
-                  </Badge>
-                ) : (
-                  <Badge variant="outline" className="ml-2">
-                    <Clock className="mr-1 h-3 w-3" />
-                    Active
+            </Link>
+            <div>
+              <h1 className="text-3xl font-bold">{opportunity.title}</h1>
+              <div className="flex items-center mt-1">
+                {opportunity.deadline && (
+                  <Badge
+                    className={
+                      isDeadlinePassed(opportunity.deadline)
+                        ? "bg-red-100 text-red-800 border-red-200 mr-2"
+                        : "bg-green-100 text-green-800 border-green-200 mr-2"
+                    }
+                  >
+                    {isDeadlinePassed(opportunity.deadline)
+                      ? "Deadline Passed"
+                      : "Open for Applications"}
                   </Badge>
                 )}
               </div>
-
-              {opportunity.startupCall && (
-                <div className="flex items-center text-muted-foreground">
-                  <Building className="h-4 w-4 mr-2" />
-                  {opportunity.startupCall.title}
-                  {opportunity.startupCall.industry && (
-                    <Badge variant="secondary" className="ml-2">
-                      {opportunity.startupCall.industry}
-                    </Badge>
-                  )}
-                </div>
-              )}
-            </div>
-
-            <div className="w-full sm:w-auto">
-              <Button
-                size="lg"
-                disabled={
-                  applyLoading ||
-                  isDeadlinePassed(opportunity.deadline) ||
-                  (status === "authenticated" &&
-                    session?.user?.role !== "SPONSOR")
-                }
-                onClick={handleApply}
-                className="w-full sm:w-auto"
-              >
-                {applyLoading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Submitting...
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle className="mr-2 h-4 w-4" />
-                    Apply for Sponsorship
-                  </>
-                )}
-              </Button>
-
-              {status === "authenticated" &&
-                session?.user?.role !== "SPONSOR" && (
-                  <p className="text-xs text-muted-foreground mt-2 text-center">
-                    Only sponsors can apply for opportunities
-                  </p>
-                )}
             </div>
           </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="md:col-span-2 space-y-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>About this Opportunity</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="whitespace-pre-line">
-                    {opportunity.description}
-                  </p>
-
-                  {opportunity.startupCall?.description && (
-                    <>
-                      <Separator className="my-6" />
-                      <h3 className="text-lg font-semibold mb-3">
-                        About the Startup
-                      </h3>
-                      <p className="whitespace-pre-line">
-                        {opportunity.startupCall.description}
-                      </p>
-                    </>
-                  )}
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Benefits for Sponsors</CardTitle>
-                  <CardDescription>
-                    What you'll receive when sponsoring this opportunity
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {opportunity.benefits && opportunity.benefits.length > 0 ? (
-                    <ul className="list-disc pl-5 space-y-2">
-                      {opportunity.benefits.map((benefit, index) => (
-                        <li key={index}>{benefit}</li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="text-muted-foreground">
-                      No specific benefits listed for this opportunity.
-                    </p>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-
-            <div className="space-y-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Sponsorship Details</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div>
-                    <h3 className="text-sm font-medium text-muted-foreground mb-1">
-                      Sponsorship Range
-                    </h3>
-                    <div className="flex items-center text-lg font-semibold">
-                      <DollarSign className="h-5 w-5 text-primary mr-1" />
-                      {formatCurrency(
-                        opportunity.minAmount,
-                        opportunity.currency
-                      )}
-                      {opportunity.minAmount !== opportunity.maxAmount && (
-                        <>
-                          {" "}
-                          -{" "}
-                          {formatCurrency(
-                            opportunity.maxAmount,
-                            opportunity.currency
-                          )}
-                        </>
-                      )}
-                    </div>
-                  </div>
-
-                  <div>
-                    <h3 className="text-sm font-medium text-muted-foreground mb-1">
-                      Application Deadline
-                    </h3>
-                    <div className="flex items-center">
-                      <CalendarDays className="h-5 w-5 text-primary mr-2" />
-                      <span
-                        className={
-                          isDeadlinePassed(opportunity.deadline)
-                            ? "text-destructive"
-                            : ""
-                        }
-                      >
-                        {formatDate(opportunity.deadline)}
-                      </span>
-                    </div>
-                  </div>
-
-                  <Separator />
-
-                  <div>
-                    <h3 className="text-sm font-medium text-muted-foreground mb-1">
-                      How to Apply
-                    </h3>
-                    <p className="text-sm">
-                      Click the "Apply for Sponsorship" button above to submit
-                      your application for this opportunity.
-                      {!session &&
-                        " You'll need to sign in or create an account first."}
-                    </p>
-                  </div>
-                </CardContent>
-                <CardFooter className="bg-muted/20 flex justify-between">
-                  <span className="text-sm text-muted-foreground">
-                    Opportunity ID: {opportunity.id.substring(0, 8)}
-                  </span>
-                  {session?.user?.role === "ADMIN" && (
-                    <Link href={`/admin/opportunities/${opportunity.id}`}>
-                      <Button variant="ghost" size="sm">
-                        Edit
-                      </Button>
-                    </Link>
-                  )}
-                </CardFooter>
-              </Card>
-
-              {!session ? (
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Sign In to Apply</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-sm text-muted-foreground mb-4">
-                      You need to be signed in as a sponsor to apply for this
-                      opportunity.
-                    </p>
-                    <Button className="w-full" asChild>
-                      <Link
-                        href={`/login?callbackUrl=/sponsorship-opportunities/${id}`}
-                      >
-                        Sign In or Register
-                      </Link>
-                    </Button>
-                  </CardContent>
-                </Card>
-              ) : null}
-            </div>
+          <div>
+            {!session && !isDeadlinePassed(opportunity.deadline) && (
+              <Link
+                href={`/auth/signin?callbackUrl=/sponsor/opportunities/${opportunity.id}/apply`}
+              >
+                <Button className="flex items-center">
+                  Sign in to Apply
+                  <LogIn className="ml-2 h-4 w-4" />
+                </Button>
+              </Link>
+            )}
           </div>
         </div>
-      </Layout>
-    </>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Opportunity Details</CardTitle>
+            {opportunity.startupCall && (
+              <CardDescription className="flex items-center">
+                <Building className="h-4 w-4 mr-1" />
+                Associated with {opportunity.startupCall.title}
+              </CardDescription>
+            )}
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <h3 className="text-lg font-medium mb-2">Description</h3>
+              <p className="text-gray-700 whitespace-pre-line">
+                {opportunity.description}
+              </p>
+            </div>
+
+            <Separator />
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <h3 className="text-lg font-medium mb-2">Funding Range</h3>
+                <div className="flex items-center text-gray-700">
+                  <DollarSign className="h-5 w-5 mr-2 text-primary" />
+                  <span>
+                    {formatCurrency(
+                      opportunity.minAmount,
+                      opportunity.currency
+                    )}{" "}
+                    -
+                    {formatCurrency(
+                      opportunity.maxAmount,
+                      opportunity.currency
+                    )}
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <h3 className="text-lg font-medium mb-2">
+                  Application Deadline
+                </h3>
+                <div className="flex items-center text-gray-700">
+                  <Calendar className="h-5 w-5 mr-2 text-primary" />
+                  <span>{formatDate(opportunity.deadline)}</span>
+                </div>
+              </div>
+            </div>
+
+            <Separator />
+
+            <div>
+              <h3 className="text-lg font-medium mb-2">Sponsor Benefits</h3>
+              {opportunity.benefits.length > 0 ? (
+                <ul className="list-disc pl-5 space-y-1">
+                  {opportunity.benefits.map((benefit, index) => (
+                    <li key={index} className="text-gray-700">
+                      {benefit}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-gray-500 italic">
+                  No specific benefits listed
+                </p>
+              )}
+            </div>
+          </CardContent>
+          <CardFooter className="flex flex-col items-start">
+            <div className="text-sm text-gray-500 mb-4">
+              Created on {new Date(opportunity.createdAt).toLocaleDateString()}
+            </div>
+          </CardFooter>
+        </Card>
+
+        {sessionStatus === "authenticated" &&
+          !isDeadlinePassed(opportunity.deadline) && (
+            <div className="mt-6 bg-blue-50 border border-blue-100 rounded-lg p-6">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="flex items-start">
+                  <Info className="h-6 w-6 text-blue-600 mr-3 mt-0.5" />
+                  <div>
+                    <h3 className="font-medium text-blue-800 text-lg mb-1">
+                      Interested in this opportunity?
+                    </h3>
+                    <p className="text-blue-700">
+                      {session.user?.role === "SPONSOR"
+                        ? "Submit your application to sponsor this opportunity."
+                        : "Sign in or create a sponsor account to apply for this sponsorship opportunity."}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  {session.user?.role === "SPONSOR" ? (
+                    <ApplySponsorshipForm
+                      opportunityId={opportunity.id}
+                      minAmount={opportunity.minAmount}
+                      maxAmount={opportunity.maxAmount}
+                      currency={opportunity.currency}
+                      onSuccess={() => {
+                        toast({
+                          title: "Application Submitted",
+                          description:
+                            "Your application has been submitted successfully.",
+                          variant: "default",
+                        });
+                        fetchOpportunityData(); // Refresh opportunity data
+                      }}
+                    />
+                  ) : (
+                    <Button
+                      variant="outline"
+                      className="min-w-[120px] flex items-center gap-2"
+                      disabled
+                    >
+                      <Info className="h-4 w-4" />
+                      Only Sponsors Can Apply
+                    </Button>
+                  )}
+                  <Link href="/sponsorship-opportunities">
+                    <Button
+                      variant="outline"
+                      className="min-w-[120px] flex items-center gap-2"
+                    >
+                      <ArrowLeft className="h-4 w-4" />
+                      Back to List
+                    </Button>
+                  </Link>
+                </div>
+              </div>
+            </div>
+          )}
+      </div>
+    </Layout>
   );
 }

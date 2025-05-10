@@ -3,30 +3,14 @@
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/router";
-import Link from "next/link";
+import Head from "next/head";
 import Layout from "@/components/layout/Layout";
-import DashboardStats from "../../components/dashboard/DashboardStats";
-import StartupList from "../../components/dashboard/StartupList";
-import TasksList from "../../components/dashboard/TasksList";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { PlusCircle } from "lucide-react";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { ArrowRight } from "lucide-react";
-import Head from "next/head";
-import { DashboardHeader } from "@/components/dashboard-header";
-import { FinancialSummary } from "@/components/sponsor/FinancialSummary";
-import { ActiveSponsorships } from "@/components/sponsor/ActiveSponsorships";
-import { OpportunityExplorer } from "@/components/sponsor/OpportunityExplorer";
-import { SponsorshipApplications } from "@/components/sponsor/SponsorshipApplications";
-import { Loader2, ExternalLink, BarChart4 } from "lucide-react";
+import ApplicationsTable from "@/components/sponsor/ApplicationsTable";
+import SponsoredStartups from "@/components/sponsor/SponsoredStartups";
+import Link from "next/link";
 
 // Define extended session user type
 interface ExtendedUser {
@@ -37,126 +21,86 @@ interface ExtendedUser {
   role?: string;
 }
 
-export default function SponsorDashboard() {
+export default function Dashboard() {
   const { data: session, status } = useSession();
   const router = useRouter();
-  const [isLoading, setIsLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState("applications");
 
-  // Redirect if not authenticated or not a sponsor
+  // Redirect if not authenticated
   useEffect(() => {
-    // Wait until session is loaded
-    if (status === "loading") return;
-
-    // Check if user is logged in
-    if (!session) {
-      console.log("No session found, redirecting to login page");
-      router.push("/login?callbackUrl=/sponsor-dashboard");
-      return;
+    if (status === "unauthenticated") {
+      router.push("/auth/signin?callbackUrl=/sponsor-dashboard");
     }
+  }, [status, router]);
 
-    // Check if user has the SPONSOR role
-    const userRole = session?.user?.role;
-    console.log("User role:", userRole);
-
-    if (userRole !== "SPONSOR") {
-      console.log("User is not a sponsor, redirecting to home page");
-      router.push("/");
-      return;
-    }
-
-    // If we reach here, the user is authenticated and has the sponsor role
-    setIsLoading(false);
-  }, [session, status, router]);
-
-  if (status === "loading" || isLoading) {
+  if (status === "loading") {
     return (
-      <Layout>
-        <div className="flex h-[50vh] items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <span className="ml-2">Loading dashboard...</span>
+      <Layout title="Loading | Sponsor Dashboard">
+        <div className="flex min-h-screen items-center justify-center">
+          <div className="text-center">
+            <LoadingSpinner size="lg" />
+            <h3 className="text-lg font-medium mt-4">Loading...</h3>
+          </div>
         </div>
       </Layout>
     );
   }
 
+  if (!session) {
+    return null; // Will redirect in the useEffect
+  }
+
+  const user = session.user as ExtendedUser;
+  const userRole = user?.role || "USER";
+
+  // Only allow sponsors to access this page
+  if (userRole !== "SPONSOR") {
+    router.push("/dashboard");
+    return null;
+  }
+
   return (
-    <>
+    <Layout title="Sponsor Dashboard | Startup Call Management System">
       <Head>
-        <title>Sponsor Dashboard | Startup Platform</title>
-        <meta
-          name="description"
-          content="Manage your sponsorships and explore new opportunities."
-        />
+        <title>Sponsor Dashboard</title>
       </Head>
-      <Layout>
-        <DashboardHeader
-          heading="Sponsor Dashboard"
-          text="Manage your sponsorships and explore new opportunities."
-        >
-          <Button variant="outline" className="ml-auto">
-            <a
-              href="/sponsor-guide.pdf"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center"
-            >
-              Sponsor Guide
-              <ExternalLink className="ml-2 h-4 w-4" />
-            </a>
-          </Button>
-        </DashboardHeader>
+      <div className="min-h-screen">
+        <header className="bg-card/80 backdrop-blur-sm shadow sticky top-0 z-10">
+          <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+            <div className="flex items-center justify-between">
+              <h1 className="text-2xl font-bold tracking-tight">
+                Sponsor Dashboard
+              </h1>
+              <Button variant="outline">
+                <Link href="/sponsorship-opportunities">
+                  View Opportunities
+                </Link>
+              </Button>
+            </div>
+          </div>
+        </header>
 
-        <div className="grid gap-8">
-          {/* Financial Summary Section */}
-          <FinancialSummary />
-
-          {/* Main Dashboard Content */}
-          <Tabs defaultValue="activity" className="space-y-4">
+        <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+          <Tabs
+            defaultValue={activeTab}
+            onValueChange={setActiveTab}
+            className="space-y-6"
+          >
             <TabsList>
-              <TabsTrigger value="activity">Active Sponsorships</TabsTrigger>
-              <TabsTrigger value="applications">My Applications</TabsTrigger>
-              <TabsTrigger value="opportunities">Opportunities</TabsTrigger>
-              <TabsTrigger value="insights">Insights</TabsTrigger>
+              <TabsTrigger value="applications">Applications</TabsTrigger>
+              <TabsTrigger value="startups">Sponsored Startups</TabsTrigger>
             </TabsList>
 
-            <TabsContent value="activity" className="space-y-4">
-              <ActiveSponsorships />
-            </TabsContent>
-
             <TabsContent value="applications" className="space-y-4">
-              <SponsorshipApplications />
+              <ApplicationsTable />
             </TabsContent>
 
-            <TabsContent value="opportunities" className="space-y-4">
-              <OpportunityExplorer />
-            </TabsContent>
-
-            <TabsContent value="insights" className="space-y-4">
-              <Card>
-                <CardHeader className="pb-4">
-                  <CardTitle className="flex items-center">
-                    <BarChart4 className="mr-2 h-5 w-5" />
-                    Sponsorship Insights
-                  </CardTitle>
-                  <CardDescription>
-                    Track the impact and performance of your sponsorships.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex flex-col items-center justify-center py-12 text-center">
-                    <p className="mb-4 text-muted-foreground">
-                      Detailed sponsorship analytics coming soon.
-                    </p>
-                    <Button variant="outline" size="sm">
-                      Request Early Access
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
+            <TabsContent value="startups" className="space-y-4">
+              <SponsoredStartups />
             </TabsContent>
           </Tabs>
-        </div>
-      </Layout>
-    </>
+        </main>
+      </div>
+    </Layout>
   );
 }
