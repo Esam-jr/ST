@@ -1,28 +1,18 @@
-import React, { useState, useEffect } from "react";
-import { useRouter } from "next/router";
-import axios from "axios";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { useState, useEffect } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { useToast } from "@/hooks/use-toast";
-import { BudgetProvider } from "@/contexts/BudgetContext";
-import { BudgetDashboard } from "@/components/admin/budget/BudgetDashboard";
-import { BudgetExpenses } from "@/components/admin/budget/BudgetExpenses";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-interface Project {
+interface ProjectData {
   id: string;
-  startupCallId: string;
-  startupCallTitle: string;
-  budget: {
+  startupCall: {
     id: string;
-    totalAmount: number;
+    title: string;
+    description: string;
+  };
+  budget: {
+    total: number;
     spent: number;
     remaining: number;
   };
@@ -31,209 +21,197 @@ interface Project {
     completed: number;
     pending: number;
   };
-  timeline: {
-    milestones: Array<{
-      id: string;
-      title: string;
-      dueDate: string;
-      status: "pending" | "in_progress" | "completed";
-    }>;
-  };
+  milestones: Array<{
+    id: string;
+    title: string;
+    dueDate: string;
+    status: string;
+  }>;
 }
 
 export default function ProjectManagement() {
-  const router = useRouter();
-  const { toast } = useToast();
-  const [project, setProject] = useState<Project | null>(null);
+  const [projectData, setProjectData] = useState<ProjectData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState("overview");
 
   useEffect(() => {
-    const fetchProject = async () => {
+    const fetchProjectData = async () => {
       try {
-        const response = await axios.get("/api/entrepreneur/project");
-        setProject(response.data);
+        const response = await fetch("/api/entrepreneur/project");
+        if (response.ok) {
+          const data = await response.json();
+          setProjectData(data);
+        }
       } catch (error) {
-        console.error("Error fetching project:", error);
-        toast({
-          title: "Error",
-          description: "Failed to load project data",
-          variant: "destructive",
-        });
+        console.error("Error fetching project data:", error);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchProject();
-  }, [toast]);
+    fetchProjectData();
+  }, []);
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-      </div>
-    );
+    return <div>Loading...</div>;
   }
 
-  if (!project) {
-    return (
-      <div className="text-center py-8">
-        <p className="text-muted-foreground">No active project found</p>
-      </div>
-    );
+  if (!projectData) {
+    return <div>No active project found.</div>;
   }
+
+  const budgetProgress =
+    (projectData.budget.spent / projectData.budget.total) * 100;
+  const taskProgress =
+    (projectData.tasks.completed / projectData.tasks.total) * 100;
 
   return (
-    <BudgetProvider>
-      <div className="space-y-6">
-        <div className="grid gap-6 md:grid-cols-2">
+    <div className="space-y-6">
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList>
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="budget">Budget</TabsTrigger>
+          <TabsTrigger value="tasks">Tasks</TabsTrigger>
+          <TabsTrigger value="timeline">Timeline</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="overview" className="space-y-4">
           {/* Budget Overview */}
           <Card>
             <CardHeader>
               <CardTitle>Budget Overview</CardTitle>
-              <CardDescription>
-                Track your allocated budget and expenses
-              </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
-                  <span className="text-sm text-muted-foreground">
-                    Total Budget
-                  </span>
-                  <span className="font-medium">
-                    ${project.budget.totalAmount.toLocaleString()}
-                  </span>
+                  <div>
+                    <p className="text-sm text-gray-500">Total Budget</p>
+                    <p className="text-2xl font-semibold">
+                      ${projectData.budget.total}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Spent</p>
+                    <p className="text-2xl font-semibold">
+                      ${projectData.budget.spent}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Remaining</p>
+                    <p className="text-2xl font-semibold">
+                      ${projectData.budget.remaining}
+                    </p>
+                  </div>
                 </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-muted-foreground">Spent</span>
-                  <span className="font-medium">
-                    ${project.budget.spent.toLocaleString()}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-muted-foreground">
-                    Remaining
-                  </span>
-                  <span className="font-medium">
-                    ${project.budget.remaining.toLocaleString()}
-                  </span>
-                </div>
-                <Progress
-                  value={
-                    (project.budget.spent / project.budget.totalAmount) * 100
-                  }
-                  className="h-2"
-                />
+                <Progress value={budgetProgress} className="h-2" />
               </div>
             </CardContent>
           </Card>
 
-          {/* Task Management */}
+          {/* Task Overview */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Task Overview</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <p className="text-sm text-gray-500">Total Tasks</p>
+                    <p className="text-2xl font-semibold">
+                      {projectData.tasks.total}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Completed</p>
+                    <p className="text-2xl font-semibold">
+                      {projectData.tasks.completed}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Pending</p>
+                    <p className="text-2xl font-semibold">
+                      {projectData.tasks.pending}
+                    </p>
+                  </div>
+                </div>
+                <Progress value={taskProgress} className="h-2" />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Timeline Overview */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Project Timeline</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {projectData.milestones.map((milestone) => (
+                  <div
+                    key={milestone.id}
+                    className="flex items-center justify-between border-b pb-4 last:border-0 last:pb-0"
+                  >
+                    <div>
+                      <h3 className="font-medium">{milestone.title}</h3>
+                      <p className="text-sm text-gray-500">
+                        Due: {new Date(milestone.dueDate).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <Badge
+                      variant={
+                        milestone.status === "COMPLETED"
+                          ? "success"
+                          : milestone.status === "IN_PROGRESS"
+                          ? "default"
+                          : "destructive"
+                      }
+                    >
+                      {milestone.status}
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="budget">
+          <Card>
+            <CardHeader>
+              <CardTitle>Budget Details</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {/* Budget details content will be added here */}
+              <p>Budget details coming soon...</p>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="tasks">
           <Card>
             <CardHeader>
               <CardTitle>Task Management</CardTitle>
-              <CardDescription>
-                Track your project milestones and tasks
-              </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-muted-foreground">
-                    Total Tasks
-                  </span>
-                  <span className="font-medium">{project.tasks.total}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-muted-foreground">
-                    Completed
-                  </span>
-                  <span className="font-medium">{project.tasks.completed}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-muted-foreground">Pending</span>
-                  <span className="font-medium">{project.tasks.pending}</span>
-                </div>
-                <Progress
-                  value={(project.tasks.completed / project.tasks.total) * 100}
-                  className="h-2"
-                />
-              </div>
+              {/* Task management content will be added here */}
+              <p>Task management coming soon...</p>
             </CardContent>
           </Card>
-        </div>
+        </TabsContent>
 
-        {/* Timeline */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Project Timeline</CardTitle>
-            <CardDescription>
-              View and manage your project milestones
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {project.timeline.milestones.map((milestone) => (
-                <div
-                  key={milestone.id}
-                  className="flex items-center justify-between p-4 border rounded-lg"
-                >
-                  <div>
-                    <h4 className="font-medium">{milestone.title}</h4>
-                    <p className="text-sm text-muted-foreground">
-                      Due: {new Date(milestone.dueDate).toLocaleDateString()}
-                    </p>
-                  </div>
-                  <Badge
-                    variant={
-                      milestone.status === "completed"
-                        ? "default"
-                        : milestone.status === "in_progress"
-                        ? "secondary"
-                        : "outline"
-                    }
-                  >
-                    {milestone.status.replace("_", " ")}
-                  </Badge>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Budget Dashboard */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Budget Details</CardTitle>
-            <CardDescription>
-              Detailed view of your budget and expenses
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <BudgetDashboard
-              startupCallId={project.startupCallId}
-              budgets={[project.budget]}
-            />
-          </CardContent>
-        </Card>
-
-        {/* Expenses */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Expenses</CardTitle>
-            <CardDescription>
-              Track and manage your project expenses
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <BudgetExpenses
-              startupCallId={project.startupCallId}
-              budgets={[project.budget]}
-            />
-          </CardContent>
-        </Card>
-      </div>
-    </BudgetProvider>
+        <TabsContent value="timeline">
+          <Card>
+            <CardHeader>
+              <CardTitle>Project Timeline</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {/* Timeline content will be added here */}
+              <p>Timeline details coming soon...</p>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+    </div>
   );
 }
