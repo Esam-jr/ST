@@ -1,5 +1,7 @@
-import { useEffect, useState } from 'react';
-import { Card, CardContent } from '@/components/ui/card';
+import { useEffect, useState } from "react";
+import axios from "axios";
+import { Card, CardContent } from "@/components/ui/card";
+import { useToast } from "@/hooks/use-toast";
 
 type DashboardStatsProps = {
   userRole: string;
@@ -8,12 +10,11 @@ type DashboardStatsProps = {
 // Mock data for demo purposes
 const mockStats = {
   ENTREPRENEUR: {
-    totalStartups: 3,
+    totalApplications: 3,
+    approvedProjects: 1,
+    openOpportunities: 5,
     reviewsReceived: 12,
-    activeSponsors: 2,
-    totalFunding: 75000,
     submissionsInReview: 1,
-    acceptedStartups: 2,
   },
   REVIEWER: {
     assignedReviews: 8,
@@ -40,35 +41,54 @@ const mockStats = {
     activeUsers: 85,
   },
   USER: {
-    totalStartups: 0,
+    totalApplications: 0,
+    approvedProjects: 0,
+    openOpportunities: 0,
     reviewsReceived: 0,
-    activeSponsors: 0,
-    totalFunding: 0,
     submissionsInReview: 0,
-    acceptedStartups: 0,
   },
 };
 
 export default function DashboardStats({ userRole }: DashboardStatsProps) {
   const [stats, setStats] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const { toast } = useToast();
 
   useEffect(() => {
-    // In a real app, you would fetch this data from an API
-    // For demo purposes, we'll use mock data
-    setTimeout(() => {
-      setStats(mockStats[userRole as keyof typeof mockStats] || mockStats.USER);
-      setIsLoading(false);
-    }, 800);
-  }, [userRole]);
+    const fetchStats = async () => {
+      setIsLoading(true);
+      try {
+        const response = await axios.get("/api/dashboard/stats");
+        setStats(response.data[userRole]);
+      } catch (error) {
+        console.error("Error fetching dashboard stats:", error);
+        toast({
+          title: "Error",
+          description: "Failed to load dashboard statistics",
+          variant: "destructive",
+        });
+
+        // Fallback to mock data on error
+        setStats(
+          mockStats[userRole as keyof typeof mockStats] || mockStats.USER
+        );
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchStats();
+  }, [userRole, toast]);
 
   if (isLoading) {
     return (
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {[...Array(6)].map((_, index) => (
-          <Card key={index} className="p-6">
-            <div className="h-4 w-1/3 animate-pulse rounded bg-muted"></div>
-            <div className="mt-4 h-8 w-2/3 animate-pulse rounded bg-muted"></div>
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-3 w-full">
+        {[...Array(3)].map((_, index) => (
+          <Card key={index} className="overflow-hidden shadow-md">
+            <CardContent className="p-6">
+              <div className="h-4 w-1/3 animate-pulse rounded bg-muted"></div>
+              <div className="mt-4 h-8 w-2/3 animate-pulse rounded bg-muted"></div>
+            </CardContent>
           </Card>
         ))}
       </div>
@@ -77,70 +97,19 @@ export default function DashboardStats({ userRole }: DashboardStatsProps) {
 
   const renderStats = () => {
     switch (userRole) {
-      case 'ENTREPRENEUR':
+      case "ENTREPRENEUR":
         return (
           <>
             <StatCard
-              title="Total Startups"
-              value={stats.totalStartups}
+              title="My Applications"
+              value={stats.totalApplications || 0}
               icon={
-                <svg className="h-6 w-6 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
-                  />
-                </svg>
-              }
-            />
-            <StatCard
-              title="Reviews Received"
-              value={stats.reviewsReceived}
-              icon={
-                <svg className="h-6 w-6 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                  />
-                </svg>
-              }
-            />
-            <StatCard
-              title="Active Sponsors"
-              value={stats.activeSponsors}
-              icon={
-                <svg className="h-6 w-6 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
-                  />
-                </svg>
-              }
-            />
-            <StatCard
-              title="Total Funding"
-              value={`$${stats.totalFunding.toLocaleString()}`}
-              icon={
-                <svg className="h-6 w-6 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                  />
-                </svg>
-              }
-            />
-            <StatCard
-              title="Submissions In Review"
-              value={stats.submissionsInReview}
-              icon={
-                <svg className="h-6 w-6 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg
+                  className="h-6 w-6 text-blue-600"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -151,29 +120,58 @@ export default function DashboardStats({ userRole }: DashboardStatsProps) {
               }
             />
             <StatCard
-              title="Accepted Startups"
-              value={stats.acceptedStartups}
+              title="Approved Projects"
+              value={stats.approvedProjects || 0}
               icon={
-                <svg className="h-6 w-6 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg
+                  className="h-6 w-6 text-green-600"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
                     strokeWidth={2}
-                    d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"
+                    d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+              }
+            />
+            <StatCard
+              title="Open Opportunities"
+              value={stats.openOpportunities || 0}
+              icon={
+                <svg
+                  className="h-6 w-6 text-amber-600"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
                   />
                 </svg>
               }
             />
           </>
         );
-      case 'REVIEWER':
+      case "REVIEWER":
         return (
           <>
             <StatCard
               title="Assigned Reviews"
               value={stats.assignedReviews}
               icon={
-                <svg className="h-6 w-6 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg
+                  className="h-6 w-6 text-primary-600"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -187,7 +185,12 @@ export default function DashboardStats({ userRole }: DashboardStatsProps) {
               title="Completed Reviews"
               value={stats.completedReviews}
               icon={
-                <svg className="h-6 w-6 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg
+                  className="h-6 w-6 text-primary-600"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -201,7 +204,12 @@ export default function DashboardStats({ userRole }: DashboardStatsProps) {
               title="Pending Reviews"
               value={stats.pendingReviews}
               icon={
-                <svg className="h-6 w-6 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg
+                  className="h-6 w-6 text-primary-600"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -215,7 +223,12 @@ export default function DashboardStats({ userRole }: DashboardStatsProps) {
               title="Average Score Given"
               value={stats.avgScore.toFixed(1)}
               icon={
-                <svg className="h-6 w-6 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg
+                  className="h-6 w-6 text-primary-600"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -229,12 +242,17 @@ export default function DashboardStats({ userRole }: DashboardStatsProps) {
               title="Total Startups Reviewed"
               value={stats.totalStartupsReviewed}
               icon={
-                <svg className="h-6 w-6 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg
+                  className="h-6 w-6 text-primary-600"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
                     strokeWidth={2}
-                    d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
+                    d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2M7 7h10"
                   />
                 </svg>
               }
@@ -243,7 +261,12 @@ export default function DashboardStats({ userRole }: DashboardStatsProps) {
               title="Reviews This Month"
               value={stats.reviewsThisMonth}
               icon={
-                <svg className="h-6 w-6 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg
+                  className="h-6 w-6 text-primary-600"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -255,14 +278,19 @@ export default function DashboardStats({ userRole }: DashboardStatsProps) {
             />
           </>
         );
-      case 'SPONSOR':
+      case "SPONSOR":
         return (
           <>
             <StatCard
               title="Active Investments"
               value={stats.activeInvestments}
               icon={
-                <svg className="h-6 w-6 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg
+                  className="h-6 w-6 text-primary-600"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -276,7 +304,12 @@ export default function DashboardStats({ userRole }: DashboardStatsProps) {
               title="Total Funded"
               value={`$${stats.totalFunded.toLocaleString()}`}
               icon={
-                <svg className="h-6 w-6 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg
+                  className="h-6 w-6 text-primary-600"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -290,7 +323,12 @@ export default function DashboardStats({ userRole }: DashboardStatsProps) {
               title="Potential Deals"
               value={stats.potentialDeals}
               icon={
-                <svg className="h-6 w-6 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg
+                  className="h-6 w-6 text-primary-600"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -304,7 +342,12 @@ export default function DashboardStats({ userRole }: DashboardStatsProps) {
               title="Investment Returns"
               value={`$${stats.investmentReturns.toLocaleString()}`}
               icon={
-                <svg className="h-6 w-6 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg
+                  className="h-6 w-6 text-primary-600"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -318,7 +361,12 @@ export default function DashboardStats({ userRole }: DashboardStatsProps) {
               title="Sponsored Startups"
               value={stats.sponsoredStartups}
               icon={
-                <svg className="h-6 w-6 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg
+                  className="h-6 w-6 text-primary-600"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -332,7 +380,12 @@ export default function DashboardStats({ userRole }: DashboardStatsProps) {
               title="Upcoming Pitches"
               value={stats.upcomingPitches}
               icon={
-                <svg className="h-6 w-6 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg
+                  className="h-6 w-6 text-primary-600"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -344,14 +397,19 @@ export default function DashboardStats({ userRole }: DashboardStatsProps) {
             />
           </>
         );
-      case 'ADMIN':
+      case "ADMIN":
         return (
           <>
             <StatCard
               title="Total Users"
               value={stats.totalUsers}
               icon={
-                <svg className="h-6 w-6 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg
+                  className="h-6 w-6 text-primary-600"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -365,7 +423,12 @@ export default function DashboardStats({ userRole }: DashboardStatsProps) {
               title="Total Startups"
               value={stats.totalStartups}
               icon={
-                <svg className="h-6 w-6 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg
+                  className="h-6 w-6 text-primary-600"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -379,7 +442,12 @@ export default function DashboardStats({ userRole }: DashboardStatsProps) {
               title="Total Reviews"
               value={stats.totalReviews}
               icon={
-                <svg className="h-6 w-6 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg
+                  className="h-6 w-6 text-primary-600"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -393,7 +461,12 @@ export default function DashboardStats({ userRole }: DashboardStatsProps) {
               title="Total Sponsors"
               value={stats.totalSponsors}
               icon={
-                <svg className="h-6 w-6 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg
+                  className="h-6 w-6 text-primary-600"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -407,7 +480,12 @@ export default function DashboardStats({ userRole }: DashboardStatsProps) {
               title="Total Funding"
               value={`$${stats.totalFunding.toLocaleString()}`}
               icon={
-                <svg className="h-6 w-6 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg
+                  className="h-6 w-6 text-primary-600"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -421,7 +499,12 @@ export default function DashboardStats({ userRole }: DashboardStatsProps) {
               title="Active Users"
               value={stats.activeUsers}
               icon={
-                <svg className="h-6 w-6 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg
+                  className="h-6 w-6 text-primary-600"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
                   <path
                     strokeLinecap="round"
                     strokeLinejoin="round"
@@ -435,17 +518,71 @@ export default function DashboardStats({ userRole }: DashboardStatsProps) {
         );
       default:
         return (
-          <div className="col-span-full text-center">
-            <p className="text-lg text-gray-500 dark:text-gray-400">
-              Welcome to the Startup Call Management System dashboard. Please complete your profile to get started.
-            </p>
-          </div>
+          <>
+            <StatCard
+              title="Applications"
+              value={0}
+              icon={
+                <svg
+                  className="h-6 w-6 text-primary-600"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
+                  />
+                </svg>
+              }
+            />
+            <StatCard
+              title="Opportunities"
+              value={0}
+              icon={
+                <svg
+                  className="h-6 w-6 text-primary-600"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
+                  />
+                </svg>
+              }
+            />
+            <StatCard
+              title="Projects"
+              value={0}
+              icon={
+                <svg
+                  className="h-6 w-6 text-primary-600"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+              }
+            />
+          </>
         );
     }
   };
 
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="grid grid-cols-1 gap-6 sm:grid-cols-3 w-full">
       {renderStats()}
     </div>
   );
@@ -459,12 +596,20 @@ type StatCardProps = {
 
 function StatCard({ title, value, icon }: StatCardProps) {
   return (
-    <Card className="transition-all duration-200 hover:shadow-md">
-      <CardContent className="flex items-center p-6">
-        {icon && <div className="flex-shrink-0 text-primary">{icon}</div>}
-        <div className="ml-3">
-          <p className="text-sm font-medium text-muted-foreground">{title}</p>
-          <p className="text-3xl font-bold">{value}</p>
+    <Card className="overflow-hidden shadow-md">
+      <CardContent className="p-6">
+        <div className="flex items-center justify-between">
+          <div className="mr-4">
+            <p className="text-sm font-medium text-muted-foreground mb-1">
+              {title}
+            </p>
+            <p className="text-2xl sm:text-3xl font-semibold truncate">
+              {value}
+            </p>
+          </div>
+          <div className="rounded-full bg-primary-50 p-3 flex-shrink-0">
+            {icon}
+          </div>
         </div>
       </CardContent>
     </Card>
