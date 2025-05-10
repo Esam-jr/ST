@@ -47,40 +47,43 @@ export default async function handler(
     // Get the entrepreneur's user ID from the session
     const userId = session.user.id;
 
-    // Find the entrepreneur's active startup with all necessary relations
-    const startup = await prisma.startup.findFirst({
+    // First, find any approved applications from this entrepreneur
+    const approvedApplications = await prisma.startupCallApplication.findMany({
       where: {
-        founderId: userId,
-        status: Status.ACCEPTED,
+        userId: userId,
+        status: StartupCallApplicationStatus.APPROVED,
       },
       include: {
-        callApplications: {
-          where: {
-            status: StartupCallApplicationStatus.APPROVED,
-          },
-          include: {
-            call: {
-              select: {
-                id: true,
-                title: true,
-              },
-            },
+        call: {
+          select: {
+            id: true,
+            title: true,
           },
         },
-        tasks: true,
-        milestones: {
-          orderBy: {
-            dueDate: "asc",
-          },
-        },
+        startup: true,
       },
     });
 
-    if (!startup || !startup.callApplications[0]) {
-      return res.status(404).json({ message: "No active project found" });
+    // If no approved applications, return 404
+    if (!approvedApplications || approvedApplications.length === 0) {
+      return res
+        .status(404)
+        .json({ message: "No approved applications found" });
     }
 
-    const approvedApplication = startup.callApplications[0];
+    // Use the first approved application
+    const approvedApplication = approvedApplications[0];
+
+    // Make sure we have a linked startup
+    if (!approvedApplication.startup) {
+      return res
+        .status(404)
+        .json({ message: "No startup linked to the approved application" });
+    }
+
+    const startup = approvedApplication.startup;
+
+    // Fetch budget information
     const budget = await prisma.budget.findFirst({
       where: {
         startupCallId: approvedApplication.call.id,
@@ -100,6 +103,22 @@ export default async function handler(
         .json({ message: "No budget found for this project" });
     }
 
+    // Fetch tasks and milestones
+    const tasks = await prisma.task.findMany({
+      where: {
+        startupId: startup.id,
+      },
+    });
+
+    const milestones = await prisma.milestone.findMany({
+      where: {
+        startupId: startup.id,
+      },
+      orderBy: {
+        dueDate: "asc",
+      },
+    });
+
     // Calculate total spent amount from expenses
     const spent = budget.expenses.reduce(
       (total, expense) => total + expense.amount,
@@ -107,9 +126,9 @@ export default async function handler(
     );
 
     // Calculate task statistics
-    const totalTasks = startup.tasks.length;
-    const completedTasks = startup.tasks.filter(
-      (task: { status: string }) => task.status === "COMPLETED"
+    const totalTasks = tasks.length;
+    const completedTasks = tasks.filter(
+      (task) => task.status === "COMPLETED"
     ).length;
 
     // Format the response
@@ -129,19 +148,12 @@ export default async function handler(
         pending: totalTasks - completedTasks,
       },
       timeline: {
-        milestones: startup.milestones.map(
-          (milestone: {
-            id: string;
-            title: string;
-            dueDate: Date;
-            status: string;
-          }) => ({
-            id: milestone.id,
-            title: milestone.title,
-            dueDate: milestone.dueDate.toISOString(),
-            status: milestone.status.toLowerCase(),
-          })
-        ),
+        milestones: milestones.map((milestone) => ({
+          id: milestone.id,
+          title: milestone.title,
+          dueDate: milestone.dueDate.toISOString(),
+          status: milestone.status.toLowerCase(),
+        })),
       },
     };
 
