@@ -1,61 +1,78 @@
-import { cn } from "@/lib/utils";
-import { Home, ClipboardList, Settings } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { LayoutDashboard, FileText, Target, Briefcase } from "lucide-react";
 
 interface DashboardSidebarProps {
-  activeTab: string;
-  onTabChange: (tab: string) => void;
-  showProjectManagement: boolean;
+  activeView: string;
+  setActiveView: (view: string) => void;
+  hasActiveProject: boolean;
 }
 
-export function DashboardSidebar({
-  activeTab,
-  onTabChange,
-  showProjectManagement,
+export default function DashboardSidebar({
+  activeView,
+  setActiveView,
+  hasActiveProject,
 }: DashboardSidebarProps) {
   return (
-    <div className="w-64 flex-shrink-0">
-      <nav className="space-y-1">
-        <button
-          onClick={() => onTabChange("overview")}
-          className={cn(
-            "w-full flex items-center px-3 py-2 text-sm font-medium rounded-md",
-            activeTab === "overview"
-              ? "bg-gray-100 text-gray-900"
-              : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
-          )}
-        >
-          <Home className="mr-3 h-5 w-5" />
-          Overview
-        </button>
-
-        {showProjectManagement && (
-          <button
-            onClick={() => onTabChange("project-management")}
-            className={cn(
-              "w-full flex items-center px-3 py-2 text-sm font-medium rounded-md",
-              activeTab === "project-management"
-                ? "bg-gray-100 text-gray-900"
-                : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
-            )}
+    <div className="w-64 flex-shrink-0 hidden md:block">
+      <div className="sticky top-24 py-4 pr-4">
+        <h2 className="text-muted-foreground font-medium mb-4 px-3">
+          Navigation
+        </h2>
+        <nav className="space-y-2">
+          <Button
+            variant={activeView === "overview" ? "default" : "ghost"}
+            className={`w-full justify-start ${
+              activeView === "overview"
+                ? "bg-primary text-primary-foreground"
+                : "hover:bg-muted"
+            }`}
+            onClick={() => setActiveView("overview")}
           >
-            <ClipboardList className="mr-3 h-5 w-5" />
-            Project Management
-          </button>
-        )}
-
-        <button
-          onClick={() => onTabChange("settings")}
-          className={cn(
-            "w-full flex items-center px-3 py-2 text-sm font-medium rounded-md",
-            activeTab === "settings"
-              ? "bg-gray-100 text-gray-900"
-              : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+            <LayoutDashboard className="mr-2 h-4 w-4" />
+            Overview
+          </Button>
+          <Button
+            variant={activeView === "applications" ? "default" : "ghost"}
+            className={`w-full justify-start ${
+              activeView === "applications"
+                ? "bg-primary text-primary-foreground"
+                : "hover:bg-muted"
+            }`}
+            onClick={() => setActiveView("applications")}
+          >
+            <FileText className="mr-2 h-4 w-4" />
+            My Applications
+          </Button>
+          <Button
+            variant={activeView === "opportunities" ? "default" : "ghost"}
+            className={`w-full justify-start ${
+              activeView === "opportunities"
+                ? "bg-primary text-primary-foreground"
+                : "hover:bg-muted"
+            }`}
+            onClick={() => setActiveView("opportunities")}
+          >
+            <Target className="mr-2 h-4 w-4" />
+            Opportunities
+          </Button>
+          {hasActiveProject && (
+            <Button
+              variant={
+                activeView === "project-management" ? "default" : "ghost"
+              }
+              className={`w-full justify-start ${
+                activeView === "project-management"
+                  ? "bg-primary text-primary-foreground"
+                  : "hover:bg-muted"
+              }`}
+              onClick={() => setActiveView("project-management")}
+            >
+              <Briefcase className="mr-2 h-4 w-4" />
+              Project Management
+            </Button>
           )}
-        >
-          <Settings className="mr-3 h-5 w-5" />
-          Settings
-        </button>
-      </nav>
+        </nav>
+      </div>
     </div>
   );
 }
