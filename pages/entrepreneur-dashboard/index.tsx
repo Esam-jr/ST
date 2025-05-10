@@ -171,10 +171,33 @@ export default function EntrepreneurDashboard() {
 
         setOpenCalls(callsResponse.data);
 
-        // Check for active project
+        // Check for active project - looking for approved applications
         try {
-          await axios.get("/api/entrepreneur/project");
-          setHasActiveProject(true);
+          // First check if the entrepreneur has any approved applications
+          const hasApprovedApp = applicationsResponse.data.some(
+            (app) => app.status === "APPROVED"
+          );
+
+          if (hasApprovedApp) {
+            // If there's an approved application, try to get the project data
+            await axios.get("/api/entrepreneur/project");
+
+            // Check if the hasActiveProject was previously false and is now true
+            if (!hasActiveProject) {
+              // Only show notification if this is a change in status
+              toast({
+                title: "Project Management Available",
+                description:
+                  "Your startup was approved! Project management tools are now available.",
+                variant: "default",
+              });
+            }
+
+            setHasActiveProject(true);
+          } else {
+            // No approved applications found
+            setHasActiveProject(false);
+          }
         } catch (error) {
           console.error("No active project found:", error);
           setHasActiveProject(false);
@@ -349,22 +372,42 @@ export default function EntrepreneurDashboard() {
                       <Target className="mr-2 h-4 w-4" />
                       Opportunities
                     </Button>
+
                     {hasActiveProject && (
-                      <Button
-                        variant={
-                          activeView === "project-management"
-                            ? "default"
-                            : "ghost"
-                        }
-                        className="w-full justify-start"
-                        onClick={() => {
-                          setActiveView("project-management");
-                          setMobileMenuOpen(false);
-                        }}
-                      >
-                        <Briefcase className="mr-2 h-4 w-4" />
-                        Project Management
-                      </Button>
+                      <>
+                        <div className="relative py-2">
+                          <div className="absolute inset-0 flex items-center">
+                            <div className="w-full border-t border-muted"></div>
+                          </div>
+                        </div>
+
+                        <div className="py-1">
+                          <div className="flex items-center text-sm text-green-600">
+                            <CheckCircle className="h-4 w-4 mr-1" />
+                            <span>Approved Startup</span>
+                          </div>
+                        </div>
+
+                        <Button
+                          variant={
+                            activeView === "project-management"
+                              ? "default"
+                              : "ghost"
+                          }
+                          className={`w-full justify-start ${
+                            activeView === "project-management"
+                              ? "bg-primary text-primary-foreground"
+                              : "border border-green-200 bg-green-50 text-green-700"
+                          }`}
+                          onClick={() => {
+                            setActiveView("project-management");
+                            setMobileMenuOpen(false);
+                          }}
+                        >
+                          <Briefcase className="mr-2 h-4 w-4" />
+                          Project Management
+                        </Button>
+                      </>
                     )}
                   </nav>
                 </div>
