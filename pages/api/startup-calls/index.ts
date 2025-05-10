@@ -1,18 +1,21 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
-import { getServerSession } from 'next-auth/next';
-import { authOptions } from '../auth/[...nextauth]';
-import prisma from '@/lib/prisma';
-import withPrisma from '@/lib/prisma-wrapper';
-import { StartupCallStatus, StartupCallApplicationStatus } from '@prisma/client';
+import type { NextApiRequest, NextApiResponse } from "next";
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "../auth/[...nextauth]";
+import prisma from "@/lib/prisma";
+import withPrisma from "@/lib/prisma-wrapper";
+import {
+  StartupCallStatus,
+  StartupCallApplicationStatus,
+} from "@prisma/client";
 
 // Define enum for application status
 enum ApplicationStatus {
-  NOT_APPLIED = 'NOT_APPLIED',
-  SUBMITTED = 'SUBMITTED',
-  UNDER_REVIEW = 'UNDER_REVIEW',
-  APPROVED = 'APPROVED',
-  REJECTED = 'REJECTED',
-  WITHDRAWN = 'WITHDRAWN'
+  NOT_APPLIED = "NOT_APPLIED",
+  SUBMITTED = "SUBMITTED",
+  UNDER_REVIEW = "UNDER_REVIEW",
+  APPROVED = "APPROVED",
+  REJECTED = "REJECTED",
+  WITHDRAWN = "WITHDRAWN",
 }
 
 // Define interface for application status mapping
@@ -56,48 +59,68 @@ export default async function handler(
   const userRole = session?.user?.role;
 
   // For write operations, only allow ADMIN users
-  if (req.method !== 'GET' && userRole !== 'ADMIN') {
-    return res.status(403).json({ message: 'You do not have permission to perform this action' });
+  if (req.method !== "GET" && userRole !== "ADMIN") {
+    return res
+      .status(403)
+      .json({ message: "You do not have permission to perform this action" });
   }
 
   // Handle GET request
-  if (req.method === 'GET') {
+  if (req.method === "GET") {
     try {
+      const { status, expired } = req.query;
+      const today = new Date();
+
+      // Set up the filter for calls
+      const filter: any = {};
+
+      // Filter by status if provided
+      if (status) {
+        filter.status = status as StartupCallStatus;
+      }
+
+      // Filter out expired calls if requested
+      if (expired === "false") {
+        filter.applicationDeadline = {
+          gte: today,
+        };
+      }
+
       // Use withPrisma wrapper to handle prepared statement errors with automatic retries
       const calls = await withPrisma(async () => {
         return prisma.startupCall.findMany({
-          where: {
-            // You can add additional filters based on query params
-            // Example: status: req.query.status as StartupCallStatus
-          },
+          where: filter,
           orderBy: {
-            publishedDate: 'desc'
+            publishedDate: "desc",
           },
           include: {
             // Include application count
             _count: {
               select: {
-                applications: true
-              }
+                applications: true,
+              },
             },
             // For each call, check if the user has applied
-            applications: userId && userRole === 'ENTREPRENEUR' ? {
-              where: {
-                userId: userId
-              },
-              select: {
-                id: true,
-                status: true
-              }
-            } : false
-          }
+            applications:
+              userId && userRole === "ENTREPRENEUR"
+                ? {
+                    where: {
+                      userId: userId,
+                    },
+                    select: {
+                      id: true,
+                      status: true,
+                    },
+                  }
+                : false,
+          },
         });
       });
 
       // Transform the data to match the expected format
-      const formattedCalls = calls.map(call => {
+      const formattedCalls = calls.map((call) => {
         // Check if the entrepreneur has applied to this call
-        let applicationStatus = 'NOT_APPLIED';
+        let applicationStatus = "NOT_APPLIED";
         if (call.applications && call.applications.length > 0) {
           applicationStatus = call.applications[0].status;
         }
@@ -108,7 +131,9 @@ export default async function handler(
           description: call.description,
           status: call.status,
           applicationDeadline: call.applicationDeadline.toISOString(),
-          publishedDate: call.publishedDate ? call.publishedDate.toISOString() : null,
+          publishedDate: call.publishedDate
+            ? call.publishedDate.toISOString()
+            : null,
           industry: call.industry,
           location: call.location,
           fundingAmount: call.fundingAmount,
@@ -117,20 +142,27 @@ export default async function handler(
           selectionProcess: call.selectionProcess,
           aboutSponsor: call.aboutSponsor,
           applicationProcess: call.applicationProcess,
-          applicationStatus: userId && userRole === 'ENTREPRENEUR' ? applicationStatus : undefined,
-          _count: call._count
+          applicationStatus:
+            userId && userRole === "ENTREPRENEUR"
+              ? applicationStatus
+              : undefined,
+          _count: call._count,
+          isExpired: new Date(call.applicationDeadline) < today,
         };
       });
 
       return res.status(200).json(formattedCalls);
     } catch (error) {
-      console.error('Error fetching startup calls:', error);
-      return res.status(500).json({ message: 'Error fetching startup calls', error: String(error) });
+      console.error("Error fetching startup calls:", error);
+      return res.status(500).json({
+        message: "Error fetching startup calls",
+        error: String(error),
+      });
     }
   }
-  
+
   // Handle POST request (Create new startup call)
-  if (req.method === 'POST') {
+  if (req.method === "POST") {
     try {
       const {
         title,
@@ -147,43 +179,56 @@ export default async function handler(
         aboutSponsor,
         applicationProcess,
       } = req.body;
-      
+
       // Validate required fields
-      if (!title || !description || !applicationDeadline || !industry || !location || !applicationProcess) {
-        return res.status(400).json({ message: 'Missing required fields' });
+      if (
+        !title ||
+        !description ||
+        !applicationDeadline ||
+        !industry ||
+        !location ||
+        !applicationProcess
+      ) {
+        return res.status(400).json({ message: "Missing required fields" });
       }
-      
+
       // Create new startup call
       const newCall = await withPrisma(async () => {
         return prisma.startupCall.create({
           data: {
             title,
             description,
-            status: status || 'DRAFT',
+            status: status || "DRAFT",
             applicationDeadline: new Date(applicationDeadline),
             publishedDate: publishedDate ? new Date(publishedDate) : null,
             industry,
             location,
             fundingAmount,
             requirements: Array.isArray(requirements) ? requirements : [],
-            eligibilityCriteria: Array.isArray(eligibilityCriteria) ? eligibilityCriteria : [],
-            selectionProcess: Array.isArray(selectionProcess) ? selectionProcess : [],
+            eligibilityCriteria: Array.isArray(eligibilityCriteria)
+              ? eligibilityCriteria
+              : [],
+            selectionProcess: Array.isArray(selectionProcess)
+              ? selectionProcess
+              : [],
             aboutSponsor,
             applicationProcess,
             createdBy: {
-              connect: { id: userId }
-            }
-          }
+              connect: { id: userId },
+            },
+          },
         });
       });
-      
+
       return res.status(201).json(newCall);
     } catch (error) {
-      console.error('Error creating startup call:', error);
-      return res.status(500).json({ message: 'Error creating startup call', error: String(error) });
+      console.error("Error creating startup call:", error);
+      return res
+        .status(500)
+        .json({ message: "Error creating startup call", error: String(error) });
     }
   }
-  
+
   // Handle other methods (PUT, DELETE) in the [id].ts file
-  return res.status(405).json({ message: 'Method not allowed' });
-} 
+  return res.status(405).json({ message: "Method not allowed" });
+}

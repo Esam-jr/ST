@@ -15,9 +15,6 @@ export default function DashboardSidebar({
   return (
     <div className="w-64 flex-shrink-0 hidden md:block">
       <div className="sticky top-24 py-4 pr-4">
-        <h2 className="text-muted-foreground font-medium mb-4 px-3">
-          Navigation
-        </h2>
         <nav className="space-y-2">
           <Button
             variant={activeView === "overview" ? "default" : "ghost"}
