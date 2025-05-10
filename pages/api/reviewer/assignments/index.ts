@@ -1,7 +1,8 @@
 import { NextApiRequest, NextApiResponse } from "next";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "../../auth/[...nextauth]";
 import prisma from "@/lib/prisma";
+import withPrisma from "@/lib/prisma-wrapper";
 
 type ReviewStatus =
   | "PENDING"
@@ -43,52 +44,81 @@ export default async function handler(
     // Get session and check if user is authenticated
     const session = await getServerSession(req, res, authOptions);
 
-    if (!session) {
-      return res.status(401).json({ message: "Unauthorized" });
+    if (!session || !session.user) {
+      return res.status(401).json({ message: "Not authenticated" });
     }
 
     // Check if the user is a reviewer
-    if (session.user.role !== "REVIEWER") {
-      return res.status(403).json({ message: "Forbidden" });
+    const user = await withPrisma(() =>
+      prisma.user.findUnique({
+        where: { id: session.user.id },
+        select: { id: true, role: true },
+      })
+    );
+
+    if (!user || user.role !== "REVIEWER") {
+      return res
+        .status(403)
+        .json({ message: "Only reviewers can access their assignments" });
     }
 
-    const assignments = await prisma.$queryRaw`
-      SELECT 
-        ra.id, ra.status, ra."assignedAt", ra."dueDate", ra."completedAt",
-        a.id as "applicationId", a."startupName", a.industry, a.stage, a.status as "applicationStatus", a."submittedAt",
-        c.id as "callId", c.title as "callTitle"
-      FROM "ReviewAssignment" ra
-      JOIN "StartupCallApplication" a ON ra."applicationId" = a.id
-      JOIN "StartupCall" c ON a."callId" = c.id
-      WHERE ra."reviewerId" = ${session.user.id}
-      ORDER BY ra."assignedAt" DESC
-    `;
+    // Get all review assignments for the reviewer
+    const assignments = await prisma.applicationReview.findMany({
+      where: {
+        reviewerId: session.user.id,
+      },
+      include: {
+        application: {
+          select: {
+            id: true,
+            startupName: true,
+            industry: true,
+            stage: true,
+            status: true,
+            submittedAt: true,
+            call: {
+              select: {
+                id: true,
+                title: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: [
+        {
+          status: "asc",
+        },
+        {
+          dueDate: "asc",
+        },
+      ],
+    });
 
-    const formattedAssignments: FormattedAssignment[] = (
-      assignments as any[]
-    ).map((assignment) => ({
+    // Format the response
+    const formattedAssignments = assignments.map((assignment) => ({
       id: assignment.id,
       status: assignment.status,
-      assignedAt: assignment.assignedAt.toISOString(),
-      dueDate: assignment.dueDate?.toISOString() || null,
-      completedAt: assignment.completedAt?.toISOString() || null,
+      assignedAt: assignment.assignedAt,
+      dueDate: assignment.dueDate,
+      completedAt: assignment.completedAt,
       application: {
-        id: assignment.applicationId,
-        startupName: assignment.startupName,
-        industry: assignment.industry,
-        stage: assignment.stage,
-        status: assignment.applicationStatus,
-        submittedAt: assignment.submittedAt.toISOString(),
+        id: assignment.application.id,
+        startupName: assignment.application.startupName,
+        industry: assignment.application.industry,
+        stage: assignment.application.stage,
+        status: assignment.application.status,
+        submittedAt: assignment.application.submittedAt,
         call: {
-          id: assignment.callId,
-          title: assignment.callTitle,
+          id: assignment.application.call.id,
+          title: assignment.application.call.title,
         },
       },
     }));
 
     return res.status(200).json(formattedAssignments);
   } catch (error) {
-    console.error("Error fetching reviewer assignments:", error);
+    console.error("Error fetching review assignments:", error);
     return res.status(500).json({ message: "Internal server error" });
   }
 }
