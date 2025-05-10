@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/router';
-import { useSession } from 'next-auth/react';
-import axios from 'axios';
-import Layout from '@/components/layout/Layout';
+import { useState, useEffect } from "react";
+import { useRouter } from "next/router";
+import { useSession } from "next-auth/react";
+import axios from "axios";
+import Layout from "@/components/layout/Layout";
 import {
   Card,
   CardContent,
@@ -10,11 +10,11 @@ import {
   CardFooter,
   CardHeader,
   CardTitle,
-} from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Calendar,
   Clock,
@@ -26,14 +26,24 @@ import {
   CheckCircle,
   PlusCircle,
   Activity,
-} from 'lucide-react';
-import LoadingSpinner from '@/components/ui/LoadingSpinner';
-import { useToast } from '@/hooks/use-toast';
-import DashboardStats from '@/components/dashboard/DashboardStats';
+  LayoutDashboard,
+  Briefcase,
+  Target,
+} from "lucide-react";
+import LoadingSpinner from "@/components/ui/LoadingSpinner";
+import { useToast } from "@/hooks/use-toast";
+import DashboardStats from "@/components/dashboard/DashboardStats";
+import ProjectManagement from "@/components/entrepreneur/ProjectManagement";
+import DashboardSidebar from "@/components/entrepreneur/DashboardSidebar";
 
 // Define types
-type CallStatus = 'DRAFT' | 'PUBLISHED' | 'CLOSED' | 'ARCHIVED';
-type ApplicationStatus = 'SUBMITTED' | 'UNDER_REVIEW' | 'APPROVED' | 'REJECTED' | 'WITHDRAWN';
+type CallStatus = "DRAFT" | "PUBLISHED" | "CLOSED" | "ARCHIVED";
+type ApplicationStatus =
+  | "SUBMITTED"
+  | "UNDER_REVIEW"
+  | "APPROVED"
+  | "REJECTED"
+  | "WITHDRAWN";
 
 interface StartupCall {
   id: string;
@@ -54,7 +64,7 @@ interface StartupCall {
     industry: string;
     location: string;
     fundingAmount: string;
-  }
+  };
 }
 
 interface Application {
@@ -75,59 +85,76 @@ interface Application {
     industry: string;
     location: string;
     fundingAmount?: string;
-  }
+  };
 }
 
 export default function EntrepreneurDashboard() {
   const router = useRouter();
   const { data: session, status: sessionStatus } = useSession();
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeView, setActiveView] = useState("overview");
   const [applications, setApplications] = useState<Application[]>([]);
   const [openCalls, setOpenCalls] = useState<StartupCall[]>([]);
   const [loading, setLoading] = useState(true);
+  const [hasActiveProject, setHasActiveProject] = useState(false);
   const { toast } = useToast();
 
   // Redirect if not authenticated or not entrepreneur
   useEffect(() => {
-    if (sessionStatus === 'loading') return;
-    
-    if (sessionStatus === 'unauthenticated') {
+    if (sessionStatus === "loading") return;
+
+    if (sessionStatus === "unauthenticated") {
       toast({
         title: "Authentication Required",
         description: "Please sign in to access the entrepreneur dashboard",
         variant: "default",
       });
-      router.push('/auth/signin?callbackUrl=/entrepreneur-dashboard');
+      router.push("/auth/signin?callbackUrl=/entrepreneur-dashboard");
       return;
     }
-    
-    if (session?.user?.role !== 'ENTREPRENEUR') {
+
+    if (session?.user?.role !== "ENTREPRENEUR") {
       toast({
         title: "Access Denied",
         description: "Only entrepreneurs can access this dashboard",
         variant: "destructive",
       });
-      router.push('/dashboard');
+      router.push("/dashboard");
       return;
     }
   }, [sessionStatus, session, router, toast]);
 
-  // Fetch applications and open calls data
+  // Fetch applications, open calls, and check for active project
   useEffect(() => {
-    if (sessionStatus !== 'authenticated' || session?.user?.role !== 'ENTREPRENEUR') return;
-    
+    if (
+      sessionStatus !== "authenticated" ||
+      session?.user?.role !== "ENTREPRENEUR"
+    )
+      return;
+
     const fetchData = async () => {
       setLoading(true);
       try {
         // Fetch the user's applications
-        const applicationsResponse = await axios.get('/api/applications/my-applications');
+        const applicationsResponse = await axios.get(
+          "/api/applications/my-applications"
+        );
         setApplications(applicationsResponse.data);
-        
+
         // Fetch open startup calls
-        const callsResponse = await axios.get('/api/startup-calls?status=PUBLISHED');
+        const callsResponse = await axios.get(
+          "/api/startup-calls?status=PUBLISHED"
+        );
         setOpenCalls(callsResponse.data);
+
+        // Check for active project
+        try {
+          await axios.get("/api/entrepreneur/project");
+          setHasActiveProject(true);
+        } catch (error) {
+          setHasActiveProject(false);
+        }
       } catch (error) {
-        console.error('Error fetching dashboard data:', error);
+        console.error("Error fetching dashboard data:", error);
         toast({
           title: "Error",
           description: "Failed to load dashboard data",
@@ -137,16 +164,16 @@ export default function EntrepreneurDashboard() {
         setLoading(false);
       }
     };
-    
+
     fetchData();
   }, [sessionStatus, session, toast]);
 
   // Helper functions
   const formatDate = (date: string) => {
-    return new Date(date).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
+    return new Date(date).toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
     });
   };
 
@@ -160,16 +187,36 @@ export default function EntrepreneurDashboard() {
 
   const getStatusBadge = (status: ApplicationStatus) => {
     switch (status) {
-      case 'SUBMITTED':
-        return <Badge className="bg-blue-50 text-blue-600 hover:bg-blue-50">Submitted</Badge>;
-      case 'UNDER_REVIEW':
-        return <Badge className="bg-purple-50 text-purple-600 hover:bg-purple-50">Under Review</Badge>;
-      case 'APPROVED':
-        return <Badge className="bg-green-50 text-green-600 hover:bg-green-50">Approved</Badge>;
-      case 'REJECTED':
-        return <Badge className="bg-red-50 text-red-600 hover:bg-red-50">Rejected</Badge>;
-      case 'WITHDRAWN':
-        return <Badge className="bg-slate-50 text-slate-600 hover:bg-slate-50">Withdrawn</Badge>;
+      case "SUBMITTED":
+        return (
+          <Badge className="bg-blue-50 text-blue-600 hover:bg-blue-50">
+            Submitted
+          </Badge>
+        );
+      case "UNDER_REVIEW":
+        return (
+          <Badge className="bg-purple-50 text-purple-600 hover:bg-purple-50">
+            Under Review
+          </Badge>
+        );
+      case "APPROVED":
+        return (
+          <Badge className="bg-green-50 text-green-600 hover:bg-green-50">
+            Approved
+          </Badge>
+        );
+      case "REJECTED":
+        return (
+          <Badge className="bg-red-50 text-red-600 hover:bg-red-50">
+            Rejected
+          </Badge>
+        );
+      case "WITHDRAWN":
+        return (
+          <Badge className="bg-slate-50 text-slate-600 hover:bg-slate-50">
+            Withdrawn
+          </Badge>
+        );
       default:
         return <Badge variant="outline">Unknown</Badge>;
     }
@@ -190,379 +237,455 @@ export default function EntrepreneurDashboard() {
       <div className="min-h-screen bg-muted/10">
         <header className="bg-card/80 backdrop-blur-sm shadow">
           <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-            <h1 className="text-2xl font-bold tracking-tight">Entrepreneur Dashboard</h1>
+            <h1 className="text-2xl font-bold tracking-tight">
+              Entrepreneur Dashboard
+            </h1>
             <p className="text-muted-foreground mt-1">
               Manage your startup applications and track your progress
             </p>
           </div>
         </header>
-        
-        <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-          <Tabs defaultValue={activeTab} onValueChange={setActiveTab} className="space-y-8">
-            <div className="flex justify-between items-center">
-              <TabsList>
-                <TabsTrigger value="overview">Overview</TabsTrigger>
-                <TabsTrigger value="applications">My Applications</TabsTrigger>
-                <TabsTrigger value="opportunities">Opportunities</TabsTrigger>
-              </TabsList>
-              
-              <Button onClick={() => router.push('/startup-calls')}>
-                <Plus className="mr-1.5 h-4 w-4" />
-                Apply to New Call
-              </Button>
-            </div>
-            
-            {/* Overview Tab */}
-            <TabsContent value="overview" className="space-y-6">
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                <DashboardStats userRole="ENTREPRENEUR" />
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Recent Applications */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Recent Applications</CardTitle>
-                    <CardDescription>Your most recent startup call applications</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    {applications.length === 0 ? (
-                      <div className="text-center py-8">
-                        <FileText className="h-12 w-12 mx-auto text-muted-foreground opacity-50" />
-                        <p className="mt-2 text-muted-foreground">No applications yet</p>
-                        <Button 
-                          variant="outline" 
-                          className="mt-4"
-                          onClick={() => router.push('/startup-calls')}
+
+        <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+          <div className="flex gap-8">
+            <DashboardSidebar
+              activeView={activeView}
+              setActiveView={setActiveView}
+              hasActiveProject={hasActiveProject}
+            />
+
+            {/* Main Content */}
+            <div className="flex-1">
+              {activeView === "overview" && (
+                <div className="space-y-6">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    <DashboardStats userRole="ENTREPRENEUR" />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Recent Applications */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Recent Applications</CardTitle>
+                        <CardDescription>
+                          Your most recent startup call applications
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        {applications.length === 0 ? (
+                          <div className="text-center py-8">
+                            <FileText className="h-12 w-12 mx-auto text-muted-foreground opacity-50" />
+                            <p className="mt-2 text-muted-foreground">
+                              No applications yet
+                            </p>
+                            <Button
+                              variant="outline"
+                              className="mt-4"
+                              onClick={() => router.push("/startup-calls")}
+                            >
+                              Browse Open Calls
+                            </Button>
+                          </div>
+                        ) : (
+                          applications.slice(0, 3).map((app) => (
+                            <div
+                              key={app.id}
+                              className="flex items-start justify-between border-b border-muted pb-4 last:border-0 last:pb-0"
+                            >
+                              <div>
+                                <div className="font-medium">
+                                  {app.startupName}
+                                </div>
+                                <div className="text-sm text-muted-foreground">
+                                  {app.call.title} •{" "}
+                                  {formatDate(app.submittedAt)}
+                                </div>
+                              </div>
+                              <div className="flex flex-col items-end gap-2">
+                                {getStatusBadge(app.status)}
+                                <div className="text-xs text-muted-foreground">
+                                  Reviews: {app.reviewsCompleted}/
+                                  {app.reviewsTotal}
+                                </div>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </CardContent>
+                      {applications.length > 0 && (
+                        <CardFooter className="justify-end">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setActiveView("applications")}
+                          >
+                            View All Applications
+                            <ArrowRight className="ml-1.5 h-4 w-4" />
+                          </Button>
+                        </CardFooter>
+                      )}
+                    </Card>
+
+                    {/* Open Opportunities */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Open Opportunities</CardTitle>
+                        <CardDescription>
+                          Startup calls accepting applications
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        {openCalls.length === 0 ? (
+                          <div className="text-center py-8">
+                            <Building className="h-12 w-12 mx-auto text-muted-foreground opacity-50" />
+                            <p className="mt-2 text-muted-foreground">
+                              No open calls at the moment
+                            </p>
+                            <Button
+                              variant="outline"
+                              className="mt-4"
+                              onClick={() => router.push("/startup-calls")}
+                            >
+                              Check All Calls
+                            </Button>
+                          </div>
+                        ) : (
+                          openCalls.slice(0, 3).map((call) => (
+                            <div
+                              key={call.id}
+                              className="flex items-start justify-between border-b border-muted pb-4 last:border-0 last:pb-0"
+                            >
+                              <div>
+                                <div className="font-medium">{call.title}</div>
+                                <div className="text-sm text-muted-foreground">
+                                  {call.industry} • {call.location}
+                                </div>
+                              </div>
+                              <div className="flex flex-col items-end gap-2">
+                                {call.applicationDeadline && (
+                                  <div className="text-xs text-amber-500 flex items-center">
+                                    <Clock className="h-3 w-3 mr-1" />
+                                    {getDaysLeft(call.applicationDeadline)} days
+                                    left
+                                  </div>
+                                )}
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() =>
+                                    router.push(`/startup-calls/${call.id}`)
+                                  }
+                                >
+                                  View
+                                </Button>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </CardContent>
+                      {openCalls.length > 0 && (
+                        <CardFooter className="justify-end">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => router.push("/startup-calls")}
+                          >
+                            View All Opportunities
+                            <ArrowRight className="ml-1.5 h-4 w-4" />
+                          </Button>
+                        </CardFooter>
+                      )}
+                    </Card>
+                  </div>
+
+                  {/* Quick Actions */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Quick Actions</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                        <Button
+                          variant="outline"
+                          className="h-auto flex-col items-center justify-center py-6 space-y-2"
+                          onClick={() => router.push("/startup-calls")}
+                        >
+                          <PlusCircle className="h-6 w-6" />
+                          <span>Apply to Call</span>
+                        </Button>
+                        <Button
+                          variant="outline"
+                          className="h-auto flex-col items-center justify-center py-6 space-y-2"
+                          onClick={() => setActiveView("applications")}
+                        >
+                          <FileText className="h-6 w-6" />
+                          <span>View Applications</span>
+                        </Button>
+                        <Button
+                          variant="outline"
+                          className="h-auto flex-col items-center justify-center py-6 space-y-2"
+                          onClick={() => router.push("/profile")}
+                        >
+                          <Building className="h-6 w-6" />
+                          <span>Update Profile</span>
+                        </Button>
+                        <Button
+                          variant="outline"
+                          className="h-auto flex-col items-center justify-center py-6 space-y-2"
+                          onClick={() => router.push("/dashboard")}
+                        >
+                          <Activity className="h-6 w-6" />
+                          <span>View Analytics</span>
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+
+              {activeView === "applications" && (
+                <div className="space-y-6">
+                  <div className="flex items-center justify-between mb-6">
+                    <h2 className="text-xl font-semibold">My Applications</h2>
+                    <Button
+                      variant="outline"
+                      onClick={() => router.push("/startup-calls")}
+                    >
+                      <Plus className="mr-1.5 h-4 w-4" />
+                      New Application
+                    </Button>
+                  </div>
+
+                  {applications.length === 0 ? (
+                    <Card>
+                      <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+                        <FileText className="h-16 w-16 text-muted-foreground opacity-50" />
+                        <h3 className="mt-4 text-lg font-medium">
+                          No Applications Found
+                        </h3>
+                        <p className="mt-2 text-muted-foreground max-w-md">
+                          You haven't applied to any startup calls yet. Browse
+                          available calls to find opportunities for your
+                          startup.
+                        </p>
+                        <Button
+                          className="mt-6"
+                          onClick={() => router.push("/startup-calls")}
                         >
                           Browse Open Calls
                         </Button>
-                      </div>
-                    ) : (
-                      applications.slice(0, 3).map((app) => (
-                        <div key={app.id} className="flex items-start justify-between border-b border-muted pb-4 last:border-0 last:pb-0">
-                          <div>
-                            <div className="font-medium">{app.startupName}</div>
-                            <div className="text-sm text-muted-foreground">
-                              {app.call.title} • {formatDate(app.submittedAt)}
-                            </div>
-                          </div>
-                          <div className="flex flex-col items-end gap-2">
-                            {getStatusBadge(app.status)}
-                            <div className="text-xs text-muted-foreground">
-                              Reviews: {app.reviewsCompleted}/{app.reviewsTotal}
-                            </div>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </CardContent>
-                  {applications.length > 0 && (
-                    <CardFooter className="justify-end">
-                      <Button 
-                        variant="ghost" 
-                        size="sm"
-                        onClick={() => setActiveTab('applications')}
-                      >
-                        View All Applications
-                        <ArrowRight className="ml-1.5 h-4 w-4" />
-                      </Button>
-                    </CardFooter>
-                  )}
-                </Card>
-                
-                {/* Open Opportunities */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Open Opportunities</CardTitle>
-                    <CardDescription>Startup calls accepting applications</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    {openCalls.length === 0 ? (
-                      <div className="text-center py-8">
-                        <Building className="h-12 w-12 mx-auto text-muted-foreground opacity-50" />
-                        <p className="mt-2 text-muted-foreground">No open calls at the moment</p>
-                        <Button 
-                          variant="outline" 
-                          className="mt-4"
-                          onClick={() => router.push('/startup-calls')}
-                        >
-                          Check All Calls
-                        </Button>
-                      </div>
-                    ) : (
-                      openCalls.slice(0, 3).map((call) => (
-                        <div key={call.id} className="flex items-start justify-between border-b border-muted pb-4 last:border-0 last:pb-0">
-                          <div>
-                            <div className="font-medium">{call.title}</div>
-                            <div className="text-sm text-muted-foreground">
-                              {call.industry} • {call.location}
-                            </div>
-                          </div>
-                          <div className="flex flex-col items-end gap-2">
-                            {call.applicationDeadline && (
-                              <div className="text-xs text-amber-500 flex items-center">
-                                <Clock className="h-3 w-3 mr-1" />
-                                {getDaysLeft(call.applicationDeadline)} days left
-                              </div>
-                            )}
-                            <Button 
-                              size="sm" 
-                              variant="outline"
-                              onClick={() => router.push(`/startup-calls/${call.id}`)}
-                            >
-                              View
-                            </Button>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </CardContent>
-                  {openCalls.length > 0 && (
-                    <CardFooter className="justify-end">
-                      <Button 
-                        variant="ghost" 
-                        size="sm"
-                        onClick={() => router.push('/startup-calls')}
-                      >
-                        View All Opportunities
-                        <ArrowRight className="ml-1.5 h-4 w-4" />
-                      </Button>
-                    </CardFooter>
-                  )}
-                </Card>
-              </div>
-              
-              {/* Quick Actions */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Quick Actions</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-                    <Button 
-                      variant="outline" 
-                      className="h-auto flex-col items-center justify-center py-6 space-y-2"
-                      onClick={() => router.push('/startup-calls')}
-                    >
-                      <PlusCircle className="h-6 w-6" />
-                      <span>Apply to Call</span>
-                    </Button>
-                    <Button 
-                      variant="outline" 
-                      className="h-auto flex-col items-center justify-center py-6 space-y-2"
-                      onClick={() => setActiveTab('applications')}
-                    >
-                      <FileText className="h-6 w-6" />
-                      <span>View Applications</span>
-                    </Button>
-                    <Button 
-                      variant="outline" 
-                      className="h-auto flex-col items-center justify-center py-6 space-y-2"
-                      onClick={() => router.push('/profile')}
-                    >
-                      <Building className="h-6 w-6" />
-                      <span>Update Profile</span>
-                    </Button>
-                    <Button 
-                      variant="outline" 
-                      className="h-auto flex-col items-center justify-center py-6 space-y-2"
-                      onClick={() => router.push('/dashboard')}
-                    >
-                      <Activity className="h-6 w-6" />
-                      <span>View Analytics</span>
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-            
-            {/* Applications Tab */}
-            <TabsContent value="applications" className="space-y-6">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-semibold">My Applications</h2>
-                <Button 
-                  variant="outline" 
-                  onClick={() => router.push('/startup-calls')}
-                >
-                  <Plus className="mr-1.5 h-4 w-4" />
-                  New Application
-                </Button>
-              </div>
-              
-              {applications.length === 0 ? (
-                <Card>
-                  <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-                    <FileText className="h-16 w-16 text-muted-foreground opacity-50" />
-                    <h3 className="mt-4 text-lg font-medium">No Applications Found</h3>
-                    <p className="mt-2 text-muted-foreground max-w-md">
-                      You haven't applied to any startup calls yet. Browse available calls to find opportunities for your startup.
-                    </p>
-                    <Button 
-                      className="mt-6" 
-                      onClick={() => router.push('/startup-calls')}
-                    >
-                      Browse Open Calls
-                    </Button>
-                  </CardContent>
-                </Card>
-              ) : (
-                <div className="space-y-4">
-                  {applications.map((app) => (
-                    <Card key={app.id}>
-                      <CardHeader className="pb-2">
-                        <div className="flex flex-wrap items-start justify-between gap-2">
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <CardTitle className="text-xl">{app.startupName}</CardTitle>
-                              {getStatusBadge(app.status)}
-                            </div>
-                            <CardDescription className="mt-1 max-w-3xl">
-                              {app.industry && `${app.industry}`} • {app.stage && `${app.stage}`}
-                            </CardDescription>
-                          </div>
-                          
-                          <div className="text-sm text-muted-foreground">
-                            Submitted on {formatDate(app.submittedAt)}
-                          </div>
-                        </div>
-                      </CardHeader>
-                      
-                      <CardContent>
-                        <div className="mt-2">
-                          <h4 className="text-sm font-medium text-muted-foreground">Applied to:</h4>
-                          <p className="font-medium">{app.call.title}</p>
-                          <div className="mt-1 text-sm text-muted-foreground">
-                            {app.call.industry} • {app.call.location}
-                            {app.call.fundingAmount && ` • Funding: ${app.call.fundingAmount}`}
-                          </div>
-                        </div>
-                        
-                        <div className="mt-4">
-                          <div className="flex justify-between text-sm mb-1">
-                            <span className="text-muted-foreground">Review progress</span>
-                            <span>{app.reviewsCompleted} of {app.reviewsTotal} reviews</span>
-                          </div>
-                          <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
-                            <div 
-                              className="h-full bg-blue-500 rounded-full"
-                              style={{ width: `${(app.reviewsCompleted / app.reviewsTotal) * 100}%` }}
-                            ></div>
-                          </div>
-                        </div>
                       </CardContent>
-                      
-                      <CardFooter className="flex justify-end gap-2">
-                        <Button 
-                          variant="outline" 
-                          onClick={() => router.push(`/startup-calls/${app.call.id}`)}
-                        >
-                          View Call
-                        </Button>
-                        <Button 
-                          onClick={() => router.push(`/applications/${app.id}`)}
-                        >
-                          View Application
-                        </Button>
-                      </CardFooter>
                     </Card>
-                  ))}
+                  ) : (
+                    <div className="space-y-4">
+                      {applications.map((app) => (
+                        <Card key={app.id}>
+                          <CardHeader className="pb-2">
+                            <div className="flex flex-wrap items-start justify-between gap-2">
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <CardTitle className="text-xl">
+                                    {app.startupName}
+                                  </CardTitle>
+                                  {getStatusBadge(app.status)}
+                                </div>
+                                <CardDescription className="mt-1 max-w-3xl">
+                                  {app.industry && `${app.industry}`} •{" "}
+                                  {app.stage && `${app.stage}`}
+                                </CardDescription>
+                              </div>
+
+                              <div className="text-sm text-muted-foreground">
+                                Submitted on {formatDate(app.submittedAt)}
+                              </div>
+                            </div>
+                          </CardHeader>
+
+                          <CardContent>
+                            <div className="mt-2">
+                              <h4 className="text-sm font-medium text-muted-foreground">
+                                Applied to:
+                              </h4>
+                              <p className="font-medium">{app.call.title}</p>
+                              <div className="mt-1 text-sm text-muted-foreground">
+                                {app.call.industry} • {app.call.location}
+                                {app.call.fundingAmount &&
+                                  ` • Funding: ${app.call.fundingAmount}`}
+                              </div>
+                            </div>
+
+                            <div className="mt-4">
+                              <div className="flex justify-between text-sm mb-1">
+                                <span className="text-muted-foreground">
+                                  Review progress
+                                </span>
+                                <span>
+                                  {app.reviewsCompleted} of {app.reviewsTotal}{" "}
+                                  reviews
+                                </span>
+                              </div>
+                              <div className="h-2 w-full bg-muted rounded-full overflow-hidden">
+                                <div
+                                  className="h-full bg-blue-500 rounded-full"
+                                  style={{
+                                    width: `${
+                                      (app.reviewsCompleted /
+                                        app.reviewsTotal) *
+                                      100
+                                    }%`,
+                                  }}
+                                ></div>
+                              </div>
+                            </div>
+                          </CardContent>
+
+                          <CardFooter className="flex justify-end gap-2">
+                            <Button
+                              variant="outline"
+                              onClick={() =>
+                                router.push(`/startup-calls/${app.call.id}`)
+                              }
+                            >
+                              View Call
+                            </Button>
+                            <Button
+                              onClick={() =>
+                                router.push(`/applications/${app.id}`)
+                              }
+                            >
+                              View Application
+                            </Button>
+                          </CardFooter>
+                        </Card>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
-            </TabsContent>
-            
-            {/* Opportunities Tab */}
-            <TabsContent value="opportunities" className="space-y-6">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-semibold">Open Opportunities</h2>
-                <Button onClick={() => router.push('/startup-calls')}>
-                  View All Calls
-                </Button>
-              </div>
-              
-              {openCalls.length === 0 ? (
-                <Card>
-                  <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-                    <AlertCircle className="h-16 w-16 text-muted-foreground opacity-50" />
-                    <h3 className="mt-4 text-lg font-medium">No Open Calls</h3>
-                    <p className="mt-2 text-muted-foreground max-w-md">
-                      There are no startup calls accepting applications at the moment. Check back later for new opportunities.
-                    </p>
-                    <Button 
-                      className="mt-6" 
-                      variant="outline"
-                      onClick={() => router.push('/startup-calls')}
-                    >
+
+              {activeView === "opportunities" && (
+                <div className="space-y-6">
+                  <div className="flex items-center justify-between mb-6">
+                    <h2 className="text-xl font-semibold">
+                      Open Opportunities
+                    </h2>
+                    <Button onClick={() => router.push("/startup-calls")}>
                       View All Calls
                     </Button>
-                  </CardContent>
-                </Card>
-              ) : (
-                <div className="space-y-4">
-                  {openCalls.map((call) => (
-                    <Card key={call.id}>
-                      <CardHeader>
-                        <div className="flex flex-wrap items-start justify-between gap-2">
-                          <div>
-                            <CardTitle className="text-xl">{call.title}</CardTitle>
-                            <CardDescription className="mt-1 max-w-3xl">
-                              {call.industry && `${call.industry}`}{call.location && call.industry ? ` • ${call.location}` : call.location}
-                              {call.fundingAmount && (call.industry || call.location ? ` • Funding: ${call.fundingAmount}` : `Funding: ${call.fundingAmount}`)}
-                            </CardDescription>
-                          </div>
-                        </div>
-                      </CardHeader>
-                      
-                      <CardContent>
-                        {call.description && (
-                          <p className="line-clamp-3 text-sm text-muted-foreground">
-                            {call.description}
-                          </p>
-                        )}
-                        
-                        <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-3 text-sm">
-                          {call.publishedDate && (
-                            <div className="flex items-center text-muted-foreground">
-                              <Calendar className="mr-1.5 h-4 w-4" />
-                              <span>Published: {formatDate(call.publishedDate)}</span>
-                            </div>
-                          )}
-                          
-                          {call.applicationDeadline && (
-                            <div className="flex items-center text-muted-foreground">
-                              <Calendar className="mr-1.5 h-4 w-4" />
-                              <span>Deadline: {formatDate(call.applicationDeadline)}</span>
-                            </div>
-                          )}
-                          
-                          {call.applicationDeadline && (
-                            <div className="flex items-center text-amber-500">
-                              <Clock className="mr-1.5 h-4 w-4" />
-                              <span>{getDaysLeft(call.applicationDeadline)} days left</span>
-                            </div>
-                          )}
-                        </div>
-                      </CardContent>
-                      
-                      <CardFooter className="flex justify-end gap-2">
-                        <Button 
+                  </div>
+
+                  {openCalls.length === 0 ? (
+                    <Card>
+                      <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+                        <AlertCircle className="h-16 w-16 text-muted-foreground opacity-50" />
+                        <h3 className="mt-4 text-lg font-medium">
+                          No Open Calls
+                        </h3>
+                        <p className="mt-2 text-muted-foreground max-w-md">
+                          There are no startup calls accepting applications at
+                          the moment. Check back later for new opportunities.
+                        </p>
+                        <Button
+                          className="mt-6"
                           variant="outline"
-                          onClick={() => router.push(`/startup-calls/${call.id}`)}
+                          onClick={() => router.push("/startup-calls")}
                         >
-                          View Details
+                          View All Calls
                         </Button>
-                        <Button onClick={() => router.push(`/startup-calls/${call.id}/apply`)}>
-                          Apply Now
-                          <ArrowRight className="ml-1.5 h-4 w-4" />
-                        </Button>
-                      </CardFooter>
+                      </CardContent>
                     </Card>
-                  ))}
+                  ) : (
+                    <div className="space-y-4">
+                      {openCalls.map((call) => (
+                        <Card key={call.id}>
+                          <CardHeader>
+                            <div className="flex flex-wrap items-start justify-between gap-2">
+                              <div>
+                                <CardTitle className="text-xl">
+                                  {call.title}
+                                </CardTitle>
+                                <CardDescription className="mt-1 max-w-3xl">
+                                  {call.industry && `${call.industry}`}
+                                  {call.location && call.industry
+                                    ? ` • ${call.location}`
+                                    : call.location}
+                                  {call.fundingAmount &&
+                                    (call.industry || call.location
+                                      ? ` • Funding: ${call.fundingAmount}`
+                                      : `Funding: ${call.fundingAmount}`)}
+                                </CardDescription>
+                              </div>
+                            </div>
+                          </CardHeader>
+
+                          <CardContent>
+                            {call.description && (
+                              <p className="line-clamp-3 text-sm text-muted-foreground">
+                                {call.description}
+                              </p>
+                            )}
+
+                            <div className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-3 text-sm">
+                              {call.publishedDate && (
+                                <div className="flex items-center text-muted-foreground">
+                                  <Calendar className="mr-1.5 h-4 w-4" />
+                                  <span>
+                                    Published: {formatDate(call.publishedDate)}
+                                  </span>
+                                </div>
+                              )}
+
+                              {call.applicationDeadline && (
+                                <div className="flex items-center text-muted-foreground">
+                                  <Calendar className="mr-1.5 h-4 w-4" />
+                                  <span>
+                                    Deadline:{" "}
+                                    {formatDate(call.applicationDeadline)}
+                                  </span>
+                                </div>
+                              )}
+
+                              {call.applicationDeadline && (
+                                <div className="flex items-center text-amber-500">
+                                  <Clock className="mr-1.5 h-4 w-4" />
+                                  <span>
+                                    {getDaysLeft(call.applicationDeadline)} days
+                                    left
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          </CardContent>
+
+                          <CardFooter className="flex justify-end gap-2">
+                            <Button
+                              variant="outline"
+                              onClick={() =>
+                                router.push(`/startup-calls/${call.id}`)
+                              }
+                            >
+                              View Details
+                            </Button>
+                            <Button
+                              onClick={() =>
+                                router.push(`/startup-calls/${call.id}/apply`)
+                              }
+                            >
+                              Apply Now
+                              <ArrowRight className="ml-1.5 h-4 w-4" />
+                            </Button>
+                          </CardFooter>
+                        </Card>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
-            </TabsContent>
-          </Tabs>
-        </main>
+
+              {activeView === "project-management" && <ProjectManagement />}
+            </div>
+          </div>
+        </div>
       </div>
     </Layout>
   );
