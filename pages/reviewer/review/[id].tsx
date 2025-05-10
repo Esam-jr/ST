@@ -142,6 +142,14 @@ export default function ReviewerReview() {
   const [executionScore, setExecutionScore] = useState<number>(0);
   const [feedback, setFeedback] = useState<string>("");
 
+  // Calculate overall score whenever any individual score changes
+  useEffect(() => {
+    const totalScore = Math.round(
+      (innovationScore + marketScore + teamScore + executionScore) / 4
+    );
+    setScore(totalScore);
+  }, [innovationScore, marketScore, teamScore, executionScore]);
+
   const { toast } = useToast();
 
   // Generate a unique key for localStorage based on the review assignment ID
@@ -257,6 +265,35 @@ export default function ReviewerReview() {
           setTeamScore(response.data.teamScore || 0);
           setExecutionScore(response.data.executionScore || 0);
           setFeedback(response.data.feedback || "");
+
+          // Set application data
+          if (response.data.application) {
+            setApplication({
+              id: response.data.application.id,
+              callId: response.data.application.call.id,
+              callTitle: response.data.application.call.title,
+              submittedAt: response.data.application.submittedAt,
+              status: response.data.application.status,
+              startupName: response.data.application.startupName,
+              industry: response.data.application.industry,
+              stage: response.data.application.stage,
+              description: response.data.application.description,
+              problem: response.data.application.problem,
+              solution: response.data.application.solution,
+              businessModel: response.data.application.businessModel,
+              useOfFunds: response.data.application.useOfFunds,
+              competitiveAdvantage:
+                response.data.application.competitiveAdvantage,
+              founderBio: response.data.application.founderBio,
+              teamSize: response.data.application.teamSize,
+              foundingDate: response.data.application.foundingDate,
+              website: response.data.application.website,
+              traction: response.data.application.traction,
+              funding: response.data.application.funding,
+              pitchDeckUrl: response.data.application.pitchDeckUrl,
+              financialsUrl: response.data.application.financialsUrl,
+            });
+          }
         }
       } catch (error) {
         console.error("Error fetching review:", error);
@@ -690,8 +727,12 @@ export default function ReviewerReview() {
                         min="0"
                         max="100"
                         value={score}
-                        onChange={(e) => setScore(Number(e.target.value))}
+                        disabled
+                        className="bg-muted"
                       />
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Automatically calculated from other scores
+                      </p>
                     </div>
 
                     {/* Innovation Score */}
