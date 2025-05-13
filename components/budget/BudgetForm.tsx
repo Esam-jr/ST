@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import axios from "axios";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,7 +11,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Table,
+  TableBody,
+  TableCaption,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
 import {
   Card,
   CardContent,
@@ -19,41 +29,44 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import {
-  Plus,
-  Trash,
-  AlertCircle,
-  Check,
-  ChevronRight,
-  ChevronLeft,
-  Save,
-} from "lucide-react";
-import { useBudget, Budget, BudgetCategory } from "@/contexts/BudgetContext";
+import { PlusCircle, XCircle, AlertTriangle, Percent } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import LoadingSpinner from "@/components/ui/LoadingSpinner";
 
 interface BudgetFormProps {
   startupCallId: string;
   initialData?: {
-    budget?: Partial<Budget>;
-    categories?: Partial<BudgetCategory>[];
+    budget: any;
+    categories: any[];
   };
-  onSubmit?: (budget: Budget) => void;
-  onCancel?: () => void;
+  templateData?: {
+    name: string;
+    description: string;
+    categories: {
+      name: string;
+      description: string;
+      percentage: number;
+    }[];
+  } | null;
+  onSubmit: (budget: any) => void;
+  onCancel: () => void;
 }
 
-// Budget form with validation
 export const BudgetForm: React.FC<BudgetFormProps> = ({
   startupCallId,
   initialData,
+  templateData,
   onSubmit,
   onCancel,
 }) => {
-  const { createBudget, updateBudget, createCategory, isLoading } = useBudget();
-
-  // Form state
-  const [step, setStep] = useState(1);
+  const { toast } = useToast();
+  const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [formValues, setFormValues] = useState({
+
+  // Budget form state
+  const [budget, setBudget] = useState({
     title: initialData?.budget?.title || "",
     description: initialData?.budget?.description || "",
     totalAmount: initialData?.budget?.totalAmount || 0,
@@ -64,28 +77,70 @@ export const BudgetForm: React.FC<BudgetFormProps> = ({
   });
 
   // Categories state
-  const [categories, setCategories] = useState<Partial<BudgetCategory>[]>(
-    initialData?.categories || [
-      { name: "", description: "", allocatedAmount: 0 },
-    ]
+  const [categories, setCategories] = useState<
+    {
+      id?: string;
+      name: string;
+      description: string;
+      allocatedAmount: number;
+      allocatedPercentage?: number;
+    }[]
+  >(
+    initialData?.categories?.map((cat: any) => ({
+      id: cat.id,
+      name: cat.name,
+      description: cat.description || "",
+      allocatedAmount: cat.allocatedAmount || 0,
+      allocatedPercentage: cat.allocatedAmount
+        ? Math.round((cat.allocatedAmount / budget.totalAmount) * 100)
+        : 0,
+    })) || []
   );
 
-  // Total allocated amount (for validation)
-  const [totalAllocated, setTotalAllocated] = useState(0);
-
-  // Calculate total allocation when categories change
+  // Apply template data if provided and no initial data
   useEffect(() => {
-    const sum = categories.reduce(
-      (acc, cat) => acc + (cat.allocatedAmount || 0),
-      0
-    );
-    setTotalAllocated(sum);
-  }, [categories]);
+    if (templateData && !initialData) {
+      // Update title based on template
+      setBudget({
+        ...budget,
+        title: `${templateData.name} Budget`,
+        description: templateData.description,
+      });
 
-  // Handle budget form changes
-  const handleChange = (field: string, value: any) => {
-    setFormValues({
-      ...formValues,
+      // Set categories based on template
+      if (templateData.categories && templateData.categories.length > 0) {
+        const totalAmount = budget.totalAmount || 100000; // Default value if amount is 0
+        const newCategories = templateData.categories.map((cat) => {
+          const allocatedAmount = (cat.percentage / 100) * totalAmount;
+          return {
+            name: cat.name,
+            description: cat.description,
+            allocatedAmount: Math.round(allocatedAmount * 100) / 100, // Round to 2 decimal places
+            allocatedPercentage: cat.percentage,
+          };
+        });
+        setCategories(newCategories);
+      }
+    }
+  }, [templateData]);
+
+  // Update category percentages when total amount changes
+  useEffect(() => {
+    if (budget.totalAmount > 0) {
+      setCategories(
+        categories.map((cat) => ({
+          ...cat,
+          allocatedPercentage:
+            Math.round((cat.allocatedAmount / budget.totalAmount) * 100) || 0,
+        }))
+      );
+    }
+  }, [budget.totalAmount]);
+
+  // Handle input changes for budget fields
+  const handleBudgetChange = (field: string, value: any) => {
+    setBudget({
+      ...budget,
       [field]: value,
     });
 
@@ -98,456 +153,474 @@ export const BudgetForm: React.FC<BudgetFormProps> = ({
     }
   };
 
-  // Handle category changes
-  const handleCategoryChange = (index: number, field: string, value: any) => {
-    const updatedCategories = [...categories];
-    updatedCategories[index] = {
-      ...updatedCategories[index],
-      [field]: value,
-    };
-    setCategories(updatedCategories);
-
-    // Clear category errors
-    if (errors[`category_${index}_${field}`]) {
-      setErrors({
-        ...errors,
-        [`category_${index}_${field}`]: "",
-      });
-    }
-  };
-
   // Add a new category
   const addCategory = () => {
     setCategories([
       ...categories,
-      { name: "", description: "", allocatedAmount: 0 },
+      {
+        name: "",
+        description: "",
+        allocatedAmount: 0,
+        allocatedPercentage: 0,
+      },
     ]);
   };
 
   // Remove a category
   const removeCategory = (index: number) => {
-    const updatedCategories = [...categories];
-    updatedCategories.splice(index, 1);
-    setCategories(updatedCategories);
+    const newCategories = [...categories];
+    newCategories.splice(index, 1);
+    setCategories(newCategories);
   };
 
-  // Validate step 1 (Budget details)
-  const validateStep1 = () => {
-    const stepErrors: Record<string, string> = {};
+  // Handle input changes for category fields
+  const handleCategoryChange = (index: number, field: string, value: any) => {
+    const newCategories = [...categories];
+    newCategories[index] = {
+      ...newCategories[index],
+      [field]: value,
+    };
 
-    if (!formValues.title.trim()) {
-      stepErrors.title = "Title is required";
+    // If changing the amount, update the percentage
+    if (field === "allocatedAmount" && budget.totalAmount > 0) {
+      newCategories[index].allocatedPercentage = Math.round(
+        (value / budget.totalAmount) * 100
+      );
     }
 
-    if (formValues.totalAmount <= 0) {
-      stepErrors.totalAmount = "Total amount must be greater than zero";
+    // If changing the percentage, update the amount
+    if (field === "allocatedPercentage" && budget.totalAmount > 0) {
+      newCategories[index].allocatedAmount =
+        Math.round((value / 100) * budget.totalAmount * 100) / 100;
     }
 
-    if (!formValues.fiscalYear.trim()) {
-      stepErrors.fiscalYear = "Fiscal year is required";
-    }
+    setCategories(newCategories);
 
-    setErrors(stepErrors);
-    return Object.keys(stepErrors).length === 0;
-  };
-
-  // Validate step 2 (Categories)
-  const validateStep2 = () => {
-    const stepErrors: Record<string, string> = {};
-
-    // Check if at least one category exists
-    if (categories.length === 0) {
-      stepErrors.categories = "At least one category is required";
-      setErrors(stepErrors);
-      return false;
-    }
-
-    // Validate each category
-    let isValid = true;
-
-    categories.forEach((category, index) => {
-      if (!category.name?.trim()) {
-        stepErrors[`category_${index}_name`] = "Category name is required";
-        isValid = false;
-      }
-
-      if (!category.allocatedAmount || category.allocatedAmount <= 0) {
-        stepErrors[`category_${index}_allocatedAmount`] =
-          "Amount must be greater than zero";
-        isValid = false;
-      }
-    });
-
-    // Check if total allocation exceeds total budget
-    if (totalAllocated > formValues.totalAmount) {
-      stepErrors.allocation = `Total allocation (${totalAllocated}) exceeds budget amount (${formValues.totalAmount})`;
-      isValid = false;
-    }
-
-    setErrors(stepErrors);
-    return isValid;
-  };
-
-  // Move to next step
-  const nextStep = () => {
-    if (step === 1 && validateStep1()) {
-      setStep(2);
-    }
-  };
-
-  // Move to previous step
-  const prevStep = () => {
-    setStep(1);
-  };
-
-  // Submit the form
-  const submitForm = async () => {
-    if (!validateStep2()) return;
-
-    try {
-      // Create or update the budget
-      const isEditing = !!initialData?.budget?.id;
-
-      const budgetData = {
-        title: formValues.title,
-        description: formValues.description,
-        totalAmount: parseFloat(formValues.totalAmount.toString()),
-        currency: formValues.currency,
-        fiscalYear: formValues.fiscalYear,
-        status: formValues.status,
-      };
-
-      let budget;
-
-      if (isEditing && initialData?.budget?.id) {
-        budget = await updateBudget(
-          startupCallId,
-          initialData.budget.id,
-          budgetData
-        );
-      } else {
-        budget = await createBudget(startupCallId, budgetData);
-      }
-
-      // Create or update categories
-      const budgetId = budget.id;
-
-      // Process categories
-      for (const category of categories) {
-        await createCategory(startupCallId, budgetId, {
-          name: category.name || "",
-          description: category.description || "",
-          allocatedAmount: parseFloat(
-            category.allocatedAmount?.toString() || "0"
-          ),
-        });
-      }
-
-      if (onSubmit) {
-        onSubmit(budget);
-      }
-    } catch (error) {
-      console.error("Error saving budget:", error);
+    // Clear category errors
+    if (errors[`category-${index}-${field}`]) {
       setErrors({
-        submit: "An error occurred while saving the budget. Please try again.",
+        ...errors,
+        [`category-${index}-${field}`]: "",
       });
     }
   };
 
+  // Calculate unallocated amount
+  const getTotalAllocated = () => {
+    return categories.reduce((sum, cat) => sum + (cat.allocatedAmount || 0), 0);
+  };
+
+  const getUnallocatedAmount = () => {
+    const totalAllocated = getTotalAllocated();
+    return budget.totalAmount - totalAllocated;
+  };
+
+  const getAllocatedPercentage = () => {
+    if (budget.totalAmount === 0) return 0;
+    return Math.round((getTotalAllocated() / budget.totalAmount) * 100);
+  };
+
+  // Distribute remaining amount evenly
+  const distributeRemaining = () => {
+    if (categories.length === 0 || budget.totalAmount === 0) return;
+
+    const unallocatedAmount = getUnallocatedAmount();
+    if (unallocatedAmount <= 0) return;
+
+    const amountPerCategory =
+      Math.round((unallocatedAmount / categories.length) * 100) / 100;
+
+    setCategories(
+      categories.map((cat) => ({
+        ...cat,
+        allocatedAmount: cat.allocatedAmount + amountPerCategory,
+        allocatedPercentage: Math.round(
+          ((cat.allocatedAmount + amountPerCategory) / budget.totalAmount) * 100
+        ),
+      }))
+    );
+  };
+
+  // Auto-adjust allocation to reach 100%
+  const adjustToTotal = () => {
+    if (categories.length === 0 || budget.totalAmount === 0) return;
+
+    const totalAllocated = getTotalAllocated();
+    const factor = budget.totalAmount / totalAllocated;
+
+    setCategories(
+      categories.map((cat) => {
+        const newAmount = Math.round(cat.allocatedAmount * factor * 100) / 100;
+        return {
+          ...cat,
+          allocatedAmount: newAmount,
+          allocatedPercentage: Math.round(
+            (newAmount / budget.totalAmount) * 100
+          ),
+        };
+      })
+    );
+  };
+
+  // Validate form
+  const validateForm = () => {
+    const newErrors: Record<string, string> = {};
+
+    if (!budget.title.trim()) {
+      newErrors.title = "Title is required";
+    }
+
+    if (budget.totalAmount <= 0) {
+      newErrors.totalAmount = "Total amount must be greater than zero";
+    }
+
+    if (!budget.fiscalYear.trim()) {
+      newErrors.fiscalYear = "Fiscal year is required";
+    }
+
+    // Validate categories
+    categories.forEach((category, index) => {
+      if (!category.name.trim()) {
+        newErrors[`category-${index}-name`] = "Category name is required";
+      }
+
+      if (category.allocatedAmount < 0) {
+        newErrors[`category-${index}-allocatedAmount`] =
+          "Amount cannot be negative";
+      }
+    });
+
+    // Check if total allocation exceeds budget
+    const totalAllocated = getTotalAllocated();
+    if (totalAllocated > budget.totalAmount) {
+      newErrors.totalAllocation = "Total allocation exceeds budget amount";
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  // Handle form submission
+  const handleSubmit = async () => {
+    if (!validateForm()) return;
+
+    setLoading(true);
+    try {
+      const categoriesData = categories.map((category) => ({
+        id: category.id, // Include id for existing categories
+        name: category.name,
+        description: category.description,
+        allocatedAmount: category.allocatedAmount,
+      }));
+
+      const budgetData = {
+        ...budget,
+        categories: categoriesData,
+      };
+
+      let response;
+      if (initialData?.budget?.id) {
+        // Edit existing budget
+        response = await axios.put(
+          `/api/startup-calls/${startupCallId}/budgets/${initialData.budget.id}`,
+          budgetData
+        );
+      } else {
+        // Create new budget
+        response = await axios.post(
+          `/api/startup-calls/${startupCallId}/budgets`,
+          budgetData
+        );
+      }
+
+      onSubmit(response.data);
+    } catch (error: any) {
+      console.error("Error saving budget:", error);
+      toast({
+        title: "Error",
+        description:
+          error.response?.data?.message ||
+          "Failed to save budget. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Format currency
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: budget.currency,
+    }).format(amount);
+  };
+
   return (
-    <Card className="w-full max-w-4xl mx-auto">
-      <CardHeader>
-        <CardTitle>
-          {initialData?.budget?.id ? "Edit Budget" : "Create New Budget"}
-        </CardTitle>
-        <CardDescription>
-          {step === 1
-            ? "Enter the basic details for this budget"
-            : "Define budget categories and allocations"}
-        </CardDescription>
-      </CardHeader>
-
-      <CardContent>
-        {/* Step indicator */}
-        <div className="mb-6">
-          <div className="flex items-center justify-between">
-            <Button
-              variant={step === 1 ? "default" : "outline"}
-              size="sm"
-              className="rounded-full w-8 h-8 p-0"
-              disabled={step === 1}
-              onClick={prevStep}
-            >
-              1
-            </Button>
-            <div className="h-0.5 flex-1 bg-muted mx-2"></div>
-            <Button
-              variant={step === 2 ? "default" : "outline"}
-              size="sm"
-              className="rounded-full w-8 h-8 p-0"
-              disabled={step === 2}
-              onClick={validateStep1 ? nextStep : undefined}
-            >
-              2
-            </Button>
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Budget Details */}
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="title">Budget Title</Label>
+            <Input
+              id="title"
+              value={budget.title}
+              onChange={(e) => handleBudgetChange("title", e.target.value)}
+              placeholder="Enter a title for this budget"
+            />
+            {errors.title && (
+              <p className="text-sm text-red-500">{errors.title}</p>
+            )}
           </div>
-          <div className="flex justify-between mt-2 text-xs text-muted-foreground">
-            <span>Budget Details</span>
-            <span>Categories</span>
+
+          <div className="space-y-2">
+            <Label htmlFor="description">Description (Optional)</Label>
+            <Textarea
+              id="description"
+              value={budget.description}
+              onChange={(e) =>
+                handleBudgetChange("description", e.target.value)
+              }
+              placeholder="Brief description of this budget"
+              rows={3}
+            />
           </div>
-        </div>
 
-        {/* Global errors */}
-        {errors.submit && (
-          <Alert variant="destructive" className="mb-4">
-            <AlertCircle className="h-4 w-4" />
-            <AlertTitle>Error</AlertTitle>
-            <AlertDescription>{errors.submit}</AlertDescription>
-          </Alert>
-        )}
-
-        {/* Step 1: Budget Details */}
-        {step === 1 && (
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="title">
-                  Budget Title <span className="text-destructive">*</span>
-                </Label>
-                <Input
-                  id="title"
-                  value={formValues.title}
-                  onChange={(e) => handleChange("title", e.target.value)}
-                  placeholder="Q1 2024 Marketing Budget"
-                />
-                {errors.title && (
-                  <p className="text-sm text-destructive">{errors.title}</p>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="fiscalYear">
-                  Fiscal Year <span className="text-destructive">*</span>
-                </Label>
-                <Input
-                  id="fiscalYear"
-                  value={formValues.fiscalYear}
-                  onChange={(e) => handleChange("fiscalYear", e.target.value)}
-                  placeholder="2024"
-                />
-                {errors.fiscalYear && (
-                  <p className="text-sm text-destructive">
-                    {errors.fiscalYear}
-                  </p>
-                )}
-              </div>
-            </div>
-
+          <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="description">Description</Label>
-              <Textarea
-                id="description"
-                value={formValues.description || ""}
-                onChange={(e) => handleChange("description", e.target.value)}
-                placeholder="Provide a brief description of this budget"
-                rows={3}
-              />
-            </div>
-
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-              <div className="space-y-2">
-                <Label htmlFor="totalAmount">
-                  Total Budget Amount{" "}
-                  <span className="text-destructive">*</span>
-                </Label>
+              <Label htmlFor="totalAmount">Total Amount</Label>
+              <div className="relative">
                 <Input
                   id="totalAmount"
                   type="number"
-                  value={formValues.totalAmount}
-                  onChange={(e) =>
-                    handleChange("totalAmount", parseFloat(e.target.value) || 0)
-                  }
                   min="0"
                   step="0.01"
+                  value={budget.totalAmount || ""}
+                  onChange={(e) =>
+                    handleBudgetChange(
+                      "totalAmount",
+                      parseFloat(e.target.value) || 0
+                    )
+                  }
+                  className="pl-7"
                 />
-                {errors.totalAmount && (
-                  <p className="text-sm text-destructive">
-                    {errors.totalAmount}
-                  </p>
-                )}
+                <div className="absolute inset-y-0 left-0 flex items-center pl-2.5 pointer-events-none">
+                  <span className="text-sm text-muted-foreground">$</span>
+                </div>
               </div>
+              {errors.totalAmount && (
+                <p className="text-sm text-red-500">{errors.totalAmount}</p>
+              )}
+            </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="currency">Currency</Label>
-                <Select
-                  value={formValues.currency}
-                  onValueChange={(value) => handleChange("currency", value)}
-                >
-                  <SelectTrigger id="currency">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="USD">USD</SelectItem>
-                    <SelectItem value="EUR">EUR</SelectItem>
-                    <SelectItem value="GBP">GBP</SelectItem>
-                    <SelectItem value="CAD">CAD</SelectItem>
-                    <SelectItem value="AUD">AUD</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="status">Status</Label>
-                <Select
-                  value={formValues.status}
-                  onValueChange={(value) => handleChange("status", value)}
-                >
-                  <SelectTrigger id="status">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="draft">Draft</SelectItem>
-                    <SelectItem value="active">Active</SelectItem>
-                    <SelectItem value="closed">Closed</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+            <div className="space-y-2">
+              <Label htmlFor="currency">Currency</Label>
+              <Select
+                value={budget.currency}
+                onValueChange={(value) => handleBudgetChange("currency", value)}
+              >
+                <SelectTrigger id="currency">
+                  <SelectValue placeholder="Select currency" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="USD">USD - US Dollar</SelectItem>
+                  <SelectItem value="EUR">EUR - Euro</SelectItem>
+                  <SelectItem value="GBP">GBP - British Pound</SelectItem>
+                  <SelectItem value="CAD">CAD - Canadian Dollar</SelectItem>
+                  <SelectItem value="AUD">AUD - Australian Dollar</SelectItem>
+                  <SelectItem value="JPY">JPY - Japanese Yen</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
-        )}
 
-        {/* Step 2: Budget Categories */}
-        {step === 2 && (
-          <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-base font-medium">Budget Categories</h3>
-                <p className="text-sm text-muted-foreground">
-                  Define how the budget will be allocated across different
-                  categories
-                </p>
-              </div>
-              <Button onClick={addCategory} variant="outline" size="sm">
-                <Plus className="h-4 w-4 mr-1" /> Add Category
-              </Button>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="fiscalYear">Fiscal Year</Label>
+              <Input
+                id="fiscalYear"
+                value={budget.fiscalYear}
+                onChange={(e) =>
+                  handleBudgetChange("fiscalYear", e.target.value)
+                }
+                placeholder="YYYY"
+              />
+              {errors.fiscalYear && (
+                <p className="text-sm text-red-500">{errors.fiscalYear}</p>
+              )}
             </div>
 
-            {/* Allocation warning */}
-            {totalAllocated !== formValues.totalAmount && (
-              <Alert
-                variant={
-                  totalAllocated > formValues.totalAmount
-                    ? "destructive"
-                    : "warning"
-                }
-                className="mt-2"
+            <div className="space-y-2">
+              <Label htmlFor="status">Status</Label>
+              <Select
+                value={budget.status}
+                onValueChange={(value) => handleBudgetChange("status", value)}
               >
-                <AlertCircle className="h-4 w-4" />
-                <AlertTitle>
-                  {totalAllocated > formValues.totalAmount
-                    ? "Over-allocation"
-                    : "Incomplete allocation"}
-                </AlertTitle>
-                <AlertDescription>
-                  {totalAllocated > formValues.totalAmount
-                    ? `You've allocated $${totalAllocated} which exceeds the total budget of $${formValues.totalAmount}.`
-                    : `You've allocated $${totalAllocated} out of $${
-                        formValues.totalAmount
-                      }. $${
-                        formValues.totalAmount - totalAllocated
-                      } remains unallocated.`}
-                </AlertDescription>
-              </Alert>
-            )}
+                <SelectTrigger id="status">
+                  <SelectValue placeholder="Select status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="draft">Draft</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="archived">Archived</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </div>
 
-            {errors.categories && (
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertTitle>Error</AlertTitle>
-                <AlertDescription>{errors.categories}</AlertDescription>
-              </Alert>
-            )}
-
-            {errors.allocation && (
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertTitle>Allocation Error</AlertTitle>
-                <AlertDescription>{errors.allocation}</AlertDescription>
-              </Alert>
-            )}
-
-            {/* Categories */}
+        {/* Budget Allocation Summary */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle>Budget Allocation</CardTitle>
+            <CardDescription>Summary of your budget allocation</CardDescription>
+          </CardHeader>
+          <CardContent className="pb-3">
             <div className="space-y-4">
-              {categories.map((category, index) => (
-                <Card key={index} className="overflow-hidden">
-                  <CardHeader className="bg-muted/30 pb-3">
-                    <div className="flex justify-between items-center">
-                      <CardTitle className="text-base">
-                        Category {index + 1}
-                      </CardTitle>
-                      {categories.length > 1 && (
-                        <Button
-                          onClick={() => removeCategory(index)}
-                          variant="ghost"
-                          size="sm"
-                        >
-                          <Trash className="h-4 w-4" />
-                        </Button>
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-medium">Total Budget:</span>
+                <span className="font-bold">
+                  {formatCurrency(budget.totalAmount)}
+                </span>
+              </div>
+
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-medium">Allocated:</span>
+                <span
+                  className={
+                    getAllocatedPercentage() === 100
+                      ? "text-green-600 font-medium"
+                      : "font-medium"
+                  }
+                >
+                  {formatCurrency(getTotalAllocated())} (
+                  {getAllocatedPercentage()}%)
+                </span>
+              </div>
+
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-medium">Unallocated:</span>
+                <span
+                  className={
+                    getUnallocatedAmount() === 0
+                      ? "text-green-600 font-medium"
+                      : getUnallocatedAmount() < 0
+                      ? "text-red-600 font-medium"
+                      : "text-amber-600 font-medium"
+                  }
+                >
+                  {formatCurrency(getUnallocatedAmount())} (
+                  {100 - getAllocatedPercentage()}%)
+                </span>
+              </div>
+
+              <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                <div
+                  className={`h-full ${
+                    getAllocatedPercentage() === 100
+                      ? "bg-green-500"
+                      : getAllocatedPercentage() > 100
+                      ? "bg-red-500"
+                      : "bg-amber-500"
+                  }`}
+                  style={{
+                    width: `${Math.min(getAllocatedPercentage(), 100)}%`,
+                  }}
+                ></div>
+              </div>
+
+              {getUnallocatedAmount() !== 0 && (
+                <div className="flex justify-center space-x-2 mt-4">
+                  {getUnallocatedAmount() > 0 && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={distributeRemaining}
+                    >
+                      Distribute Remaining
+                    </Button>
+                  )}
+                  {getAllocatedPercentage() !== 100 && (
+                    <Button variant="outline" size="sm" onClick={adjustToTotal}>
+                      Adjust to 100%
+                    </Button>
+                  )}
+                </div>
+              )}
+
+              {errors.totalAllocation && (
+                <Alert variant="destructive" className="mt-2">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertTitle>Error</AlertTitle>
+                  <AlertDescription>{errors.totalAllocation}</AlertDescription>
+                </Alert>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Categories */}
+      <div className="space-y-4">
+        <div className="flex justify-between items-center">
+          <Label className="text-lg font-medium">Budget Categories</Label>
+          <Button variant="outline" size="sm" onClick={addCategory}>
+            <PlusCircle className="mr-2 h-4 w-4" />
+            Add Category
+          </Button>
+        </div>
+
+        {categories.length === 0 ? (
+          <div className="border border-dashed border-gray-300 rounded-md p-8 text-center">
+            <h3 className="text-lg font-medium text-muted-foreground">
+              No Categories Added
+            </h3>
+            <p className="text-sm text-muted-foreground mt-1 mb-4">
+              Add categories to allocate your budget
+            </p>
+            <Button onClick={addCategory}>
+              <PlusCircle className="mr-2 h-4 w-4" />
+              Add First Category
+            </Button>
+          </div>
+        ) : (
+          <div className="border rounded-md">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[30%]">Category Name</TableHead>
+                  <TableHead className="w-[30%]">Description</TableHead>
+                  <TableHead className="w-[15%]">Amount</TableHead>
+                  <TableHead className="w-[15%]">Percentage</TableHead>
+                  <TableHead className="w-[10%]">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {categories.map((category, index) => (
+                  <TableRow key={index}>
+                    <TableCell>
+                      <Input
+                        value={category.name}
+                        onChange={(e) =>
+                          handleCategoryChange(index, "name", e.target.value)
+                        }
+                        placeholder="Category name"
+                        className={
+                          errors[`category-${index}-name`]
+                            ? "border-red-500"
+                            : ""
+                        }
+                      />
+                      {errors[`category-${index}-name`] && (
+                        <p className="text-xs text-red-500">
+                          {errors[`category-${index}-name`]}
+                        </p>
                       )}
-                    </div>
-                  </CardHeader>
-
-                  <CardContent className="pt-4">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div className="space-y-2 md:col-span-2">
-                        <Label>
-                          Category Name{" "}
-                          <span className="text-destructive">*</span>
-                        </Label>
-                        <Input
-                          value={category.name || ""}
-                          onChange={(e) =>
-                            handleCategoryChange(index, "name", e.target.value)
-                          }
-                          placeholder="Marketing"
-                        />
-                        {errors[`category_${index}_name`] && (
-                          <p className="text-sm text-destructive">
-                            {errors[`category_${index}_name`]}
-                          </p>
-                        )}
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label>
-                          Allocation <span className="text-destructive">*</span>
-                        </Label>
-                        <Input
-                          type="number"
-                          value={category.allocatedAmount || 0}
-                          onChange={(e) =>
-                            handleCategoryChange(
-                              index,
-                              "allocatedAmount",
-                              parseFloat(e.target.value) || 0
-                            )
-                          }
-                          placeholder="0.00"
-                          min="0"
-                          step="0.01"
-                        />
-                        {errors[`category_${index}_allocatedAmount`] && (
-                          <p className="text-sm text-destructive">
-                            {errors[`category_${index}_allocatedAmount`]}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="mt-4 space-y-2">
-                      <Label>Description</Label>
-                      <Textarea
-                        value={category.description || ""}
+                    </TableCell>
+                    <TableCell>
+                      <Input
+                        value={category.description}
                         onChange={(e) =>
                           handleCategoryChange(
                             index,
@@ -555,40 +628,95 @@ export const BudgetForm: React.FC<BudgetFormProps> = ({
                             e.target.value
                           )
                         }
-                        placeholder="Describe the purpose of this category"
-                        rows={2}
+                        placeholder="Brief description"
                       />
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="relative">
+                        <Input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={category.allocatedAmount || ""}
+                          onChange={(e) =>
+                            handleCategoryChange(
+                              index,
+                              "allocatedAmount",
+                              parseFloat(e.target.value) || 0
+                            )
+                          }
+                          className={`pl-6 ${
+                            errors[`category-${index}-allocatedAmount`]
+                              ? "border-red-500"
+                              : ""
+                          }`}
+                        />
+                        <div className="absolute inset-y-0 left-0 flex items-center pl-2 pointer-events-none">
+                          <span className="text-xs text-muted-foreground">
+                            $
+                          </span>
+                        </div>
+                        {errors[`category-${index}-allocatedAmount`] && (
+                          <p className="text-xs text-red-500">
+                            {errors[`category-${index}-allocatedAmount`]}
+                          </p>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="relative">
+                        <Input
+                          type="number"
+                          min="0"
+                          max="100"
+                          value={category.allocatedPercentage || ""}
+                          onChange={(e) =>
+                            handleCategoryChange(
+                              index,
+                              "allocatedPercentage",
+                              parseFloat(e.target.value) || 0
+                            )
+                          }
+                          className="pr-8"
+                        />
+                        <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
+                          <span className="text-xs text-muted-foreground">
+                            %
+                          </span>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => removeCategory(index)}
+                      >
+                        <XCircle className="h-5 w-5 text-red-500" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           </div>
         )}
-      </CardContent>
+      </div>
 
-      <CardFooter className="flex justify-between">
-        {step === 1 ? (
-          <>
-            <Button variant="outline" onClick={onCancel}>
-              Cancel
-            </Button>
-            <Button onClick={nextStep}>
-              Next <ChevronRight className="ml-1 h-4 w-4" />
-            </Button>
-          </>
-        ) : (
-          <>
-            <Button variant="outline" onClick={prevStep}>
-              <ChevronLeft className="mr-1 h-4 w-4" /> Back
-            </Button>
-            <Button onClick={submitForm} disabled={isLoading}>
-              {isLoading ? "Saving..." : "Save Budget"}
-              {!isLoading && <Save className="ml-1 h-4 w-4" />}
-            </Button>
-          </>
-        )}
-      </CardFooter>
-    </Card>
+      <div className="flex justify-end space-x-2 pt-4">
+        <Button variant="outline" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button onClick={handleSubmit} disabled={loading}>
+          {loading ? (
+            <LoadingSpinner />
+          ) : initialData?.budget?.id ? (
+            "Update Budget"
+          ) : (
+            "Create Budget"
+          )}
+        </Button>
+      </div>
+    </div>
   );
 };

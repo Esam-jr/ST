@@ -51,6 +51,10 @@ import {
   Check,
   X,
   Info,
+  Copy,
+  Save,
+  FileText,
+  PieChart,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
@@ -63,9 +67,119 @@ interface StartupCall {
   status: string;
 }
 
+interface BudgetTemplate {
+  id: string;
+  name: string;
+  description: string;
+  categories: {
+    name: string;
+    description: string;
+    percentage: number;
+  }[];
+}
+
 interface BudgetAllocationProps {
   initialStartupCallId?: string;
 }
+
+const DEFAULT_TEMPLATES: BudgetTemplate[] = [
+  {
+    id: "startup-standard",
+    name: "Startup Standard",
+    description: "A standard budget template for early-stage startups",
+    categories: [
+      {
+        name: "Product Development",
+        description: "Software/hardware development costs",
+        percentage: 40,
+      },
+      {
+        name: "Marketing",
+        description: "Advertising, PR, and customer acquisition",
+        percentage: 25,
+      },
+      {
+        name: "Operations",
+        description: "Office, utilities, and daily operations",
+        percentage: 15,
+      },
+      {
+        name: "Legal & Admin",
+        description: "Legal fees, registrations, and admin costs",
+        percentage: 10,
+      },
+      {
+        name: "Contingency",
+        description: "Emergency funds for unexpected costs",
+        percentage: 10,
+      },
+    ],
+  },
+  {
+    id: "tech-innovation",
+    name: "Tech Innovation",
+    description: "Budget template focused on R&D and innovation",
+    categories: [
+      {
+        name: "Research & Development",
+        description: "Core R&D activities",
+        percentage: 50,
+      },
+      {
+        name: "IP Protection",
+        description: "Patents, trademarks, and IP management",
+        percentage: 15,
+      },
+      {
+        name: "Market Testing",
+        description: "Prototype testing and market validation",
+        percentage: 20,
+      },
+      {
+        name: "Business Development",
+        description: "Partnership and client acquisition",
+        percentage: 10,
+      },
+      {
+        name: "Contingency",
+        description: "Buffer for unexpected research costs",
+        percentage: 5,
+      },
+    ],
+  },
+  {
+    id: "hardware-focus",
+    name: "Hardware Focus",
+    description: "Budget template for hardware-based startups",
+    categories: [
+      {
+        name: "Prototyping",
+        description: "Building and testing prototypes",
+        percentage: 30,
+      },
+      {
+        name: "Manufacturing",
+        description: "Production and assembly costs",
+        percentage: 30,
+      },
+      {
+        name: "Supply Chain",
+        description: "Materials and logistics",
+        percentage: 20,
+      },
+      {
+        name: "Certification",
+        description: "Industry certifications and testing",
+        percentage: 15,
+      },
+      {
+        name: "Contingency",
+        description: "Emergency funds for production delays",
+        percentage: 5,
+      },
+    ],
+  },
+];
 
 const BudgetAllocation: React.FC<BudgetAllocationProps> = ({
   initialStartupCallId,
@@ -82,6 +196,18 @@ const BudgetAllocation: React.FC<BudgetAllocationProps> = ({
   const [selectedBudget, setSelectedBudget] = useState<any>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
+  const [selectedTemplate, setSelectedTemplate] =
+    useState<BudgetTemplate | null>(null);
+  const [budgetTemplates, setBudgetTemplates] =
+    useState<BudgetTemplate[]>(DEFAULT_TEMPLATES);
+  const [customTemplateDialogOpen, setCustomTemplateDialogOpen] =
+    useState(false);
+  const [newTemplate, setNewTemplate] = useState<Omit<BudgetTemplate, "id">>({
+    name: "",
+    description: "",
+    categories: [],
+  });
 
   // Format currency
   const formatCurrency = (amount: number, currency: string = "USD") => {
@@ -130,6 +256,100 @@ const BudgetAllocation: React.FC<BudgetAllocationProps> = ({
       fetchBudgets(selectedCallId);
     }
   }, [selectedCallId, fetchBudgets]);
+
+  // Apply selected template to create a new budget
+  const applyTemplate = () => {
+    if (!selectedTemplate) return;
+
+    // Close the template dialog
+    setTemplateDialogOpen(false);
+
+    // Open the create budget dialog with pre-filled template data
+    setCreateDialogOpen(true);
+
+    // Pass the template data to the BudgetForm component
+    // The actual implementation will be in the BudgetForm component
+    toast({
+      title: "Template Applied",
+      description: `"${selectedTemplate.name}" template has been applied. Customize as needed.`,
+    });
+  };
+
+  // Save current budget as a template
+  const saveBudgetAsTemplate = (budget: any) => {
+    if (!budget || !budget.categories) return;
+
+    const totalAmount = budget.totalAmount || 0;
+
+    // Create a new template from the budget
+    const newTemplate: BudgetTemplate = {
+      id: `custom-${Date.now()}`,
+      name: `${budget.title} Template`,
+      description: `Template created from ${budget.title}`,
+      categories: budget.categories.map((cat: any) => ({
+        name: cat.name,
+        description: cat.description || "",
+        percentage: calculateAllocationPercentage(
+          cat.allocatedAmount,
+          totalAmount
+        ),
+      })),
+    };
+
+    // Add the new template to the list
+    setBudgetTemplates([...budgetTemplates, newTemplate]);
+
+    toast({
+      title: "Template Created",
+      description: `${newTemplate.name} has been saved for future use.`,
+    });
+  };
+
+  // Handle custom template creation
+  const createCustomTemplate = () => {
+    // Validate the template
+    if (!newTemplate.name) {
+      toast({
+        title: "Error",
+        description: "Template name is required",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (newTemplate.categories.length === 0) {
+      toast({
+        title: "Error",
+        description: "At least one category is required",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Create a new template
+    const customTemplate: BudgetTemplate = {
+      ...newTemplate,
+      id: `custom-${Date.now()}`,
+    };
+
+    // Add the new template to the list
+    setBudgetTemplates([...budgetTemplates, customTemplate]);
+
+    // Reset the new template form
+    setNewTemplate({
+      name: "",
+      description: "",
+      categories: [],
+    });
+
+    // Close the dialog
+    setCustomTemplateDialogOpen(false);
+
+    toast({
+      title: "Custom Template Created",
+      description: `${customTemplate.name} has been added to your templates.`,
+    });
+  };
 
   // Handle budget creation form submission
   const handleBudgetSubmit = async (budget: any) => {
@@ -205,10 +425,16 @@ const BudgetAllocation: React.FC<BudgetAllocationProps> = ({
             Manage budget allocation for startup calls
           </p>
         </div>
-        <Button onClick={() => setCreateDialogOpen(true)}>
-          <PlusCircle className="mr-2 h-4 w-4" />
-          Create New Budget
-        </Button>
+        <div className="flex space-x-2">
+          <Button variant="outline" onClick={() => setTemplateDialogOpen(true)}>
+            <FileText className="mr-2 h-4 w-4" />
+            Use Template
+          </Button>
+          <Button onClick={() => setCreateDialogOpen(true)}>
+            <PlusCircle className="mr-2 h-4 w-4" />
+            Create New Budget
+          </Button>
+        </div>
       </div>
 
       <Card>
@@ -257,13 +483,19 @@ const BudgetAllocation: React.FC<BudgetAllocationProps> = ({
                   There are no budgets allocated for this startup call yet.
                   Create a new budget to get started.
                 </p>
-                <Button
-                  onClick={() => setCreateDialogOpen(true)}
-                  className="mt-6"
-                >
-                  <PlusCircle className="mr-2 h-4 w-4" />
-                  Create Budget
-                </Button>
+                <div className="flex justify-center space-x-4 mt-6">
+                  <Button
+                    variant="outline"
+                    onClick={() => setTemplateDialogOpen(true)}
+                  >
+                    <FileText className="mr-2 h-4 w-4" />
+                    Use Budget Template
+                  </Button>
+                  <Button onClick={() => setCreateDialogOpen(true)}>
+                    <PlusCircle className="mr-2 h-4 w-4" />
+                    Create Budget
+                  </Button>
+                </div>
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -310,10 +542,19 @@ const BudgetAllocation: React.FC<BudgetAllocationProps> = ({
                             <Button
                               variant="outline"
                               size="sm"
+                              onClick={() => saveBudgetAsTemplate(budget)}
+                              title="Save as Template"
+                            >
+                              <Save className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
                               onClick={() => {
                                 setSelectedBudget(budget);
                                 setEditDialogOpen(true);
                               }}
+                              title="Edit Budget"
                             >
                               <Edit className="h-4 w-4" />
                             </Button>
@@ -324,6 +565,7 @@ const BudgetAllocation: React.FC<BudgetAllocationProps> = ({
                                 setSelectedBudget(budget);
                                 setDeleteDialogOpen(true);
                               }}
+                              title="Delete Budget"
                             >
                               <Trash2 className="h-4 w-4" />
                             </Button>
@@ -452,6 +694,275 @@ const BudgetAllocation: React.FC<BudgetAllocationProps> = ({
         </Card>
       )}
 
+      {/* Budget Template Dialog */}
+      <Dialog open={templateDialogOpen} onOpenChange={setTemplateDialogOpen}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Budget Templates</DialogTitle>
+            <DialogDescription>
+              Choose a template to quickly create a standardized budget
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 my-4">
+            {budgetTemplates.map((template) => (
+              <Card
+                key={template.id}
+                className={`cursor-pointer transition-all ${
+                  selectedTemplate?.id === template.id
+                    ? "ring-2 ring-primary"
+                    : "hover:bg-muted/50"
+                }`}
+                onClick={() => setSelectedTemplate(template)}
+              >
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-lg">{template.name}</CardTitle>
+                </CardHeader>
+                <CardContent className="pb-2">
+                  <p className="text-sm text-muted-foreground mb-2">
+                    {template.description}
+                  </p>
+                  <div className="text-xs">
+                    {template.categories.slice(0, 3).map((cat) => (
+                      <div key={cat.name} className="flex justify-between mb-1">
+                        <span>{cat.name}</span>
+                        <span>{cat.percentage}%</span>
+                      </div>
+                    ))}
+                    {template.categories.length > 3 && (
+                      <div className="text-muted-foreground mt-1">
+                        +{template.categories.length - 3} more categories
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+
+            {/* Add Custom Template Card */}
+            <Card
+              className="cursor-pointer hover:bg-muted/50 border-dashed"
+              onClick={() => setCustomTemplateDialogOpen(true)}
+            >
+              <CardHeader className="pb-2">
+                <CardTitle className="text-lg">
+                  Create Custom Template
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pb-4 flex items-center justify-center h-24">
+                <PlusCircle className="h-10 w-10 text-muted-foreground" />
+              </CardContent>
+            </Card>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setTemplateDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button onClick={applyTemplate} disabled={!selectedTemplate}>
+              Apply Template
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Custom Template Dialog */}
+      <Dialog
+        open={customTemplateDialogOpen}
+        onOpenChange={setCustomTemplateDialogOpen}
+      >
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Create Custom Budget Template</DialogTitle>
+            <DialogDescription>
+              Define your own budget template for reuse
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="templateName">Template Name</Label>
+              <Input
+                id="templateName"
+                value={newTemplate.name}
+                onChange={(e) =>
+                  setNewTemplate({ ...newTemplate, name: e.target.value })
+                }
+                placeholder="E.g., Software Development Budget"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="templateDescription">Description</Label>
+              <Textarea
+                id="templateDescription"
+                value={newTemplate.description}
+                onChange={(e) =>
+                  setNewTemplate({
+                    ...newTemplate,
+                    description: e.target.value,
+                  })
+                }
+                placeholder="Briefly describe what this template is for"
+                rows={2}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <Label>Categories</Label>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setNewTemplate({
+                      ...newTemplate,
+                      categories: [
+                        ...newTemplate.categories,
+                        { name: "", description: "", percentage: 0 },
+                      ],
+                    });
+                  }}
+                >
+                  <PlusCircle className="h-4 w-4 mr-1" /> Add Category
+                </Button>
+              </div>
+
+              {newTemplate.categories.length === 0 ? (
+                <div className="text-center py-4 bg-muted/40 rounded-md">
+                  <p className="text-sm text-muted-foreground">
+                    No categories added. Click "Add Category" to create
+                    categories.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {newTemplate.categories.map((category, index) => (
+                    <div
+                      key={index}
+                      className="grid grid-cols-12 gap-2 items-start"
+                    >
+                      <div className="col-span-5">
+                        <Input
+                          value={category.name}
+                          onChange={(e) => {
+                            const updated = [...newTemplate.categories];
+                            updated[index].name = e.target.value;
+                            setNewTemplate({
+                              ...newTemplate,
+                              categories: updated,
+                            });
+                          }}
+                          placeholder="Category name"
+                        />
+                      </div>
+                      <div className="col-span-5">
+                        <Input
+                          value={category.description}
+                          onChange={(e) => {
+                            const updated = [...newTemplate.categories];
+                            updated[index].description = e.target.value;
+                            setNewTemplate({
+                              ...newTemplate,
+                              categories: updated,
+                            });
+                          }}
+                          placeholder="Description"
+                        />
+                      </div>
+                      <div className="col-span-1">
+                        <Input
+                          type="number"
+                          min="0"
+                          max="100"
+                          value={category.percentage}
+                          onChange={(e) => {
+                            const updated = [...newTemplate.categories];
+                            updated[index].percentage =
+                              parseInt(e.target.value) || 0;
+                            setNewTemplate({
+                              ...newTemplate,
+                              categories: updated,
+                            });
+                          }}
+                          placeholder="%"
+                        />
+                      </div>
+                      <div className="col-span-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => {
+                            const updated = [...newTemplate.categories];
+                            updated.splice(index, 1);
+                            setNewTemplate({
+                              ...newTemplate,
+                              categories: updated,
+                            });
+                          }}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Percentage Total */}
+                  <div className="flex justify-between text-sm font-medium mt-2">
+                    <span>Total Allocation:</span>
+                    <span
+                      className={
+                        newTemplate.categories.reduce(
+                          (sum, cat) => sum + cat.percentage,
+                          0
+                        ) === 100
+                          ? "text-green-600"
+                          : "text-red-600"
+                      }
+                    >
+                      {newTemplate.categories.reduce(
+                        (sum, cat) => sum + cat.percentage,
+                        0
+                      )}
+                      %
+                      {newTemplate.categories.reduce(
+                        (sum, cat) => sum + cat.percentage,
+                        0
+                      ) !== 100 && " (Should be 100%)"}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setCustomTemplateDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={createCustomTemplate}
+              disabled={
+                !newTemplate.name ||
+                newTemplate.categories.length === 0 ||
+                newTemplate.categories.reduce(
+                  (sum, cat) => sum + cat.percentage,
+                  0
+                ) !== 100
+              }
+            >
+              Create Template
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Create Budget Dialog */}
       <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -466,6 +977,7 @@ const BudgetAllocation: React.FC<BudgetAllocationProps> = ({
               startupCallId={selectedCallId}
               onSubmit={handleBudgetSubmit}
               onCancel={() => setCreateDialogOpen(false)}
+              templateData={selectedTemplate}
             />
           )}
         </DialogContent>
@@ -502,7 +1014,20 @@ const BudgetAllocation: React.FC<BudgetAllocationProps> = ({
               undone.
             </DialogDescription>
           </DialogHeader>
-          <div className="flex justify-end space-x-2 mt-4">
+          <div className="pt-4 pb-2">
+            {selectedBudget && (
+              <Alert variant="destructive">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertTitle>Warning</AlertTitle>
+                <AlertDescription>
+                  You are about to delete budget "{selectedBudget.title}". If
+                  this budget is being used by any approved applications, they
+                  will lose their budget allocation.
+                </AlertDescription>
+              </Alert>
+            )}
+          </div>
+          <DialogFooter>
             <Button
               variant="outline"
               onClick={() => setDeleteDialogOpen(false)}
@@ -514,9 +1039,9 @@ const BudgetAllocation: React.FC<BudgetAllocationProps> = ({
               onClick={handleDeleteBudget}
               disabled={loading}
             >
-              {loading ? <LoadingSpinner /> : "Delete"}
+              {loading ? <LoadingSpinner /> : "Delete Budget"}
             </Button>
-          </div>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
