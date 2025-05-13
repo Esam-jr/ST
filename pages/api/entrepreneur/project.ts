@@ -2,7 +2,7 @@ import { NextApiRequest, NextApiResponse } from "next";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "../auth/[...nextauth]";
 import prisma from "@/lib/prisma";
-import { Status, StartupCallApplicationStatus, Prisma } from "@prisma/client";
+import { StartupCallApplicationStatus } from "@prisma/client";
 
 interface ProjectResponse {
   id: string;
@@ -38,62 +38,55 @@ export default async function handler(
   }
 
   try {
+    // Get user session
     const session = await getServerSession(req, res, authOptions);
 
-    if (!session) {
+    if (!session || !session.user || session.user.role !== "ENTREPRENEUR") {
       return res.status(401).json({ message: "Unauthorized" });
     }
 
-    // Get the entrepreneur's user ID from the session
-    const userId = session.user.id;
-
-    // First, find any approved applications from this entrepreneur
-    const approvedApplications = await prisma.startupCallApplication.findMany({
+    // First, find the entrepreneur's startup
+    const startup = await prisma.startup.findFirst({
       where: {
-        userId: userId,
-        status: StartupCallApplicationStatus.APPROVED,
+        founderId: session.user.id,
       },
       include: {
-        call: {
-          select: {
-            id: true,
-            title: true,
+        callApplications: {
+          where: {
+            status: StartupCallApplicationStatus.APPROVED,
+          },
+          include: {
+            call: true,
           },
         },
-        startup: true,
+        milestones: true,
+        tasks: true,
       },
     });
 
-    // If no approved applications, return 404
-    if (!approvedApplications || approvedApplications.length === 0) {
+    if (!startup) {
+      return res
+        .status(404)
+        .json({ message: "No startup found for this user" });
+    }
+
+    // Check if the startup has any approved applications
+    if (!startup.callApplications || startup.callApplications.length === 0) {
       return res
         .status(404)
         .json({ message: "No approved applications found" });
     }
 
-    // Use the first approved application
-    const approvedApplication = approvedApplications[0];
+    // Get the approved application & call
+    const approvedApplication = startup.callApplications[0]; // Take the first approved application
 
-    // Make sure we have a linked startup
-    if (!approvedApplication.startup) {
-      return res
-        .status(404)
-        .json({ message: "No startup linked to the approved application" });
-    }
-
-    const startup = approvedApplication.startup;
-
-    // Fetch budget information
+    // Fetch budget for this call
     const budget = await prisma.budget.findFirst({
       where: {
-        startupCallId: approvedApplication.call.id,
+        startupCallId: approvedApplication.callId,
       },
       include: {
-        expenses: {
-          select: {
-            amount: true,
-          },
-        },
+        expenses: true,
       },
     });
 
@@ -103,63 +96,43 @@ export default async function handler(
         .json({ message: "No budget found for this project" });
     }
 
-    // Fetch tasks and milestones
-    const tasks = await prisma.task.findMany({
-      where: {
-        startupId: startup.id,
-      },
-    });
-
-    const milestones = await prisma.milestone.findMany({
-      where: {
-        startupId: startup.id,
-      },
-      orderBy: {
-        dueDate: "asc",
-      },
-    });
-
-    // Calculate total spent amount from expenses
+    // Calculate spent amount from expenses
     const spent = budget.expenses.reduce(
-      (total, expense) => total + expense.amount,
+      (total: number, expense) => total + expense.amount,
       0
     );
 
-    // Calculate task statistics
-    const totalTasks = tasks.length;
-    const completedTasks = tasks.filter(
-      (task) => task.status === "COMPLETED"
-    ).length;
-
-    // Format the response
-    const response: ProjectResponse = {
+    // Format response
+    const projectResponse: ProjectResponse = {
       id: startup.id,
       startupCallId: approvedApplication.call.id,
       startupCallTitle: approvedApplication.call.title,
       budget: {
         id: budget.id,
-        totalAmount: budget.totalAmount,
-        spent,
-        remaining: budget.totalAmount - spent,
+        totalAmount: budget.totalAmount || 0,
+        spent: spent || 0,
+        remaining: (budget.totalAmount || 0) - (spent || 0),
       },
       tasks: {
-        total: totalTasks,
-        completed: completedTasks,
-        pending: totalTasks - completedTasks,
+        total: startup.tasks.length,
+        completed: startup.tasks.filter((task) => task.status === "COMPLETED")
+          .length,
+        pending: startup.tasks.filter((task) => task.status !== "COMPLETED")
+          .length,
       },
       timeline: {
-        milestones: milestones.map((milestone) => ({
+        milestones: startup.milestones.map((milestone) => ({
           id: milestone.id,
           title: milestone.title,
           dueDate: milestone.dueDate.toISOString(),
-          status: milestone.status.toLowerCase(),
+          status: milestone.status,
         })),
       },
     };
 
-    return res.status(200).json(response);
+    return res.status(200).json(projectResponse);
   } catch (error) {
-    console.error("Error fetching project:", error);
+    console.error("Error fetching project data:", error);
     return res.status(500).json({ message: "Internal server error" });
   }
 }
