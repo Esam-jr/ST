@@ -31,6 +31,21 @@ interface Project {
     totalAmount: number;
     spent: number;
     remaining: number;
+    categories: Array<{
+      id: string;
+      name: string;
+      allocatedAmount: number;
+      spent: number;
+      remaining: number;
+    }>;
+    expenses: Array<{
+      id: string;
+      title: string;
+      amount: number;
+      date: string;
+      categoryId: string;
+      status: string;
+    }>;
   };
   tasks: {
     total: number;
@@ -102,25 +117,63 @@ export default function ProjectManagement() {
     );
   }
 
-  // Calculate budget percentages
+  // Calculate budget percentages with error handling
   const spentPercentage =
-    (project.budget.spent / project.budget.totalAmount) * 100;
+    project.budget.totalAmount > 0
+      ? (project.budget.spent / project.budget.totalAmount) * 100
+      : 0;
   const remainingPercentage = 100 - spentPercentage;
 
-  // Format milestone dates
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    });
+  // Format currency with error handling
+  const formatCurrency = (amount: number) => {
+    try {
+      return amount.toLocaleString("en-US", {
+        style: "currency",
+        currency: "USD",
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      });
+    } catch (error) {
+      console.error("Error formatting currency:", error);
+      return "$0.00";
+    }
   };
 
-  // Calculate if a milestone is overdue
+  // Calculate category percentage with error handling
+  const calculateCategoryPercentage = (spent: number, allocated: number) => {
+    if (allocated <= 0) return 0;
+    try {
+      return (spent / allocated) * 100;
+    } catch (error) {
+      console.error("Error calculating category percentage:", error);
+      return 0;
+    }
+  };
+
+  // Format date with error handling
+  const formatDate = (dateString: string) => {
+    try {
+      return new Date(dateString).toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      });
+    } catch (error) {
+      console.error("Error formatting date:", error);
+      return "Invalid Date";
+    }
+  };
+
+  // Calculate if a milestone is overdue with error handling
   const isOverdue = (dateString: string) => {
-    const date = new Date(dateString);
-    const today = new Date();
-    return date < today;
+    try {
+      const date = new Date(dateString);
+      const today = new Date();
+      return date < today;
+    } catch (error) {
+      console.error("Error checking if milestone is overdue:", error);
+      return false;
+    }
   };
 
   return (
@@ -150,19 +203,19 @@ export default function ProjectManagement() {
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Total Budget</span>
                 <span className="font-medium">
-                  ${project.budget.totalAmount.toLocaleString()}
+                  {formatCurrency(project.budget.totalAmount)}
                 </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Spent</span>
                 <span className="font-medium text-amber-600">
-                  ${project.budget.spent.toLocaleString()}
+                  {formatCurrency(project.budget.spent)}
                 </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Remaining</span>
                 <span className="font-medium text-green-600">
-                  ${project.budget.remaining.toLocaleString()}
+                  {formatCurrency(project.budget.remaining)}
                 </span>
               </div>
               <Progress value={spentPercentage} className="h-2 mt-2" />
@@ -323,7 +376,7 @@ export default function ProjectManagement() {
             <div className="border rounded-md p-4">
               <h3 className="font-medium mb-2">Total Budget</h3>
               <p className="text-2xl font-bold">
-                ${project.budget.totalAmount.toLocaleString()}
+                {formatCurrency(project.budget.totalAmount)}
               </p>
               <div className="flex justify-between mt-2 text-sm">
                 <span className="text-muted-foreground">Call:</span>
@@ -333,14 +386,102 @@ export default function ProjectManagement() {
             <div className="border rounded-md p-4">
               <h3 className="font-medium mb-2">Current Spending</h3>
               <p className="text-2xl font-bold">
-                ${project.budget.spent.toLocaleString()}
+                {formatCurrency(project.budget.spent)}
               </p>
               <div className="flex justify-between mt-2 text-sm">
                 <span className="text-muted-foreground">Remaining:</span>
                 <span className="text-green-600">
-                  ${project.budget.remaining.toLocaleString()}
+                  {formatCurrency(project.budget.remaining)}
                 </span>
               </div>
+            </div>
+          </div>
+
+          {/* Budget Categories */}
+          <div className="mt-6">
+            <h3 className="font-medium mb-4">Budget Categories</h3>
+            <div className="space-y-4">
+              {project.budget.categories.map((category) => {
+                const categorySpentPercentage = calculateCategoryPercentage(
+                  category.spent,
+                  category.allocatedAmount
+                );
+                return (
+                  <div key={category.id} className="border rounded-md p-4">
+                    <div className="flex justify-between items-center mb-2">
+                      <h4 className="font-medium">{category.name}</h4>
+                      <span className="text-sm text-muted-foreground">
+                        {categorySpentPercentage.toFixed(1)}% spent
+                      </span>
+                    </div>
+                    <Progress
+                      value={categorySpentPercentage}
+                      className="h-2 mb-2"
+                    />
+                    <div className="grid grid-cols-3 gap-4 text-sm">
+                      <div>
+                        <span className="text-muted-foreground">
+                          Allocated:
+                        </span>
+                        <span className="ml-2 font-medium">
+                          {formatCurrency(category.allocatedAmount)}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Spent:</span>
+                        <span className="ml-2 font-medium text-amber-600">
+                          {formatCurrency(category.spent)}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">
+                          Remaining:
+                        </span>
+                        <span className="ml-2 font-medium text-green-600">
+                          {formatCurrency(category.remaining)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Recent Expenses */}
+          <div className="mt-6">
+            <h3 className="font-medium mb-4">Recent Expenses</h3>
+            <div className="space-y-2">
+              {project.budget.expenses.slice(0, 5).map((expense) => (
+                <div
+                  key={expense.id}
+                  className="flex justify-between items-center border-b pb-2 last:border-0"
+                >
+                  <div>
+                    <p className="font-medium">{expense.title}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {formatDate(expense.date)}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-medium">
+                      {formatCurrency(expense.amount)}
+                    </p>
+                    <Badge
+                      variant="outline"
+                      className={
+                        expense.status === "APPROVED"
+                          ? "bg-green-50 text-green-600"
+                          : expense.status === "PENDING"
+                          ? "bg-amber-50 text-amber-600"
+                          : "bg-red-50 text-red-600"
+                      }
+                    >
+                      {expense.status}
+                    </Badge>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </CardContent>
@@ -423,13 +564,13 @@ export default function ProjectManagement() {
           <div className="flex justify-between py-4 text-center border-b">
             <div className="w-1/4">
               <p className="text-xl font-bold">
-                ${project.budget.spent.toLocaleString()}
+                {formatCurrency(project.budget.spent)}
               </p>
               <p className="text-sm text-muted-foreground">Total Spent</p>
             </div>
             <div className="w-1/4">
               <p className="text-xl font-bold">
-                ${project.budget.remaining.toLocaleString()}
+                {formatCurrency(project.budget.remaining)}
               </p>
               <p className="text-sm text-muted-foreground">Remaining</p>
             </div>
@@ -439,7 +580,7 @@ export default function ProjectManagement() {
             </div>
             <div className="w-1/4">
               <p className="text-xl font-bold">
-                ${project.budget.totalAmount.toLocaleString()}
+                {formatCurrency(project.budget.totalAmount)}
               </p>
               <p className="text-sm text-muted-foreground">Total Budget</p>
             </div>
