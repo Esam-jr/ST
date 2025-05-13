@@ -13,6 +13,21 @@ interface ProjectResponse {
     totalAmount: number;
     spent: number;
     remaining: number;
+    categories: Array<{
+      id: string;
+      name: string;
+      allocatedAmount: number;
+      spent: number;
+      remaining: number;
+    }>;
+    expenses: Array<{
+      id: string;
+      title: string;
+      amount: number;
+      date: string;
+      categoryId: string;
+      status: string;
+    }>;
   };
   tasks: {
     total: number;
@@ -87,6 +102,7 @@ export default async function handler(
       },
       include: {
         expenses: true,
+        categories: true,
       },
     });
 
@@ -102,6 +118,24 @@ export default async function handler(
       0
     );
 
+    // Calculate category-wise spending
+    const categorySpending = budget.categories.map((category) => {
+      const categoryExpenses = budget.expenses.filter(
+        (expense) => expense.categoryId === category.id
+      );
+      const categorySpent = categoryExpenses.reduce(
+        (total, expense) => total + expense.amount,
+        0
+      );
+      return {
+        id: category.id,
+        name: category.name,
+        allocatedAmount: category.allocatedAmount,
+        spent: categorySpent,
+        remaining: category.allocatedAmount - categorySpent,
+      };
+    });
+
     // Format response
     const projectResponse: ProjectResponse = {
       id: startup.id,
@@ -112,6 +146,15 @@ export default async function handler(
         totalAmount: budget.totalAmount || 0,
         spent: spent || 0,
         remaining: (budget.totalAmount || 0) - (spent || 0),
+        categories: categorySpending,
+        expenses: budget.expenses.map((expense) => ({
+          id: expense.id,
+          title: expense.title,
+          amount: expense.amount,
+          date: expense.date.toISOString(),
+          categoryId: expense.categoryId || "",
+          status: expense.status,
+        })),
       },
       tasks: {
         total: startup.tasks.length,
