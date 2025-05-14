@@ -53,10 +53,13 @@ async function getBudgets(
           return res.status(404).json({ error: "Startup call not found" });
         }
 
-        // Get all budgets for the startup call
+        // Get all budgets for the startup call with their categories
         const budgets = await prisma.budget.findMany({
           where: { startupCallId },
           orderBy: { createdAt: "desc" },
+          include: {
+            categories: true,
+          },
         });
 
         return budgets;
@@ -79,8 +82,15 @@ async function createBudget(
   startupCallId: string,
   userId: string
 ) {
-  const { title, description, totalAmount, currency, fiscalYear, status } =
-    req.body;
+  const {
+    title,
+    description,
+    totalAmount,
+    currency,
+    fiscalYear,
+    status,
+    categories,
+  } = req.body;
 
   if (!title || !totalAmount || !currency) {
     return res.status(400).json({ error: "Missing required fields" });
@@ -96,27 +106,60 @@ async function createBudget(
         });
 
         if (!startupCall) {
-          return res.status(404).json({ error: "Startup call not found" });
+          return null; // Will be checked outside
         }
 
-        // Create the budget
-        const budget = await prisma.budget.create({
-          data: {
-            title,
-            description,
-            totalAmount: parseFloat(totalAmount),
-            currency,
-            fiscalYear: fiscalYear || new Date().getFullYear().toString(),
-            status: status || "draft",
-            startupCall: { connect: { id: startupCallId } },
-          },
-        });
+        // Use transaction to create budget and categories
+        return await prisma.$transaction(async (tx) => {
+          // Create the budget
+          const budget = await tx.budget.create({
+            data: {
+              title,
+              description,
+              totalAmount: parseFloat(totalAmount.toString()),
+              currency,
+              fiscalYear: fiscalYear || new Date().getFullYear().toString(),
+              status: status || "draft",
+              startupCall: { connect: { id: startupCallId } },
+            },
+          });
 
-        return budget;
+          // Create categories if provided
+          if (
+            categories &&
+            Array.isArray(categories) &&
+            categories.length > 0
+          ) {
+            for (const category of categories) {
+              await tx.budgetCategory.create({
+                data: {
+                  name: category.name,
+                  description: category.description || null,
+                  allocatedAmount: parseFloat(
+                    category.allocatedAmount.toString()
+                  ),
+                  budget: { connect: { id: budget.id } },
+                },
+              });
+            }
+          }
+
+          // Return the budget with its categories
+          return tx.budget.findUnique({
+            where: { id: budget.id },
+            include: {
+              categories: true,
+            },
+          });
+        });
       } finally {
         await prisma.$disconnect();
       }
     });
+
+    if (result === null) {
+      return res.status(404).json({ error: "Startup call not found" });
+    }
 
     return res.status(201).json(result);
   } catch (error) {
