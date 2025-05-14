@@ -42,6 +42,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   DollarSign,
   PlusCircle,
@@ -51,6 +52,7 @@ import {
   AlertCircle,
   Receipt,
   Tag,
+  RefreshCw,
 } from "lucide-react";
 
 interface Expense {
@@ -104,6 +106,7 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
   const [milestones, setMilestones] = useState<Milestone[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [fetchingExpenses, setFetchingExpenses] = useState(false);
 
   // Expense form state
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -120,48 +123,83 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
 
   // Fetch all data when component mounts
   useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        // Fetch project data
-        const projectResponse = await axios.get("/api/entrepreneur/project");
+    fetchData();
+  }, []);
 
-        // Fetch expenses
-        const expenseResponse = await axios.get("/api/entrepreneur/expenses");
-        setExpenses(expenseResponse.data);
+  // Fetch data function to enable easier refreshing
+  const fetchData = async () => {
+    setLoading(true);
+    setError(null);
 
+    try {
+      // Create an array of promises to fetch data in parallel
+      const [
+        projectResponse,
+        expenseResponse,
+        taskResponse,
+        milestoneResponse,
+      ] = await Promise.allSettled([
+        axios.get("/api/entrepreneur/project"),
+        axios.get("/api/entrepreneur/expenses").catch((err) => {
+          console.error("Error fetching expenses:", err);
+          return { status: "rejected", reason: err };
+        }),
+        axios.get("/api/entrepreneur/tasks").catch((err) => {
+          console.error("Error fetching tasks:", err);
+          return { status: "rejected", reason: err };
+        }),
+        axios.get("/api/entrepreneur/milestones").catch((err) => {
+          console.error("Error fetching milestones:", err);
+          return { status: "rejected", reason: err };
+        }),
+      ]);
+
+      // Handle each response individually
+      if (projectResponse.status === "fulfilled") {
         // Set categories from project data with budget information
-        setCategories(projectResponse.data.budget.categories);
+        setCategories(projectResponse.value.data.budget.categories);
+      } else {
+        throw new Error("Failed to load project data");
+      }
 
-        // Fetch tasks
-        const taskResponse = await axios.get("/api/entrepreneur/tasks");
-        setTasks(taskResponse.data);
-
-        // Fetch milestones
-        const milestoneResponse = await axios.get(
-          "/api/entrepreneur/milestones"
-        );
-        setMilestones(milestoneResponse.data);
-
-        setError(null);
-      } catch (err: any) {
-        console.error("Error fetching expense data:", err);
-        setError(
-          err.response?.data?.message ||
-            "Failed to load expense data. Please try again later."
-        );
+      if (expenseResponse.status === "fulfilled") {
+        setExpenses(expenseResponse.value.data);
+      } else {
+        console.error("Error fetching expenses:", expenseResponse.reason);
+        // Don't throw error here, just display a message
         toast({
-          title: "Error",
-          description: "Failed to load expense data",
+          title: "Warning",
+          description: "Failed to load expenses. Some data may be missing.",
           variant: "destructive",
         });
-      } finally {
-        setLoading(false);
       }
-    };
 
-    fetchData();
-  }, [toast]);
+      if (taskResponse.status === "fulfilled") {
+        setTasks(taskResponse.value.data);
+      } else {
+        console.warn("Could not load tasks:", taskResponse.reason);
+      }
+
+      if (milestoneResponse.status === "fulfilled") {
+        setMilestones(milestoneResponse.value.data);
+      } else {
+        console.warn("Could not load milestones:", milestoneResponse.reason);
+      }
+    } catch (err: any) {
+      console.error("Error fetching expense data:", err);
+      setError(
+        err.response?.data?.message ||
+          "Failed to load expense data. Please try again later."
+      );
+      toast({
+        title: "Error",
+        description: "Failed to load expense data",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Format currency
   const formatCurrency = (amount: number, currency: string = "USD") => {
@@ -324,7 +362,8 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
 
   // Get filtered tasks based on milestone selection
   const getFilteredTasks = () => {
-    if (!newExpense.milestoneId) return tasks;
+    if (!newExpense.milestoneId || newExpense.milestoneId === "none")
+      return tasks;
     return tasks.filter((task) => task.milestoneId === newExpense.milestoneId);
   };
 
@@ -355,10 +394,16 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
             Track and manage your project expenses
           </p>
         </div>
-        <Button onClick={() => setCreateDialogOpen(true)}>
-          <PlusCircle className="mr-2 h-4 w-4" />
-          Add Expense
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={fetchData} disabled={loading}>
+            <RefreshCw className="mr-2 h-4 w-4" />
+            Refresh
+          </Button>
+          <Button onClick={() => setCreateDialogOpen(true)}>
+            <PlusCircle className="mr-2 h-4 w-4" />
+            Add Expense
+          </Button>
+        </div>
       </div>
 
       {/* Budget Overview */}
@@ -371,40 +416,48 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {categories.map((category) => {
-              const spentPercentage =
-                category.allocatedAmount > 0
-                  ? (category.spent / category.allocatedAmount) * 100
-                  : 0;
+            {categories.length === 0 ? (
+              <div className="text-center py-4">
+                <p className="text-muted-foreground">
+                  No budget categories available
+                </p>
+              </div>
+            ) : (
+              categories.map((category) => {
+                const spentPercentage =
+                  category.allocatedAmount > 0
+                    ? (category.spent / category.allocatedAmount) * 100
+                    : 0;
 
-              return (
-                <div key={category.id}>
-                  <div className="flex justify-between mb-1">
-                    <span className="font-medium">{category.name}</span>
-                    <span className="text-sm text-muted-foreground">
-                      {formatCurrency(category.spent)} of{" "}
-                      {formatCurrency(category.allocatedAmount)}
-                    </span>
+                return (
+                  <div key={category.id}>
+                    <div className="flex justify-between mb-1">
+                      <span className="font-medium">{category.name}</span>
+                      <span className="text-sm text-muted-foreground">
+                        {formatCurrency(category.spent)} of{" "}
+                        {formatCurrency(category.allocatedAmount)}
+                      </span>
+                    </div>
+                    <Progress
+                      value={spentPercentage}
+                      className={`h-2 ${
+                        spentPercentage > 90
+                          ? "bg-red-100"
+                          : spentPercentage > 75
+                          ? "bg-amber-100"
+                          : "bg-green-100"
+                      }`}
+                    />
+                    <div className="flex justify-between text-xs mt-1">
+                      <span>{spentPercentage.toFixed(1)}% used</span>
+                      <span className="text-green-600">
+                        {formatCurrency(category.remaining)} remaining
+                      </span>
+                    </div>
                   </div>
-                  <Progress
-                    value={spentPercentage}
-                    className={`h-2 ${
-                      spentPercentage > 90
-                        ? "bg-red-100"
-                        : spentPercentage > 75
-                        ? "bg-amber-100"
-                        : "bg-green-100"
-                    }`}
-                  />
-                  <div className="flex justify-between text-xs mt-1">
-                    <span>{spentPercentage.toFixed(1)}% used</span>
-                    <span className="text-green-600">
-                      {formatCurrency(category.remaining)} remaining
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })
+            )}
           </div>
         </CardContent>
       </Card>
@@ -500,7 +553,7 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
 
       {/* Add Expense Dialog */}
       <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[90vh]">
           <DialogHeader>
             <DialogTitle>Add New Expense</DialogTitle>
             <DialogDescription>
@@ -509,158 +562,164 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <Label htmlFor="title">Title</Label>
-              <Input
-                id="title"
-                placeholder="Expense title"
-                value={newExpense.title}
-                onChange={(e) => handleInputChange("title", e.target.value)}
-              />
-              {formErrors.title && (
-                <p className="text-sm text-red-500">{formErrors.title}</p>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="description">Description (Optional)</Label>
-              <Textarea
-                id="description"
-                placeholder="Brief description of the expense"
-                value={newExpense.description}
-                onChange={(e) =>
-                  handleInputChange("description", e.target.value)
-                }
-                rows={3}
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
+          <ScrollArea className="max-h-[60vh] pr-4">
+            <div className="space-y-4 py-2">
               <div className="space-y-2">
-                <Label htmlFor="amount">Amount</Label>
-                <div className="relative">
-                  <DollarSign className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    id="amount"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    className="pl-8"
-                    value={newExpense.amount || ""}
-                    onChange={(e) =>
-                      handleInputChange(
-                        "amount",
-                        parseFloat(e.target.value) || 0
-                      )
-                    }
-                  />
-                </div>
-                {formErrors.amount && (
-                  <p className="text-sm text-red-500">{formErrors.amount}</p>
+                <Label htmlFor="title">Title</Label>
+                <Input
+                  id="title"
+                  placeholder="Expense title"
+                  value={newExpense.title}
+                  onChange={(e) => handleInputChange("title", e.target.value)}
+                />
+                {formErrors.title && (
+                  <p className="text-sm text-red-500">{formErrors.title}</p>
                 )}
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="date">Date</Label>
-                <div className="relative">
-                  <Calendar className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    id="date"
-                    type="date"
-                    className="pl-8"
-                    value={newExpense.date}
-                    onChange={(e) => handleInputChange("date", e.target.value)}
-                  />
-                </div>
-                {formErrors.date && (
-                  <p className="text-sm text-red-500">{formErrors.date}</p>
-                )}
+                <Label htmlFor="description">Description (Optional)</Label>
+                <Textarea
+                  id="description"
+                  placeholder="Brief description of the expense"
+                  value={newExpense.description}
+                  onChange={(e) =>
+                    handleInputChange("description", e.target.value)
+                  }
+                  rows={3}
+                />
               </div>
-            </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="category">Category</Label>
-              <Select
-                value={newExpense.categoryId}
-                onValueChange={(value) =>
-                  handleInputChange("categoryId", value)
-                }
-              >
-                <SelectTrigger id="category">
-                  <SelectValue placeholder="Select category" />
-                </SelectTrigger>
-                <SelectContent>
-                  {categories.map((category) => (
-                    <SelectItem key={category.id} value={category.id}>
-                      {category.name} ({formatCurrency(category.remaining)}{" "}
-                      remaining)
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {formErrors.categoryId && (
-                <p className="text-sm text-red-500">{formErrors.categoryId}</p>
-              )}
-
-              {newExpense.categoryId && (
-                <div className="mt-2 text-sm">
-                  <div className="flex justify-between items-center">
-                    <span>Budget remaining:</span>
-                    <span className="font-medium">
-                      {formatCurrency(
-                        categories.find(
-                          (cat) => cat.id === newExpense.categoryId
-                        )?.remaining || 0
-                      )}
-                    </span>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="amount">Amount</Label>
+                  <div className="relative">
+                    <DollarSign className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="amount"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      className="pl-8"
+                      value={newExpense.amount || ""}
+                      onChange={(e) =>
+                        handleInputChange(
+                          "amount",
+                          parseFloat(e.target.value) || 0
+                        )
+                      }
+                    />
                   </div>
+                  {formErrors.amount && (
+                    <p className="text-sm text-red-500">{formErrors.amount}</p>
+                  )}
                 </div>
-              )}
-            </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="milestone">Related Milestone (Optional)</Label>
-              <Select
-                value={newExpense.milestoneId}
-                onValueChange={(value) =>
-                  handleInputChange("milestoneId", value)
-                }
-              >
-                <SelectTrigger id="milestone">
-                  <SelectValue placeholder="Select milestone" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
-                  {milestones.map((milestone) => (
-                    <SelectItem key={milestone.id} value={milestone.id}>
-                      {milestone.title}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+                <div className="space-y-2">
+                  <Label htmlFor="date">Date</Label>
+                  <div className="relative">
+                    <Calendar className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="date"
+                      type="date"
+                      className="pl-8"
+                      value={newExpense.date}
+                      onChange={(e) =>
+                        handleInputChange("date", e.target.value)
+                      }
+                    />
+                  </div>
+                  {formErrors.date && (
+                    <p className="text-sm text-red-500">{formErrors.date}</p>
+                  )}
+                </div>
+              </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="task">Related Task (Optional)</Label>
-              <Select
-                value={newExpense.taskId}
-                onValueChange={(value) => handleInputChange("taskId", value)}
-              >
-                <SelectTrigger id="task">
-                  <SelectValue placeholder="Select task" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
-                  {getFilteredTasks().map((task) => (
-                    <SelectItem key={task.id} value={task.id}>
-                      {task.title}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="space-y-2">
+                <Label htmlFor="category">Category</Label>
+                <Select
+                  value={newExpense.categoryId}
+                  onValueChange={(value) =>
+                    handleInputChange("categoryId", value)
+                  }
+                >
+                  <SelectTrigger id="category">
+                    <SelectValue placeholder="Select category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {categories.map((category) => (
+                      <SelectItem key={category.id} value={category.id}>
+                        {category.name} ({formatCurrency(category.remaining)}{" "}
+                        remaining)
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {formErrors.categoryId && (
+                  <p className="text-sm text-red-500">
+                    {formErrors.categoryId}
+                  </p>
+                )}
+
+                {newExpense.categoryId && (
+                  <div className="mt-2 text-sm">
+                    <div className="flex justify-between items-center">
+                      <span>Budget remaining:</span>
+                      <span className="font-medium">
+                        {formatCurrency(
+                          categories.find(
+                            (cat) => cat.id === newExpense.categoryId
+                          )?.remaining || 0
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="milestone">Related Milestone (Optional)</Label>
+                <Select
+                  value={newExpense.milestoneId}
+                  onValueChange={(value) =>
+                    handleInputChange("milestoneId", value)
+                  }
+                >
+                  <SelectTrigger id="milestone">
+                    <SelectValue placeholder="Select milestone" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None</SelectItem>
+                    {milestones.map((milestone) => (
+                      <SelectItem key={milestone.id} value={milestone.id}>
+                        {milestone.title}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="task">Related Task (Optional)</Label>
+                <Select
+                  value={newExpense.taskId}
+                  onValueChange={(value) => handleInputChange("taskId", value)}
+                >
+                  <SelectTrigger id="task">
+                    <SelectValue placeholder="Select task" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None</SelectItem>
+                    {getFilteredTasks().map((task) => (
+                      <SelectItem key={task.id} value={task.id}>
+                        {task.title}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-          </div>
+          </ScrollArea>
 
           <DialogFooter>
             <Button
