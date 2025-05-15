@@ -162,7 +162,7 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
       }
 
       if (expenseResponse.status === "fulfilled") {
-        setExpenses(expenseResponse.value.data);
+        setExpenses(expenseResponse.value?.data || []);
       } else {
         console.error("Error fetching expenses:", expenseResponse.reason);
         // Don't throw error here, just display a message
@@ -171,18 +171,22 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
           description: "Failed to load expenses. Some data may be missing.",
           variant: "destructive",
         });
+        // Initialize with empty array to prevent errors
+        setExpenses([]);
       }
 
       if (taskResponse.status === "fulfilled") {
-        setTasks(taskResponse.value.data);
+        setTasks(taskResponse.value?.data || []);
       } else {
         console.warn("Could not load tasks:", taskResponse.reason);
+        setTasks([]);
       }
 
       if (milestoneResponse.status === "fulfilled") {
-        setMilestones(milestoneResponse.value.data);
+        setMilestones(milestoneResponse.value?.data || []);
       } else {
         console.warn("Could not load milestones:", milestoneResponse.reason);
+        setMilestones([]);
       }
     } catch (err: any) {
       console.error("Error fetching expense data:", err);
@@ -195,6 +199,11 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
         description: "Failed to load expense data",
         variant: "destructive",
       });
+      // Initialize arrays to prevent errors
+      setExpenses([]);
+      setCategories([]);
+      setTasks([]);
+      setMilestones([]);
     } finally {
       setLoading(false);
     }
@@ -303,7 +312,7 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
         categories.find((cat) => cat.id === newExpense.categoryId)?.name || "";
 
       setExpenses([
-        ...expenses,
+        ...(expenses || []),
         {
           ...response.data,
           categoryName,
@@ -362,11 +371,13 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
   // Get filtered tasks based on milestone selection
   const getFilteredTasks = () => {
     if (!newExpense.milestoneId || newExpense.milestoneId === "none")
-      return tasks;
-    return tasks.filter((task) => task.milestoneId === newExpense.milestoneId);
+      return tasks || [];
+    return (tasks || []).filter(
+      (task) => task.milestoneId === newExpense.milestoneId
+    );
   };
 
-  if (loading && !expenses.length) {
+  if (loading && (!expenses || expenses.length === 0)) {
     return (
       <div className="flex justify-center items-center h-64">
         <LoadingSpinner />
@@ -415,7 +426,7 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {categories.length === 0 ? (
+            {!categories || categories.length === 0 ? (
               <div className="text-center py-4">
                 <p className="text-muted-foreground">
                   No budget categories available
@@ -470,7 +481,7 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {expenses.length === 0 ? (
+          {!expenses || expenses.length === 0 ? (
             <div className="text-center py-8">
               <FileText className="mx-auto h-12 w-12 text-muted-foreground opacity-50" />
               <h3 className="mt-4 text-lg font-medium">No Expenses Found</h3>
@@ -646,7 +657,7 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
                     <SelectValue placeholder="Select category" />
                   </SelectTrigger>
                   <SelectContent>
-                    {categories.map((category) => (
+                    {(categories || []).map((category) => (
                       <SelectItem key={category.id} value={category.id}>
                         {category.name} ({formatCurrency(category.remaining)}{" "}
                         remaining)
@@ -689,7 +700,7 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">None</SelectItem>
-                    {milestones.map((milestone) => (
+                    {(milestones || []).map((milestone) => (
                       <SelectItem key={milestone.id} value={milestone.id}>
                         {milestone.title}
                       </SelectItem>
