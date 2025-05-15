@@ -13,6 +13,30 @@ import { PrismaClient } from "@prisma/client";
 
 const globalForPrisma = global as unknown as { prisma: PrismaClient };
 
+/**
+ * Retry function with exponential backoff
+ */
+const retry = async (fn: () => Promise<any>, retries = 3, delay = 300) => {
+  try {
+    return await fn();
+  } catch (error: any) {
+    if (
+      retries > 0 &&
+      (error.message?.includes("ConnectionReset") ||
+        error.message?.includes("prepared statement") ||
+        error.message?.includes("statement does not exist") ||
+        error.code === "26000")
+    ) {
+      console.log(
+        `Retrying operation, ${retries} attempts left. Error: ${error.message}`
+      );
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      return retry(fn, retries - 1, delay * 1.5); // Exponential backoff
+    }
+    throw error;
+  }
+};
+
 // Configure Prisma Client with better connection handling
 const prismaClientSingleton = () => {
   return new PrismaClient({
@@ -28,26 +52,13 @@ const prismaClientSingleton = () => {
     query: {
       $allOperations({ operation, model, args, query }) {
         // Add retry logic for connection issues
-        const startTime = Date.now();
-        return query(args).catch(async (error) => {
-          console.error(`Prisma ${model}.${operation} error:`, error);
-
-          // Retry once for connection reset errors
-          if (
-            (error.message?.includes("ConnectionReset") ||
-              error.message?.includes("prepared statement") ||
-              error.message?.includes("statement does not exist")) &&
-            Date.now() - startTime < 3000
-          ) {
-            console.log(
-              `Retrying ${model}.${operation} after connection error...`
-            );
-            // Wait 500ms before retry
-            await new Promise((resolve) => setTimeout(resolve, 500));
-            return query(args);
+        return retry(async () => {
+          try {
+            return await query(args);
+          } catch (error: any) {
+            console.error(`Prisma ${model}.${operation} error:`, error);
+            throw error;
           }
-
-          throw error;
         });
       },
     },
