@@ -38,6 +38,7 @@ import { BudgetForm } from "@/components/budget/BudgetForm";
 import { ExpenseList } from "@/components/budget/ExpenseList";
 import { FilterBar } from "@/components/budget/FilterBar";
 import { Budget } from "@/contexts/BudgetContext";
+import ExpenseApprovalTable from "@/components/admin/budget/ExpenseApprovalTable";
 
 // Types
 interface StartupCall {
@@ -53,6 +54,8 @@ export default function BudgetManagement() {
   const [startupCall, setStartupCall] = useState<StartupCall | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("budgets");
+  const [budgets, setBudgets] = useState<any[]>([]);
+  const [budgetsLoaded, setBudgetsLoaded] = useState(false);
 
   // Dialog states
   const [newBudgetDialogOpen, setNewBudgetDialogOpen] = useState(false);
@@ -84,6 +87,31 @@ export default function BudgetManagement() {
     }
   }, [startupCallId, toast]);
 
+  // Fetch budgets for the startup call
+  useEffect(() => {
+    if (startupCallId && typeof startupCallId === "string") {
+      const fetchBudgets = async () => {
+        try {
+          const response = await axios.get(
+            `/api/startup-calls/${startupCallId}/budgets`
+          );
+          setBudgets(response.data);
+          setBudgetsLoaded(true);
+        } catch (error) {
+          console.error("Error fetching budgets:", error);
+          toast({
+            title: "Error",
+            description: "Failed to fetch budget details",
+            variant: "destructive",
+          });
+          setBudgetsLoaded(true);
+        }
+      };
+
+      fetchBudgets();
+    }
+  }, [startupCallId, toast]);
+
   const handleBudgetSubmit = (budget: Budget) => {
     setNewBudgetDialogOpen(false);
     toast({
@@ -92,8 +120,22 @@ export default function BudgetManagement() {
     });
   };
 
+  // Refresh budgets after expense status updates
+  const refreshData = async () => {
+    if (!startupCallId || typeof startupCallId !== "string") return;
+
+    try {
+      const response = await axios.get(
+        `/api/startup-calls/${startupCallId}/budgets`
+      );
+      setBudgets(response.data);
+    } catch (error) {
+      console.error("Error refreshing data:", error);
+    }
+  };
+
   const renderContent = () => {
-    if (loading) {
+    if (loading && !budgetsLoaded) {
       return (
         <div className="flex justify-center items-center py-20">
           <div className="flex flex-col items-center">
@@ -134,7 +176,8 @@ export default function BudgetManagement() {
         <div className="flex justify-between items-center mb-6">
           <TabsList>
             <TabsTrigger value="budgets">Budgets</TabsTrigger>
-            <TabsTrigger value="expenses">Expenses</TabsTrigger>
+            <TabsTrigger value="expenses">All Expenses</TabsTrigger>
+            <TabsTrigger value="approval">Expense Approval</TabsTrigger>
           </TabsList>
 
           <div className="flex gap-2">
@@ -203,6 +246,13 @@ export default function BudgetManagement() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        <TabsContent value="approval" className="space-y-6">
+          <ExpenseApprovalTable
+            startupCallId={startupCallId as string}
+            onStatusUpdate={refreshData}
+          />
+        </TabsContent>
       </Tabs>
     );
   };
@@ -249,14 +299,11 @@ export default function BudgetManagement() {
         </Dialog>
 
         {/* Budget Report Dialog */}
-        {startupCall && (
-          <BudgetReportDialog
-            open={reportDialogOpen}
-            onOpenChange={setReportDialogOpen}
-            startupCallId={startupCallId as string}
-            startupCallTitle={startupCall.title}
-          />
-        )}
+        <BudgetReportDialog
+          open={reportDialogOpen}
+          onOpenChange={setReportDialogOpen}
+          startupCallId={startupCallId as string}
+        />
       </div>
     </BudgetProvider>
   );

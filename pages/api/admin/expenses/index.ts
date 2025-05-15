@@ -1,54 +1,49 @@
 import { NextApiRequest, NextApiResponse } from "next";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "../../auth/[...nextauth]";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/pages/api/auth/[...nextauth]";
 import prisma from "@/lib/prisma";
 
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
-  // Get session and verify authorization
+  // Check if user is authenticated and is an admin
   const session = await getServerSession(req, res, authOptions);
-
-  if (
-    !session ||
-    !session.user ||
-    !["ADMIN", "SPONSOR", "REVIEWER"].includes(session.user.role)
-  ) {
-    return res.status(401).json({
-      message: "You are not authorized to access this resource",
-      code: "UNAUTHORIZED",
-    });
+  if (!session) {
+    return res.status(401).json({ error: "Unauthorized" });
   }
 
-  // Handle GET request - list all expenses for admin review
+  const user = await prisma.user.findUnique({
+    where: { email: session.user?.email as string },
+    select: { role: true },
+  });
+
+  if (user?.role !== "ADMIN") {
+    return res.status(403).json({ error: "Forbidden: Admin access required" });
+  }
+
+  // GET - Fetch expenses with filters
   if (req.method === "GET") {
     try {
-      // Parse query parameters
-      const { status, startupId, startupCallId, limit, offset } = req.query;
+      const { startupCallId, status } = req.query;
 
-      // Build where clause based on filters
+      // Build the query
       const where: any = {};
 
-      if (status && typeof status === "string") {
-        where.status = status;
-      }
-
-      // For filtering by startup or startup call, we need to join through budget
+      // Add filters if provided
       if (startupCallId && typeof startupCallId === "string") {
         where.budget = {
           startupCallId,
         };
       }
 
-      // Query expenses with startup information
+      if (status && typeof status === "string") {
+        where.status = status.toUpperCase();
+      }
+
+      // Fetch expenses with necessary relations
       const expenses = await prisma.expense.findMany({
         where,
-        orderBy: {
-          createdAt: "desc",
-        },
-        take: limit ? parseInt(limit as string) : 50,
-        skip: offset ? parseInt(offset as string) : 0,
         include: {
           budget: {
             include: {
@@ -56,99 +51,98 @@ export default async function handler(
                 select: {
                   id: true,
                   title: true,
-                  applications: {
-                    where: {
-                      status: "APPROVED",
-                    },
+                },
+              },
+              application: {
+                include: {
+                  startup: {
                     select: {
-                      startup: {
-                        select: {
-                          id: true,
-                          name: true,
-                          founderId: true,
-                          founder: {
-                            select: {
-                              id: true,
-                              name: true,
-                              email: true,
-                            },
-                          },
-                        },
-                      },
+                      name: true,
                     },
                   },
                 },
               },
             },
           },
+          category: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+        orderBy: [
+          { status: "asc" }, // PENDING first
+          { date: "desc" }, // Most recent first
+        ],
+      });
+
+      // Transform data to add the startup name for convenience
+      const transformedExpenses = expenses.map((expense) => ({
+        ...expense,
+        startupName: expense.budget.application?.startup.name || "Unknown",
+      }));
+
+      return res.status(200).json({
+        expenses: transformedExpenses,
+      });
+    } catch (error) {
+      console.error("Error fetching expenses:", error);
+      return res.status(500).json({ error: "Internal server error" });
+    }
+  }
+
+  // POST - Create a new expense (admin override)
+  else if (req.method === "POST") {
+    try {
+      const { budgetId, categoryId, title, description, amount, date, status } =
+        req.body;
+
+      // Validate required fields
+      if (!budgetId || !title || !amount || !date) {
+        return res.status(400).json({
+          error:
+            "Missing required fields: budgetId, title, amount, and date are required",
+        });
+      }
+
+      // Validate budget exists
+      const budget = await prisma.budget.findUnique({
+        where: { id: budgetId },
+      });
+
+      if (!budget) {
+        return res.status(404).json({ error: "Budget not found" });
+      }
+
+      // Create the new expense
+      const newExpense = await prisma.expense.create({
+        data: {
+          budgetId,
+          categoryId,
+          title,
+          description,
+          amount: Number(amount),
+          date: new Date(date),
+          status: status || "APPROVED", // Admin-created expenses are approved by default
+          currency: "INR", // Hardcoded for now, could be made configurable
+        },
+        include: {
+          budget: true,
           category: true,
         },
       });
 
-      // Filter by startupId if provided
-      // This is done post-query because of the complex relation
-      let filteredExpenses = expenses;
-      if (startupId && typeof startupId === "string") {
-        filteredExpenses = expenses.filter((expense) => {
-          const apps = expense.budget?.startupCall?.applications || [];
-          return apps.some((app) => app.startup.id === startupId);
-        });
-      }
-
-      // Transform the response to a more convenient format
-      const transformedExpenses = filteredExpenses.map((expense) => {
-        const applications = expense.budget?.startupCall?.applications || [];
-        const startup =
-          applications.length > 0 ? applications[0].startup : null;
-
-        return {
-          id: expense.id,
-          title: expense.title,
-          description: expense.description,
-          amount: expense.amount,
-          currency: expense.currency,
-          date: expense.date,
-          status: expense.status,
-          createdAt: expense.createdAt,
-          updatedAt: expense.updatedAt,
-          categoryId: expense.categoryId,
-          categoryName: expense.category?.name || "Uncategorized",
-          budgetId: expense.budgetId,
-          startupCallId: expense.budget?.startupCallId,
-          startupCallTitle: expense.budget?.startupCall?.title,
-          startupId: startup?.id,
-          startupName: startup?.name,
-          founderName: startup?.founder?.name,
-          founderEmail: startup?.founder?.email,
-          founderId: startup?.founderId,
-        };
-      });
-
-      // Get total count for pagination
-      const totalCount = await prisma.expense.count({
-        where,
-      });
-
-      return res.status(200).json({
-        expenses: transformedExpenses,
-        totalCount,
-        offset: offset ? parseInt(offset as string) : 0,
-        limit: limit ? parseInt(limit as string) : 50,
-      });
-    } catch (error: any) {
-      console.error("Error fetching expenses for admin:", error);
-      return res.status(500).json({
-        message: "Failed to fetch expenses",
-        code: "SERVER_ERROR",
-        details:
-          process.env.NODE_ENV === "development" ? error.message : undefined,
-      });
+      return res.status(201).json(newExpense);
+    } catch (error) {
+      console.error("Error creating expense:", error);
+      return res.status(500).json({ error: "Internal server error" });
     }
-  } else {
-    res.setHeader("Allow", ["GET"]);
-    return res.status(405).json({
-      message: `Method ${req.method} Not Allowed`,
-      code: "METHOD_NOT_ALLOWED",
-    });
+  }
+
+  // Unsupported method
+  else {
+    res.setHeader("Allow", ["GET", "POST"]);
+    return res.status(405).json({ error: `Method ${req.method} Not Allowed` });
   }
 }
