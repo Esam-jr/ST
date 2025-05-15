@@ -18,11 +18,22 @@ export default async function handler(
   if (req.method === "GET") {
     try {
       // First, find the entrepreneur's startup
-      const startup = await prisma.startup.findFirst({
-        where: {
-          founderId: session.user.id,
-        },
-      });
+      let startup;
+      try {
+        startup = await prisma.startup.findFirst({
+          where: {
+            founderId: session.user.id,
+          },
+        });
+      } catch (error: any) {
+        console.error("Database error finding startup:", error);
+        return res.status(503).json({
+          message: "Unable to connect to the database. Please try again.",
+          code: "DB_CONNECTION_ERROR",
+          details:
+            process.env.NODE_ENV === "development" ? error.message : undefined,
+        });
+      }
 
       if (!startup) {
         return res
@@ -31,8 +42,9 @@ export default async function handler(
       }
 
       // Find the approved application
-      const approvedApplication = await prisma.startupCallApplication.findFirst(
-        {
+      let approvedApplication;
+      try {
+        approvedApplication = await prisma.startupCallApplication.findFirst({
           where: {
             startupId: startup.id,
             status: "APPROVED",
@@ -40,8 +52,16 @@ export default async function handler(
           include: {
             call: true,
           },
-        }
-      );
+        });
+      } catch (error: any) {
+        console.error("Database error finding application:", error);
+        return res.status(503).json({
+          message: "Database error when finding your approved application.",
+          code: "DB_QUERY_ERROR",
+          details:
+            process.env.NODE_ENV === "development" ? error.message : undefined,
+        });
+      }
 
       if (!approvedApplication) {
         return res
@@ -50,14 +70,25 @@ export default async function handler(
       }
 
       // Get budget for this call
-      const budget = await prisma.budget.findFirst({
-        where: {
-          startupCallId: approvedApplication.callId,
-        },
-        include: {
-          categories: true,
-        },
-      });
+      let budget;
+      try {
+        budget = await prisma.budget.findFirst({
+          where: {
+            startupCallId: approvedApplication.callId,
+          },
+          include: {
+            categories: true,
+          },
+        });
+      } catch (error: any) {
+        console.error("Database error finding budget:", error);
+        return res.status(503).json({
+          message: "Database error when retrieving budget information.",
+          code: "BUDGET_QUERY_ERROR",
+          details:
+            process.env.NODE_ENV === "development" ? error.message : undefined,
+        });
+      }
 
       if (!budget) {
         return res
@@ -66,14 +97,25 @@ export default async function handler(
       }
 
       // Get expenses
-      const expenses = await prisma.expense.findMany({
-        where: {
-          budgetId: budget.id,
-        },
-        orderBy: {
-          date: "desc",
-        },
-      });
+      let expenses;
+      try {
+        expenses = await prisma.expense.findMany({
+          where: {
+            budgetId: budget.id,
+          },
+          orderBy: {
+            date: "desc",
+          },
+        });
+      } catch (error: any) {
+        console.error("Database error finding expenses:", error);
+        return res.status(503).json({
+          message: "Database error when retrieving your expenses.",
+          code: "EXPENSE_QUERY_ERROR",
+          details:
+            process.env.NODE_ENV === "development" ? error.message : undefined,
+        });
+      }
 
       // Enrich expenses with category name
       const enrichedExpenses = expenses.map((expense) => {
@@ -104,17 +146,23 @@ export default async function handler(
         });
       } else if (
         error.message &&
-        error.message.includes("prepared statement")
+        (error.message.includes("prepared statement") ||
+          error.message.includes("connection") ||
+          error.message.includes("network"))
       ) {
         return res.status(503).json({
           message: "Database connection issue. Please try again in a moment.",
           code: "CONNECTION_ERROR",
+          details:
+            process.env.NODE_ENV === "development" ? error.message : undefined,
         });
       }
 
       return res.status(500).json({
         message: "Failed to load expense data. Please try again later.",
         code: "SERVER_ERROR",
+        details:
+          process.env.NODE_ENV === "development" ? error.message : undefined,
       });
     }
   }

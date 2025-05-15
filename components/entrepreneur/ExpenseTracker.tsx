@@ -106,6 +106,8 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [fetchingExpenses, setFetchingExpenses] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
+  const [retryTimeout, setRetryTimeout] = useState<NodeJS.Timeout | null>(null);
 
   // Expense form state
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -123,11 +125,20 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
   // Fetch all data when component mounts
   useEffect(() => {
     fetchData();
+
+    // Cleanup function to clear any pending timeouts
+    return () => {
+      if (retryTimeout) {
+        clearTimeout(retryTimeout);
+      }
+    };
   }, []);
 
   // Fetch data function to enable easier refreshing
-  const fetchData = async () => {
-    setLoading(true);
+  const fetchData = async (isRetry = false) => {
+    if (!isRetry) {
+      setLoading(true);
+    }
     setError(null);
 
     try {
@@ -153,12 +164,31 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
         }),
       ]);
 
+      // Clear any existing retry timeouts if we get here
+      if (retryTimeout) {
+        clearTimeout(retryTimeout);
+        setRetryTimeout(null);
+      }
+
+      // Track if we need to retry due to connection issues
+      let shouldRetry = false;
+
       // Handle each response individually
       if (projectResponse.status === "fulfilled") {
         // Set categories from project data with budget information
         setCategories(projectResponse.value.data.budget.categories);
       } else {
-        throw new Error("Failed to load project data");
+        const error = projectResponse.reason;
+        if (
+          error?.response?.data?.code === "CONNECTION_ERROR" ||
+          error?.response?.data?.code === "DB_CONNECTION_ERROR" ||
+          error?.message?.includes("network")
+        ) {
+          shouldRetry = true;
+        }
+        if (!isRetry) {
+          throw new Error("Failed to load project data");
+        }
       }
 
       if (
@@ -172,11 +202,16 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
         // Check for specific error codes
         const errorResponse = expenseResponse.reason?.response?.data;
         if (errorResponse) {
-          if (errorResponse.code === "CONNECTION_ERROR") {
+          if (
+            errorResponse.code === "CONNECTION_ERROR" ||
+            errorResponse.code === "DB_CONNECTION_ERROR"
+          ) {
+            shouldRetry = true;
             toast({
               title: "Connection Issue",
-              description:
-                "Database connection problem. We'll try again shortly.",
+              description: isRetry
+                ? `Database connection problem. Retry attempt ${retryCount}/3...`
+                : "Database connection problem. Will retry automatically...",
               variant: "destructive",
             });
           } else if (errorResponse.code === "SCHEMA_ERROR") {
@@ -224,6 +259,29 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
         console.warn("Could not load milestones:", milestoneResponse.reason);
         setMilestones([]);
       }
+
+      // Set up retry if needed
+      if (shouldRetry && retryCount < 3) {
+        const delay = 2000 * Math.pow(2, retryCount); // Exponential backoff: 2s, 4s, 8s
+        console.log(
+          `Scheduling retry in ${delay / 1000}s (attempt ${retryCount + 1}/3)`
+        );
+
+        const timeout = setTimeout(() => {
+          setRetryCount((prev) => prev + 1);
+          fetchData(true);
+        }, delay);
+
+        setRetryTimeout(timeout);
+      } else if (retryCount > 0 && !shouldRetry) {
+        // If this was a successful retry
+        toast({
+          title: "Connection Restored",
+          description: "Successfully connected to the database.",
+          variant: "default",
+        });
+        setRetryCount(0);
+      }
     } catch (err: any) {
       console.error("Error fetching expense data:", err);
 
@@ -235,32 +293,69 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
 
       // Set appropriate user-friendly error message
       let userMessage = errorMessage;
+      let shouldRetry = false;
 
-      if (errorCode === "CONNECTION_ERROR") {
-        userMessage =
-          "Database connection issue. Please try refreshing in a few moments.";
+      if (
+        errorCode === "CONNECTION_ERROR" ||
+        errorCode === "DB_CONNECTION_ERROR"
+      ) {
+        userMessage = isRetry
+          ? `Database connection issue. Retry attempt ${retryCount}/3...`
+          : "Database connection issue. Will retry automatically...";
+        shouldRetry = true;
       } else if (errorCode === "SCHEMA_ERROR") {
         userMessage = "System error. Our technical team has been notified.";
       } else if (err.message?.includes("Network Error")) {
-        userMessage =
-          "Network connection issue. Please check your internet connection.";
+        userMessage = "Network connection issue. Will retry automatically...";
+        shouldRetry = true;
       }
 
       setError(userMessage);
 
-      toast({
-        title: "Error",
-        description: userMessage,
-        variant: "destructive",
-      });
+      if (!isRetry) {
+        toast({
+          title: "Error",
+          description: userMessage,
+          variant: "destructive",
+        });
+      }
 
       // Initialize arrays to prevent errors
       setExpenses([]);
       setCategories([]);
       setTasks([]);
       setMilestones([]);
+
+      // Set up retry if needed
+      if (shouldRetry && retryCount < 3) {
+        const delay = 2000 * Math.pow(2, retryCount); // Exponential backoff: 2s, 4s, 8s
+        console.log(
+          `Scheduling retry in ${delay / 1000}s (attempt ${retryCount + 1}/3)`
+        );
+
+        const timeout = setTimeout(() => {
+          setRetryCount((prev) => prev + 1);
+          fetchData(true);
+        }, delay);
+
+        setRetryTimeout(timeout);
+      }
     } finally {
-      setLoading(false);
+      if (!isRetry) {
+        setLoading(false);
+      } else if (retryCount >= 3) {
+        // If we've exhausted our retries, make sure loading is false
+        setLoading(false);
+        setError(
+          "Database connection failed after multiple attempts. Please try again later."
+        );
+        toast({
+          title: "Connection Failed",
+          description:
+            "Could not connect to database after several attempts. Please try again later.",
+          variant: "destructive",
+        });
+      }
     }
   };
 
