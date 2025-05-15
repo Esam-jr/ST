@@ -178,7 +178,10 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
         // Set categories from project data with budget information
         setCategories(projectResponse.value.data.budget.categories);
       } else {
-        const error = projectResponse.reason;
+        const error =
+          projectResponse.status === "rejected"
+            ? (projectResponse as PromiseRejectedResult).reason
+            : new Error("Unknown error");
         if (
           error?.response?.data?.code === "CONNECTION_ERROR" ||
           error?.response?.data?.code === "DB_CONNECTION_ERROR" ||
@@ -197,10 +200,15 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
       ) {
         setExpenses(expenseResponse.value.data || []);
       } else {
-        console.error("Error fetching expenses:", expenseResponse.reason);
+        const errorReason =
+          expenseResponse.status === "rejected"
+            ? (expenseResponse as PromiseRejectedResult).reason
+            : new Error("Unknown expense error");
+
+        console.error("Error fetching expenses:", errorReason);
 
         // Check for specific error codes
-        const errorResponse = expenseResponse.reason?.response?.data;
+        const errorResponse = errorReason?.response?.data;
         if (errorResponse) {
           if (
             errorResponse.code === "CONNECTION_ERROR" ||
@@ -246,7 +254,12 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
       if (taskResponse.status === "fulfilled" && "data" in taskResponse.value) {
         setTasks(taskResponse.value.data || []);
       } else {
-        console.warn("Could not load tasks:", taskResponse.reason);
+        const taskError =
+          taskResponse.status === "rejected"
+            ? (taskResponse as PromiseRejectedResult).reason
+            : new Error("Unknown task error");
+
+        console.warn("Could not load tasks:", taskError);
         setTasks([]);
       }
 
@@ -256,7 +269,12 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
       ) {
         setMilestones(milestoneResponse.value.data || []);
       } else {
-        console.warn("Could not load milestones:", milestoneResponse.reason);
+        const milestoneError =
+          milestoneResponse.status === "rejected"
+            ? (milestoneResponse as PromiseRejectedResult).reason
+            : new Error("Unknown milestone error");
+
+        console.warn("Could not load milestones:", milestoneError);
         setMilestones([]);
       }
 
@@ -450,67 +468,136 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
       const milestoneId =
         newExpense.milestoneId === "none" ? null : newExpense.milestoneId;
 
-      const response = await axios.post("/api/entrepreneur/expenses", {
-        ...newExpense,
-        taskId,
-        milestoneId,
-        status: "PENDING", // New expenses start as pending
-      });
+      // Ensure amount is a valid number
+      const amount = parseFloat(newExpense.amount.toString());
+      if (isNaN(amount) || amount <= 0) {
+        setFormErrors({
+          ...formErrors,
+          amount: "Amount must be a positive number",
+        });
+        setLoading(false);
+        return;
+      }
 
-      // Add the new expense to state with category name
-      const categoryName =
-        categories.find((cat) => cat.id === newExpense.categoryId)?.name || "";
+      try {
+        const response = await axios.post("/api/entrepreneur/expenses", {
+          ...newExpense,
+          amount, // Send the properly parsed amount
+          taskId,
+          milestoneId,
+          status: "PENDING", // New expenses start as pending
+        });
 
-      setExpenses([
-        ...(expenses || []),
-        {
-          ...response.data,
-          categoryName,
-          taskTitle: tasks.find((t) => t.id === newExpense.taskId)?.title,
-          milestoneTitle: milestones.find(
-            (m) => m.id === newExpense.milestoneId
-          )?.title,
-        },
-      ]);
+        // If we get a successful response, update the UI with the new expense
+        const newExpenseData = response.data;
 
-      // Update category spending
-      setCategories(
-        categories.map((category) =>
-          category.id === newExpense.categoryId
-            ? {
-                ...category,
-                spent: category.spent + newExpense.amount,
-                remaining: category.remaining - newExpense.amount,
-              }
-            : category
-        )
-      );
+        // Check if the response already includes categoryName; if not, get it from state
+        if (!newExpenseData.categoryName) {
+          newExpenseData.categoryName =
+            categories.find((cat) => cat.id === newExpense.categoryId)?.name ||
+            "Unknown";
+        }
 
-      toast({
-        title: "Expense Added",
-        description: "Your expense has been submitted for approval",
-      });
+        // Check if the response already includes task title; if not, get it from state
+        if (taskId && !newExpenseData.taskTitle) {
+          newExpenseData.taskTitle = tasks.find((t) => t.id === taskId)?.title;
+        }
 
-      // Reset form with proper values
-      setNewExpense({
-        title: "",
-        description: "",
-        amount: 0,
-        categoryId: "",
-        date: new Date().toISOString().substring(0, 10),
-        taskId: "none",
-        milestoneId: "none",
-      });
+        // Check if the response already includes milestone title; if not, get it from state
+        if (milestoneId && !newExpenseData.milestoneTitle) {
+          newExpenseData.milestoneTitle = milestones.find(
+            (m) => m.id === milestoneId
+          )?.title;
+        }
 
-      // Close dialog
-      setCreateDialogOpen(false);
+        setExpenses([...(expenses || []), newExpenseData]);
+
+        // Update category spending
+        setCategories(
+          categories.map((category) =>
+            category.id === newExpense.categoryId
+              ? {
+                  ...category,
+                  spent: category.spent + amount,
+                  remaining: category.remaining - amount,
+                }
+              : category
+          )
+        );
+
+        toast({
+          title: "Expense Added",
+          description: "Your expense has been submitted for approval",
+        });
+
+        // Reset form with proper values
+        setNewExpense({
+          title: "",
+          description: "",
+          amount: 0,
+          categoryId: "",
+          date: new Date().toISOString().substring(0, 10),
+          taskId: "none",
+          milestoneId: "none",
+        });
+
+        // Close dialog
+        setCreateDialogOpen(false);
+      } catch (apiError: any) {
+        console.error("Error from expense API:", apiError);
+
+        // Get the specific error details from the API response
+        const errorData = apiError.response?.data;
+        const errorCode = errorData?.code;
+        const errorDetails = errorData?.details;
+
+        if (errorCode === "VALIDATION_ERROR" && errorDetails) {
+          // Handle field-specific validation errors
+          const newFormErrors: Record<string, string> = {};
+
+          if (errorDetails.title) newFormErrors.title = errorDetails.title;
+          if (errorDetails.amount) newFormErrors.amount = errorDetails.amount;
+          if (errorDetails.categoryId)
+            newFormErrors.categoryId = errorDetails.categoryId;
+          if (errorDetails.date) newFormErrors.date = errorDetails.date;
+
+          setFormErrors(newFormErrors);
+
+          toast({
+            title: "Validation Error",
+            description: "Please check the form for errors",
+            variant: "destructive",
+          });
+        } else if (errorCode === "BUDGET_EXCEEDED") {
+          // Special handling for budget exceeded errors
+          setFormErrors({
+            ...formErrors,
+            amount: `Amount exceeds remaining budget for ${
+              errorDetails?.categoryName || "this category"
+            } (${formatCurrency(errorDetails?.remaining || 0)})`,
+          });
+
+          toast({
+            title: "Budget Exceeded",
+            description: `The expense amount exceeds the remaining budget for this category`,
+            variant: "destructive",
+          });
+        } else {
+          // Generic error handling
+          toast({
+            title: "Error",
+            description:
+              errorData?.message ||
+              "Failed to create expense. Please try again.",
+            variant: "destructive",
+          });
+        }
+      }
     } catch (error: any) {
       console.error("Error creating expense:", error);
       toast({
         title: "Error",
-        description:
-          error.response?.data?.message ||
-          "Failed to create expense. Please try again.",
+        description: "An unexpected error occurred. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -555,7 +642,11 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={fetchData} disabled={loading}>
+          <Button
+            variant="outline"
+            onClick={() => fetchData()}
+            disabled={loading}
+          >
             <RefreshCw className="mr-2 h-4 w-4" />
             Refresh
           </Button>
@@ -758,16 +849,19 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
                     <Input
                       id="amount"
                       type="number"
-                      min="0"
+                      min="0.01"
                       step="0.01"
                       className="pl-8"
                       value={newExpense.amount || ""}
-                      onChange={(e) =>
-                        handleInputChange(
-                          "amount",
-                          parseFloat(e.target.value) || 0
-                        )
-                      }
+                      onChange={(e) => {
+                        // Validate and convert to number immediately
+                        const value = e.target.value;
+                        const numValue = value === "" ? 0 : parseFloat(value);
+                        // Only update if it's a valid number or empty string (which becomes 0)
+                        if (!isNaN(numValue) || value === "") {
+                          handleInputChange("amount", numValue);
+                        }
+                      }}
                     />
                   </div>
                   {formErrors.amount && (

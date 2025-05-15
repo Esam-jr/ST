@@ -181,130 +181,241 @@ export default async function handler(
       } = req.body;
 
       // Validate required fields
-      if (!title || !amount || !categoryId || !date) {
+      if (!title || amount === undefined || !categoryId || !date) {
         return res.status(400).json({
           message: "Missing required fields",
+          code: "VALIDATION_ERROR",
+          details: {
+            title: !title ? "Title is required" : undefined,
+            amount: amount === undefined ? "Amount is required" : undefined,
+            categoryId: !categoryId ? "Category is required" : undefined,
+            date: !date ? "Date is required" : undefined,
+          },
         });
       }
 
-      // Get startup
-      const startup = await prisma.startup.findFirst({
-        where: {
-          founderId: session.user.id,
-        },
-      });
-
-      if (!startup) {
-        return res
-          .status(404)
-          .json({ message: "No startup found for this user" });
+      // Validate amount is a valid number
+      const parsedAmount =
+        typeof amount === "string" ? parseFloat(amount) : amount;
+      if (isNaN(parsedAmount) || parsedAmount <= 0) {
+        return res.status(400).json({
+          message: "Amount must be a positive number",
+          code: "VALIDATION_ERROR",
+          details: { amount: "Amount must be a positive number" },
+        });
       }
 
-      // Find the approved application
-      const approvedApplication = await prisma.startupCallApplication.findFirst(
-        {
+      // Find startup with error handling
+      let startup;
+      try {
+        startup = await prisma.startup.findFirst({
+          where: {
+            founderId: session.user.id,
+          },
+        });
+      } catch (error: any) {
+        console.error("Database error finding startup:", error);
+        return res.status(503).json({
+          message: "Database error when trying to find your startup",
+          code: "DB_ERROR",
+          details:
+            process.env.NODE_ENV === "development" ? error.message : undefined,
+        });
+      }
+
+      if (!startup) {
+        return res.status(404).json({
+          message: "No startup found for this user",
+          code: "NOT_FOUND",
+        });
+      }
+
+      // Find the approved application with error handling
+      let approvedApplication;
+      try {
+        approvedApplication = await prisma.startupCallApplication.findFirst({
           where: {
             startupId: startup.id,
             status: "APPROVED",
           },
-        }
-      );
+        });
+      } catch (error: any) {
+        console.error("Database error finding application:", error);
+        return res.status(503).json({
+          message:
+            "Database error when trying to find your approved application",
+          code: "DB_ERROR",
+          details:
+            process.env.NODE_ENV === "development" ? error.message : undefined,
+        });
+      }
 
       if (!approvedApplication) {
-        return res
-          .status(404)
-          .json({ message: "No approved application found" });
-      }
-
-      // Get budget for this call
-      const budget = await prisma.budget.findFirst({
-        where: {
-          startupCallId: approvedApplication.callId,
-        },
-        include: {
-          categories: true,
-          expenses: true,
-        },
-      });
-
-      if (!budget) {
-        return res.status(404).json({ message: "No budget found" });
-      }
-
-      // Validate category exists
-      const category = budget.categories.find((cat) => cat.id === categoryId);
-      if (!category) {
-        return res.status(400).json({ message: "Invalid category" });
-      }
-
-      // Calculate current spending for this category
-      const categoryExpenses = budget.expenses.filter(
-        (expense) => expense.categoryId === categoryId
-      );
-      const categorySpent = categoryExpenses.reduce(
-        (total, expense) => total + expense.amount,
-        0
-      );
-
-      // Validate budget limit
-      const remainingBudget = category.allocatedAmount - categorySpent;
-      if (amount > remainingBudget) {
-        return res.status(400).json({
-          message: `Expense exceeds remaining budget for category ${category.name}. Remaining: ${remainingBudget}`,
+        return res.status(404).json({
+          message: "No approved application found",
+          code: "NOT_FOUND",
         });
       }
 
-      // Create expense
-      const expense = await prisma.expense.create({
-        data: {
-          budgetId: budget.id,
-          categoryId,
-          title,
-          description,
-          amount: parseFloat(amount.toString()),
-          currency: budget.currency,
-          date: new Date(date),
-          status: "PENDING", // All new expenses start as pending
-        },
-      });
+      // Use a transaction for the remaining database operations to ensure atomicity
+      try {
+        return await prisma.$transaction(async (tx) => {
+          // Get budget for this call
+          const budget = await tx.budget.findFirst({
+            where: {
+              startupCallId: approvedApplication.callId,
+            },
+            include: {
+              categories: true,
+              expenses: true,
+            },
+          });
 
-      // If task provided, link expense to task
-      if (taskId) {
-        // Verify task belongs to this startup
-        const task = await prisma.task.findFirst({
-          where: {
-            id: taskId,
-            startupId: startup.id,
-          },
+          if (!budget) {
+            return res.status(404).json({
+              message: "No budget found",
+              code: "NOT_FOUND",
+            });
+          }
+
+          // Validate category exists
+          const category = budget.categories.find(
+            (cat) => cat.id === categoryId
+          );
+          if (!category) {
+            return res.status(400).json({
+              message: "Invalid category",
+              code: "VALIDATION_ERROR",
+              details: { categoryId: "Category not found in budget" },
+            });
+          }
+
+          // Calculate current spending for this category
+          const categoryExpenses = budget.expenses.filter(
+            (expense) => expense.categoryId === categoryId
+          );
+          const categorySpent = categoryExpenses.reduce(
+            (total, expense) => total + expense.amount,
+            0
+          );
+
+          // Validate budget limit
+          const remainingBudget = category.allocatedAmount - categorySpent;
+          if (parsedAmount > remainingBudget) {
+            return res.status(400).json({
+              message: `Expense exceeds remaining budget for category ${category.name}. Remaining: ${remainingBudget}`,
+              code: "BUDGET_EXCEEDED",
+              details: {
+                categoryId: category.id,
+                categoryName: category.name,
+                requested: parsedAmount,
+                remaining: remainingBudget,
+              },
+            });
+          }
+
+          // Create expense
+          const expense = await tx.expense.create({
+            data: {
+              budgetId: budget.id,
+              categoryId,
+              title,
+              description,
+              amount: parsedAmount,
+              currency: budget.currency,
+              date: new Date(date),
+              status: "PENDING", // All new expenses start as pending
+            },
+          });
+
+          // Collect extra task and milestone data if provided
+          const expenseData: any = { ...expense };
+
+          // If task provided, verify task
+          if (taskId) {
+            // Verify task belongs to this startup
+            const task = await tx.task.findFirst({
+              where: {
+                id: taskId,
+                startupId: startup.id,
+              },
+              select: {
+                id: true,
+                title: true,
+              },
+            });
+
+            if (task) {
+              expenseData.taskTitle = task.title;
+            }
+          }
+
+          // If milestone provided, verify milestone
+          if (milestoneId) {
+            // Verify milestone belongs to this startup
+            const milestone = await tx.milestone.findFirst({
+              where: {
+                id: milestoneId,
+                startupId: startup.id,
+              },
+              select: {
+                id: true,
+                title: true,
+              },
+            });
+
+            if (milestone) {
+              expenseData.milestoneTitle = milestone.title;
+            }
+          }
+
+          // Get the category name for the response
+          expenseData.categoryName = category.name;
+
+          return res.status(201).json(expenseData);
         });
+      } catch (error: any) {
+        console.error("Transaction error creating expense:", error);
 
-        if (task) {
-          // Link task to expense (this would require a model change to add this relationship)
-          // For now, we'll just return the expense with the task ID
-          console.log(`Expense linked to task ${taskId}`);
+        if (error.code === "P2002") {
+          return res.status(409).json({
+            message: "Duplicate expense entry",
+            code: "DUPLICATE_ERROR",
+          });
         }
-      }
 
-      // If milestone provided, link expense to milestone
-      if (milestoneId) {
-        // Verify milestone belongs to this startup
-        const milestone = await prisma.milestone.findFirst({
-          where: {
-            id: milestoneId,
-            startupId: startup.id,
-          },
+        return res.status(500).json({
+          message: "Failed to create expense due to a database error",
+          code: "TRANSACTION_ERROR",
+          details:
+            process.env.NODE_ENV === "development" ? error.message : undefined,
         });
-
-        if (milestone) {
-          // Link milestone to expense (this would require a model change)
-          console.log(`Expense linked to milestone ${milestoneId}`);
-        }
       }
-
-      return res.status(201).json(expense);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error creating expense:", error);
-      return res.status(500).json({ message: "Internal server error" });
+
+      // Provide specific error information based on error type
+      if (error.code) {
+        if (error.code === "P2021") {
+          return res.status(500).json({
+            message:
+              "The database schema appears to be outdated. Please contact support.",
+            code: "SCHEMA_ERROR",
+          });
+        } else if (error.code === "P2023" || error.code === "P2025") {
+          return res.status(400).json({
+            message: "Invalid data format or record not found",
+            code: "INVALID_INPUT",
+          });
+        }
+      }
+
+      return res.status(500).json({
+        message: "Failed to create expense. Please try again later.",
+        code: "SERVER_ERROR",
+        details:
+          process.env.NODE_ENV === "development" ? error.message : undefined,
+      });
     }
   }
 
