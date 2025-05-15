@@ -106,6 +106,7 @@ interface BudgetContextType {
     budgetId: string,
     expenseId: string
   ) => Promise<void>;
+  updateExpenseLocally: (updatedExpense: Expense) => void;
 
   // Filter setters
   setSelectedBudgetId: (id: string | null) => void;
@@ -695,6 +696,32 @@ export const BudgetProvider: React.FC<{ children: ReactNode }> = ({
     [budgets, getBudgetById, getTotalExpenseAmount]
   );
 
+  // New method to update expense locally after approval/rejection
+  const updateExpenseLocally = useCallback((updatedExpense: Expense) => {
+    setExpenses((prevExpenses) =>
+      prevExpenses.map((expense) =>
+        expense.id === updatedExpense.id
+          ? {
+              ...expense,
+              ...updatedExpense,
+              // Make sure to preserve the category reference to avoid UI issues
+              category: expense.category,
+            }
+          : expense
+      )
+    );
+
+    // If the expense was approved or rejected, we may need to update budget totals
+    // This would typically be handled by refetching the budgets, but for immediate UI feedback:
+    if (
+      updatedExpense.status === "APPROVED" ||
+      updatedExpense.status === "REJECTED"
+    ) {
+      // In a real implementation, you might want to recalculate budget totals here
+      // or trigger a budget refresh
+    }
+  }, []);
+
   const contextValue: BudgetContextType = {
     // Data
     budgets,
@@ -723,6 +750,9 @@ export const BudgetProvider: React.FC<{ children: ReactNode }> = ({
     createExpense,
     updateExpense,
     deleteExpense,
+
+    // New method to update expense locally - useful for approval updates
+    updateExpenseLocally,
 
     // Filter setters
     setSelectedBudgetId,

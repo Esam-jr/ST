@@ -44,6 +44,7 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
     deleteExpense,
     getTotalExpenseAmount,
     selectedBudgetId,
+    updateExpenseLocally,
   } = useBudget();
 
   // Local state for dialogs
@@ -98,6 +99,13 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
   // Handler for viewing receipt
   const handleViewReceipt = (expense: Expense) => {
     setViewReceiptExpense(expense);
+  };
+
+  // Handler for status change from the approval button
+  const handleStatusChange = (updatedExpense: Expense) => {
+    if (updateExpenseLocally) {
+      updateExpenseLocally(updatedExpense);
+    }
   };
 
   // Format currency total
@@ -199,6 +207,7 @@ export const ExpenseList: React.FC<ExpenseListProps> = ({
               onEdit={handleEditExpense}
               onDelete={handleDeleteExpense}
               onViewReceipt={expense.receipt ? handleViewReceipt : undefined}
+              onStatusChange={handleStatusChange}
             />
           ))}
         </div>

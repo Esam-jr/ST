@@ -11,12 +11,15 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Expense, BudgetCategory } from "@/contexts/BudgetContext";
+import ExpenseApprovalButton from "./ExpenseApprovalButton";
+import { useSession } from "next-auth/react";
 
 interface ExpenseCardProps {
   expense: Expense;
   onEdit?: (expense: Expense) => void;
   onDelete?: (expense: Expense) => void;
   onViewReceipt?: (expense: Expense) => void;
+  onStatusChange?: (updatedExpense: Expense) => void;
 }
 
 export const ExpenseCard: React.FC<ExpenseCardProps> = ({
@@ -24,7 +27,11 @@ export const ExpenseCard: React.FC<ExpenseCardProps> = ({
   onEdit,
   onDelete,
   onViewReceipt,
+  onStatusChange,
 }) => {
+  const { data: session } = useSession();
+  const isAdmin = session?.user?.role === "ADMIN";
+
   // Format date as a relative time (e.g., "2 days ago")
   const formattedDate = formatDistanceToNow(new Date(expense.date), {
     addSuffix: true,
@@ -111,6 +118,14 @@ export const ExpenseCard: React.FC<ExpenseCardProps> = ({
             {formatCurrency(expense.amount, expense.currency)}
           </span>
         </div>
+
+        {/* Render approval buttons for admins */}
+        {isAdmin && (
+          <ExpenseApprovalButton
+            expense={expense}
+            onStatusChange={onStatusChange}
+          />
+        )}
       </CardContent>
 
       <CardFooter className="pt-2 border-t bg-muted/20 flex justify-between">
