@@ -60,7 +60,9 @@ export default async function handler(
       });
 
       if (!budget) {
-        return res.status(404).json({ message: "No budget found" });
+        return res
+          .status(404)
+          .json({ message: "No budget found for your active project" });
       }
 
       // Get expenses
@@ -85,9 +87,35 @@ export default async function handler(
       });
 
       return res.status(200).json(enrichedExpenses);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error fetching expenses:", error);
-      return res.status(500).json({ message: "Internal server error" });
+
+      // Provide more specific error messages based on error type
+      if (error.code === "P2021") {
+        return res.status(500).json({
+          message:
+            "The database schema appears to be outdated. Please contact support.",
+          code: "SCHEMA_ERROR",
+        });
+      } else if (error.code === "P2023" || error.code === "P2025") {
+        return res.status(400).json({
+          message: "Invalid ID format or record not found",
+          code: "INVALID_INPUT",
+        });
+      } else if (
+        error.message &&
+        error.message.includes("prepared statement")
+      ) {
+        return res.status(503).json({
+          message: "Database connection issue. Please try again in a moment.",
+          code: "CONNECTION_ERROR",
+        });
+      }
+
+      return res.status(500).json({
+        message: "Failed to load expense data. Please try again later.",
+        code: "SERVER_ERROR",
+      });
     }
   }
 

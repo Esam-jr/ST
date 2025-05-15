@@ -161,44 +161,99 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
         throw new Error("Failed to load project data");
       }
 
-      if (expenseResponse.status === "fulfilled") {
-        setExpenses(expenseResponse.value?.data || []);
+      if (
+        expenseResponse.status === "fulfilled" &&
+        "data" in expenseResponse.value
+      ) {
+        setExpenses(expenseResponse.value.data || []);
       } else {
         console.error("Error fetching expenses:", expenseResponse.reason);
-        // Don't throw error here, just display a message
-        toast({
-          title: "Warning",
-          description: "Failed to load expenses. Some data may be missing.",
-          variant: "destructive",
-        });
+
+        // Check for specific error codes
+        const errorResponse = expenseResponse.reason?.response?.data;
+        if (errorResponse) {
+          if (errorResponse.code === "CONNECTION_ERROR") {
+            toast({
+              title: "Connection Issue",
+              description:
+                "Database connection problem. We'll try again shortly.",
+              variant: "destructive",
+            });
+          } else if (errorResponse.code === "SCHEMA_ERROR") {
+            toast({
+              title: "System Error",
+              description:
+                "There's a technical issue with the database. Our team has been notified.",
+              variant: "destructive",
+            });
+          } else {
+            toast({
+              title: "Warning",
+              description:
+                errorResponse.message ||
+                "Failed to load expenses. Some data may be missing.",
+              variant: "destructive",
+            });
+          }
+        } else {
+          // Generic error handling
+          toast({
+            title: "Warning",
+            description: "Failed to load expenses. Some data may be missing.",
+            variant: "destructive",
+          });
+        }
+
         // Initialize with empty array to prevent errors
         setExpenses([]);
       }
 
-      if (taskResponse.status === "fulfilled") {
-        setTasks(taskResponse.value?.data || []);
+      if (taskResponse.status === "fulfilled" && "data" in taskResponse.value) {
+        setTasks(taskResponse.value.data || []);
       } else {
         console.warn("Could not load tasks:", taskResponse.reason);
         setTasks([]);
       }
 
-      if (milestoneResponse.status === "fulfilled") {
-        setMilestones(milestoneResponse.value?.data || []);
+      if (
+        milestoneResponse.status === "fulfilled" &&
+        "data" in milestoneResponse.value
+      ) {
+        setMilestones(milestoneResponse.value.data || []);
       } else {
         console.warn("Could not load milestones:", milestoneResponse.reason);
         setMilestones([]);
       }
     } catch (err: any) {
       console.error("Error fetching expense data:", err);
-      setError(
+
+      // Check if error is from axios
+      const errorMessage =
         err.response?.data?.message ||
-          "Failed to load expense data. Please try again later."
-      );
+        "Failed to load expense data. Please try again later.";
+      const errorCode = err.response?.data?.code;
+
+      // Set appropriate user-friendly error message
+      let userMessage = errorMessage;
+
+      if (errorCode === "CONNECTION_ERROR") {
+        userMessage =
+          "Database connection issue. Please try refreshing in a few moments.";
+      } else if (errorCode === "SCHEMA_ERROR") {
+        userMessage = "System error. Our technical team has been notified.";
+      } else if (err.message?.includes("Network Error")) {
+        userMessage =
+          "Network connection issue. Please check your internet connection.";
+      }
+
+      setError(userMessage);
+
       toast({
         title: "Error",
-        description: "Failed to load expense data",
+        description: userMessage,
         variant: "destructive",
       });
+
       // Initialize arrays to prevent errors
       setExpenses([]);
       setCategories([]);
