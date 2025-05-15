@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from "next";
-import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/pages/api/auth/[...nextauth]";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 
 export default async function handler(
@@ -9,130 +9,148 @@ export default async function handler(
 ) {
   // Only allow PATCH method
   if (req.method !== "PATCH") {
-    return res.status(405).json({
-      message: "Method not allowed",
-      code: "METHOD_NOT_ALLOWED",
-    });
-  }
-
-  // Get the expense ID from the URL
-  const { id } = req.query;
-  const { status, feedback } = req.body;
-
-  if (!id || typeof id !== "string") {
-    return res.status(400).json({
-      message: "Invalid expense ID",
-      code: "INVALID_ID",
-    });
-  }
-
-  if (!status || !["APPROVED", "REJECTED", "PENDING"].includes(status)) {
-    return res.status(400).json({
-      message: "Invalid status. Must be APPROVED, REJECTED, or PENDING",
-      code: "INVALID_STATUS",
-    });
+    return res.status(405).json({ error: "Method not allowed" });
   }
 
   try {
-    // Get user session to verify admin authorization
+    // Get user session
     const session = await getServerSession(req, res, authOptions);
 
-    if (!session || !session.user || session.user.role !== "ADMIN") {
-      return res.status(401).json({
-        message: "Unauthorized. Only administrators can approve expenses",
-        code: "UNAUTHORIZED",
-      });
+    // Check if user is authenticated
+    if (!session || !session.user) {
+      return res.status(401).json({ error: "Unauthorized" });
     }
 
-    // Find the expense first to check it exists
+    // Check if user is an admin
+    const user = await prisma.user.findUnique({
+      where: { email: session.user.email! },
+    });
+
+    if (!user || user.role !== "ADMIN") {
+      return res
+        .status(401)
+        .json({ error: "Unauthorized: Admin access required" });
+    }
+
+    // Get expense ID from URL
+    const { id } = req.query;
+
+    if (!id || typeof id !== "string") {
+      return res.status(400).json({ error: "Invalid expense ID" });
+    }
+
+    // Get expense status from request body
+    const { status, feedback } = req.body;
+
+    // Validate status
+    if (!status || !["APPROVED", "REJECTED", "PENDING"].includes(status)) {
+      return res
+        .status(400)
+        .json({
+          error: "Invalid status. Must be APPROVED, REJECTED, or PENDING",
+        });
+    }
+
+    // Find the expense
     const expense = await prisma.expense.findUnique({
       where: { id },
+      include: {
+        budget: {
+          include: {
+            categories: true,
+            expenses: {
+              where: {
+                status: "APPROVED", // Only include approved expenses for budget calculation
+              },
+            },
+          },
+        },
+        category: true,
+      },
+    });
+
+    if (!expense) {
+      return res.status(404).json({ error: "Expense not found" });
+    }
+
+    // Update expense status and add feedback to description if provided
+    const updatedExpense = await prisma.expense.update({
+      where: { id },
+      data: {
+        status,
+        description: feedback
+          ? `${expense.description || ""}\n\nAdmin feedback: ${feedback}`
+          : expense.description,
+      },
       include: {
         budget: true,
         category: true,
       },
     });
 
-    if (!expense) {
-      return res.status(404).json({
-        message: "Expense not found",
-        code: "NOT_FOUND",
-      });
-    }
-
-    // Update the expense status
-    const updatedExpense = await prisma.expense.update({
-      where: { id },
-      data: {
-        status,
-        // Add feedback if provided (optional field we'd need to add to the schema)
-        ...(feedback && {
-          description: `${
-            expense.description || ""
-          }\n\nAdmin feedback: ${feedback}`,
-        }),
-      },
-      include: {
-        category: true,
-      },
-    });
-
-    // Get budget with categories to calculate updated budget figures
+    // Recalculate budget totals
     const budget = await prisma.budget.findUnique({
       where: { id: expense.budgetId },
       include: {
-        categories: true,
-        expenses: true,
+        categories: {
+          include: {
+            expenses: {
+              where: {
+                status: "APPROVED",
+              },
+            },
+          },
+        },
+        expenses: {
+          where: {
+            status: "APPROVED",
+          },
+        },
       },
     });
 
-    // Calculate new budget figures with the updated expense status
-    const totalSpent =
-      budget?.expenses.reduce((total, exp) => {
-        // Only count APPROVED expenses towards spent amount
-        if (exp.status === "APPROVED") {
-          return total + exp.amount;
-        }
-        return total;
-      }, 0) || 0;
+    if (!budget) {
+      return res.status(404).json({ error: "Budget not found" });
+    }
+
+    // Calculate total spent amount
+    const totalSpent = budget.expenses.reduce(
+      (sum, exp) => sum + exp.amount,
+      0
+    );
+
+    // Calculate remaining budget
+    const remaining = budget.totalAmount - totalSpent;
 
     // Calculate category spending
-    const categorySpending = budget?.categories.map((category) => {
-      const categoryExpenses = budget.expenses.filter(
-        (exp) => exp.categoryId === category.id && exp.status === "APPROVED"
-      );
-      const categorySpent = categoryExpenses.reduce(
-        (total, exp) => total + exp.amount,
-        0
-      );
+    const categorySpending = budget.categories.map((category) => {
+      const spent = category.expenses.reduce((sum, exp) => sum + exp.amount, 0);
+      const allocated = category.allocatedAmount;
+      const remainingInCategory = allocated - spent;
+
       return {
         id: category.id,
-        spent: categorySpent,
-        remaining: category.allocatedAmount - categorySpent,
+        name: category.name,
+        allocated,
+        spent,
+        remaining: remainingInCategory,
+        percentage: allocated > 0 ? (spent / allocated) * 100 : 0,
       };
     });
 
-    // Format response with budget impact
-    const response = {
+    return res.status(200).json({
       expense: updatedExpense,
       budget: {
-        id: budget?.id,
-        totalAmount: budget?.totalAmount || 0,
+        id: budget.id,
+        title: budget.title,
+        totalAmount: budget.totalAmount,
         spent: totalSpent,
-        remaining: (budget?.totalAmount || 0) - totalSpent,
-        categoryImpact: categorySpending,
+        remaining,
+        categories: categorySpending,
       },
-      message: `Expense has been ${status.toLowerCase()}`,
-    };
-
-    // Notification logic would go here (future enhancement)
-
-    return res.status(200).json(response);
-  } catch (error) {
-    console.error("Error updating expense status:", error);
-    return res.status(500).json({
-      message: "Failed to update expense status",
-      code: "SERVER_ERROR",
     });
+  } catch (error) {
+    console.error("Error handling expense approval:", error);
+    return res.status(500).json({ error: "Internal server error" });
   }
 }

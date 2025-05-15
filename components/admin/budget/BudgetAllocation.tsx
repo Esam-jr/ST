@@ -40,7 +40,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import {
   DollarSign,
@@ -60,6 +59,8 @@ import { useToast } from "@/hooks/use-toast";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import { useBudget } from "@/contexts/BudgetContext";
 import { BudgetForm } from "@/components/budget/BudgetForm";
+import PendingExpensesTab from "./PendingExpensesTab";
+import Image from "next/image";
 
 interface StartupCall {
   id: string;
@@ -258,9 +259,7 @@ const BudgetAllocation: React.FC<BudgetAllocationProps> = ({
   }, [selectedCallId, fetchBudgets]);
 
   // Apply selected template to create a new budget
-  const applyTemplate = () => {
-    if (!selectedTemplate) return;
-
+  const applyTemplate = (template: BudgetTemplate) => {
     // Close the template dialog
     setTemplateDialogOpen(false);
 
@@ -271,7 +270,7 @@ const BudgetAllocation: React.FC<BudgetAllocationProps> = ({
     // The actual implementation will be in the BudgetForm component
     toast({
       title: "Template Applied",
-      description: `"${selectedTemplate.name}" template has been applied. Customize as needed.`,
+      description: `"${template.name}" template has been applied. Customize as needed.`,
     });
   };
 
@@ -591,104 +590,230 @@ const BudgetAllocation: React.FC<BudgetAllocationProps> = ({
           </CardHeader>
           <CardContent>
             <Tabs defaultValue={budgets[0]?.id}>
-              <TabsList className="mb-4">
-                {budgets.map((budget) => (
-                  <TabsTrigger key={budget.id} value={budget.id}>
-                    {budget.title}
-                  </TabsTrigger>
-                ))}
+              <TabsList className="mb-6">
+                <TabsTrigger value="budgets">Budgets</TabsTrigger>
+                <TabsTrigger value="categories">Categories</TabsTrigger>
+                <TabsTrigger value="expenses">
+                  Expenses
+                  {expenses.filter((e) => e.status === "PENDING").length >
+                    0 && (
+                    <Badge className="ml-2 bg-yellow-100 text-yellow-800 hover:bg-yellow-100">
+                      {expenses.filter((e) => e.status === "PENDING").length}
+                    </Badge>
+                  )}
+                </TabsTrigger>
               </TabsList>
 
-              {budgets.map((budget) => (
-                <TabsContent key={budget.id} value={budget.id}>
-                  {budget.categories && budget.categories.length > 0 ? (
-                    <div className="space-y-6">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Category</TableHead>
-                            <TableHead>Allocated</TableHead>
-                            <TableHead>% of Total</TableHead>
-                            <TableHead>Description</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {budget.categories.map((category) => (
-                            <TableRow key={category.id}>
-                              <TableCell className="font-medium">
-                                {category.name}
-                              </TableCell>
-                              <TableCell>
-                                {formatCurrency(
-                                  category.allocatedAmount,
-                                  budget.currency
-                                )}
-                              </TableCell>
-                              <TableCell>
-                                {calculateAllocationPercentage(
-                                  category.allocatedAmount,
-                                  budget.totalAmount
-                                )}
-                                %
-                              </TableCell>
-                              <TableCell className="max-w-xs truncate">
-                                {category.description || "No description"}
-                              </TableCell>
+              <TabsContent value="budgets" className="mt-0">
+                {budgets.map((budget) => (
+                  <TabsContent key={budget.id} value={budget.id}>
+                    {budget.categories && budget.categories.length > 0 ? (
+                      <div className="space-y-6">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Category</TableHead>
+                              <TableHead>Allocated</TableHead>
+                              <TableHead>% of Total</TableHead>
+                              <TableHead>Description</TableHead>
                             </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
+                          </TableHeader>
+                          <TableBody>
+                            {budget.categories.map((category) => (
+                              <TableRow key={category.id}>
+                                <TableCell className="font-medium">
+                                  {category.name}
+                                </TableCell>
+                                <TableCell>
+                                  {formatCurrency(
+                                    category.allocatedAmount,
+                                    budget.currency
+                                  )}
+                                </TableCell>
+                                <TableCell>
+                                  {calculateAllocationPercentage(
+                                    category.allocatedAmount,
+                                    budget.totalAmount
+                                  )}
+                                  %
+                                </TableCell>
+                                <TableCell className="max-w-xs truncate">
+                                  {category.description || "No description"}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
 
-                      <Card>
-                        <CardHeader>
-                          <CardTitle className="text-lg">
-                            Category Allocation
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="space-y-4">
-                            {budget.categories.map((category) => {
-                              const percentage = calculateAllocationPercentage(
-                                category.allocatedAmount,
-                                budget.totalAmount
-                              );
-                              return (
-                                <div key={category.id}>
-                                  <div className="flex justify-between mb-1">
-                                    <span className="text-sm font-medium">
-                                      {category.name}
-                                    </span>
-                                    <span className="text-sm text-muted-foreground">
-                                      {formatCurrency(
-                                        category.allocatedAmount,
-                                        budget.currency
-                                      )}{" "}
-                                      ({percentage}%)
-                                    </span>
+                        <Card>
+                          <CardHeader>
+                            <CardTitle className="text-lg">
+                              Category Allocation
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="space-y-4">
+                              {budget.categories.map((category) => {
+                                const percentage =
+                                  calculateAllocationPercentage(
+                                    category.allocatedAmount,
+                                    budget.totalAmount
+                                  );
+                                return (
+                                  <div key={category.id}>
+                                    <div className="flex justify-between mb-1">
+                                      <span className="text-sm font-medium">
+                                        {category.name}
+                                      </span>
+                                      <span className="text-sm text-muted-foreground">
+                                        {formatCurrency(
+                                          category.allocatedAmount,
+                                          budget.currency
+                                        )}{" "}
+                                        ({percentage}%)
+                                      </span>
+                                    </div>
+                                    <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                                      <div
+                                        className="h-full bg-primary"
+                                        style={{ width: `${percentage}%` }}
+                                      ></div>
+                                    </div>
                                   </div>
-                                  <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
-                                    <div
-                                      className="h-full bg-primary"
-                                      style={{ width: `${percentage}%` }}
-                                    ></div>
+                                );
+                              })}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </div>
+                    ) : (
+                      <div className="text-center py-6">
+                        <Info className="h-10 w-10 text-muted-foreground mx-auto" />
+                        <p className="mt-2">
+                          No categories defined for this budget
+                        </p>
+                      </div>
+                    )}
+                  </TabsContent>
+                ))}
+              </TabsContent>
+
+              <TabsContent value="categories" className="mt-0">
+                {budgets.map((budget) => (
+                  <TabsContent key={budget.id} value={budget.id}>
+                    {budget.categories && budget.categories.length > 0 ? (
+                      <div className="space-y-6">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Category</TableHead>
+                              <TableHead>Allocated</TableHead>
+                              <TableHead>% of Total</TableHead>
+                              <TableHead>Description</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {budget.categories.map((category) => (
+                              <TableRow key={category.id}>
+                                <TableCell className="font-medium">
+                                  {category.name}
+                                </TableCell>
+                                <TableCell>
+                                  {formatCurrency(
+                                    category.allocatedAmount,
+                                    budget.currency
+                                  )}
+                                </TableCell>
+                                <TableCell>
+                                  {calculateAllocationPercentage(
+                                    category.allocatedAmount,
+                                    budget.totalAmount
+                                  )}
+                                  %
+                                </TableCell>
+                                <TableCell className="max-w-xs truncate">
+                                  {category.description || "No description"}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+
+                        <Card>
+                          <CardHeader>
+                            <CardTitle className="text-lg">
+                              Category Allocation
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="space-y-4">
+                              {budget.categories.map((category) => {
+                                const percentage =
+                                  calculateAllocationPercentage(
+                                    category.allocatedAmount,
+                                    budget.totalAmount
+                                  );
+                                return (
+                                  <div key={category.id}>
+                                    <div className="flex justify-between mb-1">
+                                      <span className="text-sm font-medium">
+                                        {category.name}
+                                      </span>
+                                      <span className="text-sm text-muted-foreground">
+                                        {formatCurrency(
+                                          category.allocatedAmount,
+                                          budget.currency
+                                        )}{" "}
+                                        ({percentage}%)
+                                      </span>
+                                    </div>
+                                    <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                                      <div
+                                        className="h-full bg-primary"
+                                        style={{ width: `${percentage}%` }}
+                                      ></div>
+                                    </div>
                                   </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </CardContent>
-                      </Card>
-                    </div>
-                  ) : (
-                    <div className="text-center py-6">
-                      <Info className="h-10 w-10 text-muted-foreground mx-auto" />
-                      <p className="mt-2">
-                        No categories defined for this budget
-                      </p>
-                    </div>
-                  )}
-                </TabsContent>
-              ))}
+                                );
+                              })}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </div>
+                    ) : (
+                      <div className="text-center py-6">
+                        <Info className="h-10 w-10 text-muted-foreground mx-auto" />
+                        <p className="mt-2">
+                          No categories defined for this budget
+                        </p>
+                      </div>
+                    )}
+                  </TabsContent>
+                ))}
+              </TabsContent>
+
+              <TabsContent value="expenses" className="mt-0">
+                {selectedCallId ? (
+                  <PendingExpensesTab startupCallId={selectedCallId} />
+                ) : (
+                  <div className="flex flex-col items-center justify-center h-64 text-center">
+                    <Image
+                      src="/icons/startups.svg"
+                      width={120}
+                      height={120}
+                      alt="Select Startup"
+                      className="mb-6 opacity-50"
+                    />
+                    <h3 className="text-lg font-medium">
+                      Select a Startup Call
+                    </h3>
+                    <p className="text-sm text-muted-foreground mt-2 max-w-md">
+                      Please select a startup call from the dropdown above to
+                      view and manage expenses
+                    </p>
+                  </div>
+                )}
+              </TabsContent>
             </Tabs>
           </CardContent>
         </Card>
@@ -706,53 +831,50 @@ const BudgetAllocation: React.FC<BudgetAllocationProps> = ({
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 my-4">
             {budgetTemplates.map((template) => (
-              <Card
-                key={template.id}
-                className={`cursor-pointer transition-all ${
-                  selectedTemplate?.id === template.id
-                    ? "ring-2 ring-primary"
-                    : "hover:bg-muted/50"
-                }`}
-                onClick={() => setSelectedTemplate(template)}
-              >
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-lg">{template.name}</CardTitle>
-                </CardHeader>
-                <CardContent className="pb-2">
-                  <p className="text-sm text-muted-foreground mb-2">
-                    {template.description}
-                  </p>
-                  <div className="text-xs">
-                    {template.categories.slice(0, 3).map((cat) => (
-                      <div key={cat.name} className="flex justify-between mb-1">
-                        <span>{cat.name}</span>
-                        <span>{cat.percentage}%</span>
-                      </div>
-                    ))}
-                    {template.categories.length > 3 && (
-                      <div className="text-muted-foreground mt-1">
-                        +{template.categories.length - 3} more categories
-                      </div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
+              <div key={template.id} onClick={() => applyTemplate(template)}>
+                <Card
+                  className={`cursor-pointer transition-all ${
+                    selectedTemplate?.id === template.id
+                      ? "ring-2 ring-primary"
+                      : "hover:bg-muted/50"
+                  }`}
+                >
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-lg">{template.name}</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm text-muted-foreground mb-2">
+                      {template.description || "No description available"}
+                    </p>
+                    <div className="flex flex-wrap gap-1">
+                      {template.categories.map((category) => (
+                        <Badge
+                          key={category.id}
+                          variant="outline"
+                          className="bg-muted"
+                        >
+                          {category.name}
+                        </Badge>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
             ))}
 
             {/* Add Custom Template Card */}
-            <Card
-              className="cursor-pointer hover:bg-muted/50 border-dashed"
-              onClick={() => setCustomTemplateDialogOpen(true)}
-            >
-              <CardHeader className="pb-2">
-                <CardTitle className="text-lg">
-                  Create Custom Template
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="pb-4 flex items-center justify-center h-24">
-                <PlusCircle className="h-10 w-10 text-muted-foreground" />
-              </CardContent>
-            </Card>
+            <div onClick={() => setCustomTemplateDialogOpen(true)}>
+              <Card className="cursor-pointer hover:bg-muted/50 border-dashed">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-lg">
+                    Create Custom Template
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="flex items-center justify-center h-24">
+                  <PlusCircle className="h-10 w-10 text-muted-foreground" />
+                </CardContent>
+              </Card>
+            </div>
           </div>
 
           <DialogFooter>
@@ -762,7 +884,10 @@ const BudgetAllocation: React.FC<BudgetAllocationProps> = ({
             >
               Cancel
             </Button>
-            <Button onClick={applyTemplate} disabled={!selectedTemplate}>
+            <Button
+              onClick={() => applyTemplate(selectedTemplate)}
+              disabled={!selectedTemplate}
+            >
               Apply Template
             </Button>
           </DialogFooter>

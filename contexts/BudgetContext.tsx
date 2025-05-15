@@ -7,6 +7,7 @@ import React, {
   ReactNode,
 } from "react";
 import axios from "axios";
+import { useToast } from "@/hooks/use-toast";
 
 // Define types
 export interface Budget {
@@ -21,6 +22,7 @@ export interface Budget {
   updatedAt: string;
   categories: BudgetCategory[];
   expenses?: Expense[];
+  startupCallId: string;
 }
 
 export interface BudgetCategory {
@@ -135,6 +137,7 @@ export const BudgetProvider: React.FC<{ children: ReactNode }> = ({
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
+  const { toast } = useToast();
 
   // UI state
   const [selectedBudgetId, setSelectedBudgetId] = useState<string | null>(null);
@@ -152,9 +155,9 @@ export const BudgetProvider: React.FC<{ children: ReactNode }> = ({
 
       try {
         const response = await axios.get(
-          `/api/startup-calls/${startupCallId}/budgets`
+          `/api/admin/budgets?startupCallId=${startupCallId}`
         );
-        const fetchedBudgets = response.data;
+        const fetchedBudgets = response.data.budgets || [];
 
         // Set the first budget as selected by default if none is selected
         if (fetchedBudgets.length > 0 && !selectedBudgetId) {
@@ -188,6 +191,11 @@ export const BudgetProvider: React.FC<{ children: ReactNode }> = ({
       } catch (err) {
         setError(err as Error);
         console.error("Error fetching budgets:", err);
+        toast({
+          title: "Error",
+          description: "Failed to fetch budgets",
+          variant: "destructive",
+        });
       } finally {
         setIsLoading(false);
       }
@@ -204,19 +212,25 @@ export const BudgetProvider: React.FC<{ children: ReactNode }> = ({
       setIsLoading(true);
 
       try {
-        const response = await axios.post(
-          `/api/startup-calls/${startupCallId}/budgets`,
-          budgetData
-        );
+        const response = await axios.post(`/api/admin/budgets`, budgetData);
 
         // Update local state with new budget
         setBudgets((prev) => [...prev, response.data]);
+        toast({
+          title: "Success",
+          description: "Budget created successfully",
+        });
 
         return response.data;
       } catch (err) {
         const error = err as Error;
         setError(error);
         console.error("Error creating budget:", error);
+        toast({
+          title: "Error",
+          description: "Failed to create budget",
+          variant: "destructive",
+        });
         throw error;
       } finally {
         setIsLoading(false);
@@ -236,7 +250,7 @@ export const BudgetProvider: React.FC<{ children: ReactNode }> = ({
 
       try {
         const response = await axios.put(
-          `/api/startup-calls/${startupCallId}/budgets/${budgetId}`,
+          `/api/admin/budgets/${budgetId}`,
           budgetData
         );
 
@@ -246,12 +260,21 @@ export const BudgetProvider: React.FC<{ children: ReactNode }> = ({
             budget.id === budgetId ? { ...budget, ...response.data } : budget
           )
         );
+        toast({
+          title: "Success",
+          description: "Budget updated successfully",
+        });
 
         return response.data;
       } catch (err) {
         const error = err as Error;
         setError(error);
         console.error("Error updating budget:", error);
+        toast({
+          title: "Error",
+          description: "Failed to update budget",
+          variant: "destructive",
+        });
         throw error;
       } finally {
         setIsLoading(false);
@@ -266,9 +289,7 @@ export const BudgetProvider: React.FC<{ children: ReactNode }> = ({
       setIsLoading(true);
 
       try {
-        await axios.delete(
-          `/api/startup-calls/${startupCallId}/budgets/${budgetId}`
-        );
+        await axios.delete(`/api/admin/budgets/${budgetId}`);
 
         // Update local state
         setBudgets((prev) => prev.filter((budget) => budget.id !== budgetId));
@@ -283,10 +304,19 @@ export const BudgetProvider: React.FC<{ children: ReactNode }> = ({
             remainingBudgets.length > 0 ? remainingBudgets[0].id : null
           );
         }
+        toast({
+          title: "Success",
+          description: "Budget deleted successfully",
+        });
       } catch (err) {
         const error = err as Error;
         setError(error);
         console.error("Error deleting budget:", error);
+        toast({
+          title: "Error",
+          description: "Failed to delete budget",
+          variant: "destructive",
+        });
         throw error;
       } finally {
         setIsLoading(false);
