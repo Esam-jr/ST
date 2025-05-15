@@ -42,7 +42,6 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   DollarSign,
   PlusCircle,
@@ -562,7 +561,7 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
             </DialogDescription>
           </DialogHeader>
 
-          <ScrollArea className="max-h-[60vh] pr-4">
+          <div className="max-h-[60vh] pr-4 overflow-y-auto">
             <div className="space-y-4 py-2">
               <div className="space-y-2">
                 <Label htmlFor="title">Title</Label>
@@ -719,7 +718,7 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
                 </Select>
               </div>
             </div>
-          </ScrollArea>
+          </div>
 
           <DialogFooter>
             <Button
