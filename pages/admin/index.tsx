@@ -241,9 +241,9 @@ export default function AdminDashboard() {
                 </div>
                 <Button
                   variant="default"
-                  onClick={() => router.push("/admin/startup-calls/budgets")}
+                  onClick={() => setActiveSection("budget-management")}
                 >
-                  View All Budgets
+                  Refresh Budgets
                 </Button>
               </div>
 

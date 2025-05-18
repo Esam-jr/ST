@@ -113,17 +113,24 @@ const ExpenseApprovalTable: React.FC<ExpenseApprovalTableProps> = ({
       const response = await axios.get(url);
       setExpenses(response.data.expenses);
 
-      // Extract unique startups
-      const uniqueStartups = Array.from(
-        new Set(
-          response.data.expenses.map((expense: Expense) => expense.startupName)
-        )
-      ).map((name) => ({
-        id: name,
-        name: name as string,
-      }));
+      // Extract unique startups from response data
+      if (response.data.startups) {
+        setStartups(response.data.startups);
+      } else {
+        // Fallback to extracting startups from expenses if not provided directly
+        const uniqueStartups = Array.from(
+          new Set(
+            response.data.expenses.map(
+              (expense: Expense) => expense.startupName
+            )
+          )
+        ).map((name) => ({
+          id: name,
+          name: name as string,
+        }));
 
-      setStartups(uniqueStartups);
+        setStartups(uniqueStartups);
+      }
     } catch (error) {
       console.error("Error fetching expenses:", error);
       toast({

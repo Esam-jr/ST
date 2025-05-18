@@ -25,7 +25,7 @@ export default async function handler(
   // GET - Fetch expenses with filters
   if (req.method === "GET") {
     try {
-      const { startupCallId, status } = req.query;
+      const { startupCallId, status, startupId } = req.query;
 
       // Build the query
       const where: any = {};
@@ -39,6 +39,12 @@ export default async function handler(
 
       if (status && typeof status === "string") {
         where.status = status.toUpperCase();
+      }
+
+      if (startupId && typeof startupId === "string") {
+        where.startup = {
+          id: startupId,
+        };
       }
 
       // Fetch expenses with necessary relations
@@ -57,6 +63,7 @@ export default async function handler(
                 include: {
                   startup: {
                     select: {
+                      id: true,
                       name: true,
                     },
                   },
@@ -83,8 +90,64 @@ export default async function handler(
         startupName: expense.budget.application?.startup.name || "Unknown",
       }));
 
+      // Get the unique startupCallIds from the expenses
+      const startupCallIds = Array.from(
+        new Set(expenses.map((e) => e.budget.startupCallId))
+      );
+
+      // Now get all startups that have approved applications for these startup calls
+      const startups = await prisma.startup.findMany({
+        where: {
+          callApplications: {
+            some: {
+              callId: {
+                in: startupCallIds,
+              },
+              status: "APPROVED",
+            },
+          },
+        },
+        select: {
+          id: true,
+          name: true,
+          founderId: true,
+          founder: {
+            select: {
+              name: true,
+            },
+          },
+          callApplications: {
+            where: {
+              status: "APPROVED",
+              callId: {
+                in: startupCallIds,
+              },
+            },
+            select: {
+              callId: true,
+            },
+          },
+        },
+      });
+
+      // Transform startup data for easier frontend use
+      const startupInfo = startups.map((startup) => ({
+        id: startup.id,
+        name: startup.name,
+        founderId: startup.founderId,
+        founderName: startup.founder.name,
+        callIds: startup.callApplications.map((app) => app.callId),
+      }));
+
+      // Return the expenses and related data
       return res.status(200).json({
         expenses: transformedExpenses,
+        startups: startupInfo,
+        filters: {
+          startupCallId: startupCallId || null,
+          status: status || null,
+          startupId: startupId || null,
+        },
       });
     } catch (error) {
       console.error("Error fetching expenses:", error);
