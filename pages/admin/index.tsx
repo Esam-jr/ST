@@ -49,6 +49,8 @@ import AdminReviewerManagement from "@/components/admin/AdminReviewerManagement"
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import { BudgetProvider } from "@/contexts/BudgetContext";
 import BudgetAllocation from "@/components/admin/budget/BudgetAllocation";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import ExpenseApprovalTable from "@/components/admin/budget/ExpenseApprovalTable";
 
 export default function AdminDashboard() {
   const { data: session, status } = useSession();
@@ -236,18 +238,44 @@ export default function AdminDashboard() {
                 <div>
                   <h1 className="text-3xl font-bold">Budget Management</h1>
                   <p className="text-muted-foreground">
-                    Manage budgets for all startup calls
+                    Manage budgets and track expenses across all startup calls
                   </p>
                 </div>
-                <Button
-                  variant="default"
-                  onClick={() => setActiveSection("budget-management")}
-                >
-                  Refresh Budgets
-                </Button>
               </div>
 
-              <BudgetAllocation />
+              <Tabs defaultValue="budgets" className="w-full">
+                <TabsList className="mb-4">
+                  <TabsTrigger value="budgets">Budget Allocation</TabsTrigger>
+                  <TabsTrigger value="expenses">Expense Tracking</TabsTrigger>
+                  <TabsTrigger value="approval">Expense Approval</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="budgets">
+                  <BudgetAllocation />
+                </TabsContent>
+
+                <TabsContent value="expenses">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Expense Tracking</CardTitle>
+                      <CardDescription>
+                        Monitor all expenses across startup calls and budgets
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <iframe
+                        src="/api/embed/expenses-dashboard"
+                        className="w-full h-[70vh] border-none rounded-md"
+                        title="Expense Dashboard"
+                      />
+                    </CardContent>
+                  </Card>
+                </TabsContent>
+
+                <TabsContent value="approval">
+                  <ExpenseApprovalTable />
+                </TabsContent>
+              </Tabs>
             </div>
           </BudgetProvider>
         );
