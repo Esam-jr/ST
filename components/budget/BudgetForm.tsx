@@ -31,692 +31,604 @@ import {
 } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { PlusCircle, XCircle, AlertTriangle, Percent } from "lucide-react";
+import {
+  PlusCircle,
+  XCircle,
+  AlertTriangle,
+  Percent,
+  Trash2,
+} from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm, useFieldArray } from "react-hook-form";
+import * as z from "zod";
+import { useBudget } from "@/contexts/BudgetContext";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+
+// Define the form schema
+const formSchema = z.object({
+  title: z.string().min(3, "Title must be at least 3 characters"),
+  description: z.string().optional(),
+  totalAmount: z.coerce
+    .number()
+    .positive("Total amount must be positive")
+    .min(1, "Total amount must be at least 1"),
+  currency: z.string().min(1, "Currency is required"),
+  fiscalYear: z.string().min(1, "Fiscal year is required"),
+  status: z.string().min(1, "Status is required"),
+  categories: z.array(
+    z.object({
+      name: z.string().min(1, "Category name is required"),
+      description: z.string().optional(),
+      allocatedAmount: z.coerce
+        .number()
+        .positive("Amount must be positive")
+        .min(1, "Amount must be at least 1"),
+    })
+  ),
+});
+
+type FormValues = z.infer<typeof formSchema>;
 
 interface BudgetFormProps {
   startupCallId: string;
-  initialData?: {
-    budget: any;
-    categories: any[];
-  };
-  templateData?: {
-    name: string;
-    description: string;
-    categories: {
-      name: string;
-      description: string;
-      percentage: number;
-    }[];
-  } | null;
-  onSubmit: (budget: any) => void;
+  budget?: any;
+  templateData?: any;
+  onSubmit: (data: any) => void;
   onCancel: () => void;
 }
 
-export const BudgetForm: React.FC<BudgetFormProps> = ({
+export const BudgetForm = ({
   startupCallId,
-  initialData,
+  budget,
   templateData,
   onSubmit,
   onCancel,
-}) => {
+}: BudgetFormProps) => {
+  const { createBudget, updateBudget } = useBudget();
   const { toast } = useToast();
-  const [loading, setLoading] = useState(false);
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Budget form state
-  const [budget, setBudget] = useState({
-    title: initialData?.budget?.title || "",
-    description: initialData?.budget?.description || "",
-    totalAmount: initialData?.budget?.totalAmount || 0,
-    currency: initialData?.budget?.currency || "USD",
-    fiscalYear:
-      initialData?.budget?.fiscalYear || new Date().getFullYear().toString(),
-    status: initialData?.budget?.status || "draft",
+  // Calculate current year for default fiscal year
+  const currentYear = new Date().getFullYear().toString();
+
+  // Set default form values
+  const defaultValues: Partial<FormValues> = {
+    title: budget?.title || "",
+    description: budget?.description || "",
+    totalAmount: budget?.totalAmount || 0,
+    currency: budget?.currency || "INR",
+    fiscalYear: budget?.fiscalYear || currentYear,
+    status: budget?.status || "active",
+    categories: budget?.categories?.length
+      ? budget.categories.map((cat: any) => ({
+          name: cat.name,
+          description: cat.description || "",
+          allocatedAmount: cat.allocatedAmount,
+        }))
+      : [{ name: "", description: "", allocatedAmount: 0 }],
+  };
+
+  // Initialize form
+  const form = useForm<FormValues>({
+    resolver: zodResolver(formSchema),
+    defaultValues,
   });
 
-  // Categories state
-  const [categories, setCategories] = useState<
-    {
-      id?: string;
-      name: string;
-      description: string;
-      allocatedAmount: number;
-      allocatedPercentage?: number;
-    }[]
-  >(
-    initialData?.categories?.map((cat: any) => ({
-      id: cat.id,
-      name: cat.name,
-      description: cat.description || "",
-      allocatedAmount: cat.allocatedAmount || 0,
-      allocatedPercentage: cat.allocatedAmount
-        ? Math.round((cat.allocatedAmount / budget.totalAmount) * 100)
-        : 0,
-    })) || []
-  );
+  // Field array for dynamic categories
+  const { fields, append, remove } = useFieldArray({
+    control: form.control,
+    name: "categories",
+  });
 
-  // Apply template data if provided and no initial data
+  // Apply template data if provided
   useEffect(() => {
-    if (templateData && !initialData) {
+    if (templateData && !budget) {
       // Update title based on template
-      setBudget({
-        ...budget,
-        title: `${templateData.name} Budget`,
-        description: templateData.description,
-      });
+      form.setValue("title", `${templateData.name} Budget`);
+      form.setValue("description", templateData.description || "");
 
       // Set categories based on template
       if (templateData.categories && templateData.categories.length > 0) {
-        const totalAmount = budget.totalAmount || 100000; // Default value if amount is 0
-        const newCategories = templateData.categories.map((cat) => {
-          const allocatedAmount = (cat.percentage / 100) * totalAmount;
-          return {
-            name: cat.name,
-            description: cat.description,
-            allocatedAmount: Math.round(allocatedAmount * 100) / 100, // Round to 2 decimal places
-            allocatedPercentage: cat.percentage,
-          };
-        });
-        setCategories(newCategories);
+        const totalAmount = form.getValues().totalAmount || 100000; // Default value if amount is 0
+        const newCategories = templateData.categories.map((cat: any) => ({
+          name: cat.name,
+          description: cat.description || "",
+          allocatedAmount: Math.round((cat.percentage / 100) * totalAmount),
+        }));
+        form.setValue("categories", newCategories);
       }
     }
-  }, [templateData]);
+  }, [templateData, form, budget]);
 
-  // Update category percentages when total amount changes
-  useEffect(() => {
-    if (budget.totalAmount > 0) {
-      setCategories(
-        categories.map((cat) => ({
-          ...cat,
-          allocatedPercentage:
-            Math.round((cat.allocatedAmount / budget.totalAmount) * 100) || 0,
-        }))
-      );
-    }
-  }, [budget.totalAmount]);
+  // Calculate total allocated amount for categories
+  const calculateTotalAllocated = () => {
+    const categories = form.watch("categories");
+    return categories.reduce(
+      (sum, category) => sum + (Number(category.allocatedAmount) || 0),
+      0
+    );
+  };
 
-  // Handle input changes for budget fields
-  const handleBudgetChange = (field: string, value: any) => {
-    setBudget({
-      ...budget,
-      [field]: value,
-    });
+  const totalAllocated = calculateTotalAllocated();
+  const totalAmount = Number(form.watch("totalAmount")) || 0;
+  const remainingUnallocated = totalAmount - totalAllocated;
 
-    // Clear error for this field
-    if (errors[field]) {
-      setErrors({
-        ...errors,
-        [field]: "",
+  // Handle form submission
+  const handleSubmit = async (data: FormValues) => {
+    setIsSubmitting(true);
+
+    try {
+      let result;
+
+      if (budget) {
+        // Update existing budget
+        result = await updateBudget(startupCallId, budget.id, data);
+      } else {
+        // Create new budget
+        result = await createBudget(startupCallId, data);
+      }
+
+      onSubmit(result);
+      toast({
+        title: budget ? "Budget Updated" : "Budget Created",
+        description: `The budget was successfully ${
+          budget ? "updated" : "created"
+        }.`,
       });
-    }
-  };
-
-  // Add a new category
-  const addCategory = () => {
-    setCategories([
-      ...categories,
-      {
-        name: "",
-        description: "",
-        allocatedAmount: 0,
-        allocatedPercentage: 0,
-      },
-    ]);
-  };
-
-  // Remove a category
-  const removeCategory = (index: number) => {
-    const newCategories = [...categories];
-    newCategories.splice(index, 1);
-    setCategories(newCategories);
-  };
-
-  // Handle input changes for category fields
-  const handleCategoryChange = (index: number, field: string, value: any) => {
-    const newCategories = [...categories];
-    newCategories[index] = {
-      ...newCategories[index],
-      [field]: value,
-    };
-
-    // If changing the amount, update the percentage
-    if (field === "allocatedAmount" && budget.totalAmount > 0) {
-      newCategories[index].allocatedPercentage = Math.round(
-        (value / budget.totalAmount) * 100
-      );
-    }
-
-    // If changing the percentage, update the amount
-    if (field === "allocatedPercentage" && budget.totalAmount > 0) {
-      newCategories[index].allocatedAmount =
-        Math.round((value / 100) * budget.totalAmount * 100) / 100;
-    }
-
-    setCategories(newCategories);
-
-    // Clear category errors
-    if (errors[`category-${index}-${field}`]) {
-      setErrors({
-        ...errors,
-        [`category-${index}-${field}`]: "",
+    } catch (error) {
+      console.error("Error submitting budget:", error);
+      toast({
+        title: "Error",
+        description: "Failed to save budget. Please try again.",
+        variant: "destructive",
       });
+    } finally {
+      setIsSubmitting(false);
     }
-  };
-
-  // Calculate unallocated amount
-  const getTotalAllocated = () => {
-    return categories.reduce((sum, cat) => sum + (cat.allocatedAmount || 0), 0);
-  };
-
-  const getUnallocatedAmount = () => {
-    const totalAllocated = getTotalAllocated();
-    return budget.totalAmount - totalAllocated;
-  };
-
-  const getAllocatedPercentage = () => {
-    if (budget.totalAmount === 0) return 0;
-    return Math.round((getTotalAllocated() / budget.totalAmount) * 100);
   };
 
   // Distribute remaining amount evenly
   const distributeRemaining = () => {
-    if (categories.length === 0 || budget.totalAmount === 0) return;
-
-    const unallocatedAmount = getUnallocatedAmount();
-    if (unallocatedAmount <= 0) return;
+    if (fields.length === 0 || totalAmount === 0 || remainingUnallocated <= 0)
+      return;
 
     const amountPerCategory =
-      Math.round((unallocatedAmount / categories.length) * 100) / 100;
+      Math.round((remainingUnallocated / fields.length) * 100) / 100;
+    const newCategories = form.getValues().categories.map((cat) => ({
+      ...cat,
+      allocatedAmount: Number(cat.allocatedAmount) + amountPerCategory,
+    }));
 
-    setCategories(
-      categories.map((cat) => ({
-        ...cat,
-        allocatedAmount: cat.allocatedAmount + amountPerCategory,
-        allocatedPercentage: Math.round(
-          ((cat.allocatedAmount + amountPerCategory) / budget.totalAmount) * 100
-        ),
-      }))
-    );
+    form.setValue("categories", newCategories);
   };
 
-  // Auto-adjust allocation to reach 100%
+  // Adjust allocation to not exceed budget
   const adjustToTotal = () => {
-    if (categories.length === 0 || budget.totalAmount === 0) return;
+    if (fields.length === 0 || totalAmount === 0 || remainingUnallocated >= 0)
+      return;
 
-    const totalAllocated = getTotalAllocated();
-    const factor = budget.totalAmount / totalAllocated;
+    const factor = totalAmount / totalAllocated;
+    const newCategories = form.getValues().categories.map((cat) => ({
+      ...cat,
+      allocatedAmount:
+        Math.round(Number(cat.allocatedAmount) * factor * 100) / 100,
+    }));
 
-    setCategories(
-      categories.map((cat) => {
-        const newAmount = Math.round(cat.allocatedAmount * factor * 100) / 100;
-        return {
-          ...cat,
-          allocatedAmount: newAmount,
-          allocatedPercentage: Math.round(
-            (newAmount / budget.totalAmount) * 100
-          ),
-        };
-      })
-    );
+    form.setValue("categories", newCategories);
   };
 
-  // Validate form
-  const validateForm = () => {
-    const newErrors: Record<string, string> = {};
-
-    if (!budget.title.trim()) {
-      newErrors.title = "Title is required";
-    }
-
-    if (budget.totalAmount <= 0) {
-      newErrors.totalAmount = "Total amount must be greater than zero";
-    }
-
-    if (!budget.fiscalYear.trim()) {
-      newErrors.fiscalYear = "Fiscal year is required";
-    }
-
-    // Validate categories
-    categories.forEach((category, index) => {
-      if (!category.name.trim()) {
-        newErrors[`category-${index}-name`] = "Category name is required";
-      }
-
-      if (category.allocatedAmount < 0) {
-        newErrors[`category-${index}-allocatedAmount`] =
-          "Amount cannot be negative";
-      }
-    });
-
-    // Check if total allocation exceeds budget
-    const totalAllocated = getTotalAllocated();
-    if (totalAllocated > budget.totalAmount) {
-      newErrors.totalAllocation = "Total allocation exceeds budget amount";
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
-  // Handle form submission
-  const handleSubmit = async () => {
-    if (!validateForm()) return;
-
-    setLoading(true);
-    try {
-      const categoriesData = categories.map((category) => ({
-        id: category.id, // Include id for existing categories
-        name: category.name,
-        description: category.description,
-        allocatedAmount: category.allocatedAmount,
-      }));
-
-      const budgetData = {
-        ...budget,
-        categories: categoriesData,
-      };
-
-      let response;
-      if (initialData?.budget?.id) {
-        // Edit existing budget
-        response = await axios.put(
-          `/api/startup-calls/${startupCallId}/budgets/${initialData.budget.id}`,
-          budgetData
-        );
-      } else {
-        // Create new budget
-        response = await axios.post(
-          `/api/startup-calls/${startupCallId}/budgets`,
-          budgetData
-        );
-      }
-
-      onSubmit(response.data);
-    } catch (error: any) {
-      console.error("Error saving budget:", error);
-      toast({
-        title: "Error",
-        description:
-          error.response?.data?.message ||
-          "Failed to save budget. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Format currency
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: budget.currency,
-    }).format(amount);
-  };
+  // Validate if total allocated amount doesn't exceed total budget
+  const isAllocationValid = totalAllocated <= totalAmount;
 
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Budget Details */}
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
+        {/* Basic Budget Information */}
         <div className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="title">Budget Title</Label>
-            <Input
-              id="title"
-              value={budget.title}
-              onChange={(e) => handleBudgetChange("title", e.target.value)}
-              placeholder="Enter a title for this budget"
-            />
-            {errors.title && (
-              <p className="text-sm text-red-500">{errors.title}</p>
+          <FormField
+            control={form.control}
+            name="title"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Budget Title</FormLabel>
+                <FormControl>
+                  <Input placeholder="Enter budget title" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
             )}
-          </div>
+          />
 
-          <div className="space-y-2">
-            <Label htmlFor="description">Description (Optional)</Label>
-            <Textarea
-              id="description"
-              value={budget.description}
-              onChange={(e) =>
-                handleBudgetChange("description", e.target.value)
-              }
-              placeholder="Brief description of this budget"
-              rows={3}
+          <FormField
+            control={form.control}
+            name="description"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Description</FormLabel>
+                <FormControl>
+                  <Textarea
+                    placeholder="Describe the purpose of this budget"
+                    className="min-h-[100px]"
+                    {...field}
+                    value={field.value || ""}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <FormField
+              control={form.control}
+              name="totalAmount"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Total Amount</FormLabel>
+                  <FormControl>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                        <span className="text-sm text-gray-500">
+                          {form.watch("currency") === "INR" ? "₹" : "$"}
+                        </span>
+                      </div>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        placeholder="0.00"
+                        className="pl-7"
+                        {...field}
+                        onChange={(e) => {
+                          field.onChange(e);
+                          form.trigger("totalAmount");
+                        }}
+                      />
+                    </div>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="currency"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Currency</FormLabel>
+                  <Select
+                    onValueChange={field.onChange}
+                    defaultValue={field.value}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select currency" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="INR">INR - Indian Rupee</SelectItem>
+                      <SelectItem value="USD">USD - US Dollar</SelectItem>
+                      <SelectItem value="EUR">EUR - Euro</SelectItem>
+                      <SelectItem value="GBP">GBP - British Pound</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="totalAmount">Total Amount</Label>
-              <div className="relative">
-                <Input
-                  id="totalAmount"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={budget.totalAmount || ""}
-                  onChange={(e) =>
-                    handleBudgetChange(
-                      "totalAmount",
-                      parseFloat(e.target.value) || 0
-                    )
-                  }
-                  className="pl-7"
-                />
-                <div className="absolute inset-y-0 left-0 flex items-center pl-2.5 pointer-events-none">
-                  <span className="text-sm text-muted-foreground">$</span>
-                </div>
-              </div>
-              {errors.totalAmount && (
-                <p className="text-sm text-red-500">{errors.totalAmount}</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <FormField
+              control={form.control}
+              name="fiscalYear"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Fiscal Year</FormLabel>
+                  <Select
+                    onValueChange={field.onChange}
+                    defaultValue={field.value}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select fiscal year" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {[
+                        Number(currentYear) - 1,
+                        Number(currentYear),
+                        Number(currentYear) + 1,
+                        Number(currentYear) + 2,
+                      ].map((year) => (
+                        <SelectItem key={year} value={year.toString()}>
+                          {year}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
               )}
-            </div>
+            />
 
-            <div className="space-y-2">
-              <Label htmlFor="currency">Currency</Label>
-              <Select
-                value={budget.currency}
-                onValueChange={(value) => handleBudgetChange("currency", value)}
-              >
-                <SelectTrigger id="currency">
-                  <SelectValue placeholder="Select currency" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="USD">USD - US Dollar</SelectItem>
-                  <SelectItem value="EUR">EUR - Euro</SelectItem>
-                  <SelectItem value="GBP">GBP - British Pound</SelectItem>
-                  <SelectItem value="CAD">CAD - Canadian Dollar</SelectItem>
-                  <SelectItem value="AUD">AUD - Australian Dollar</SelectItem>
-                  <SelectItem value="JPY">JPY - Japanese Yen</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="fiscalYear">Fiscal Year</Label>
-              <Input
-                id="fiscalYear"
-                value={budget.fiscalYear}
-                onChange={(e) =>
-                  handleBudgetChange("fiscalYear", e.target.value)
-                }
-                placeholder="YYYY"
-              />
-              {errors.fiscalYear && (
-                <p className="text-sm text-red-500">{errors.fiscalYear}</p>
+            <FormField
+              control={form.control}
+              name="status"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Status</FormLabel>
+                  <Select
+                    onValueChange={field.onChange}
+                    defaultValue={field.value}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select status" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="active">Active</SelectItem>
+                      <SelectItem value="draft">Draft</SelectItem>
+                      <SelectItem value="closed">Closed</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
               )}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="status">Status</Label>
-              <Select
-                value={budget.status}
-                onValueChange={(value) => handleBudgetChange("status", value)}
-              >
-                <SelectTrigger id="status">
-                  <SelectValue placeholder="Select status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="draft">Draft</SelectItem>
-                  <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="archived">Archived</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            />
           </div>
         </div>
 
         {/* Budget Allocation Summary */}
         <Card>
-          <CardHeader className="pb-3">
-            <CardTitle>Budget Allocation</CardTitle>
-            <CardDescription>Summary of your budget allocation</CardDescription>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-md">Budget Allocation</CardTitle>
           </CardHeader>
-          <CardContent className="pb-3">
-            <div className="space-y-4">
-              <div className="flex justify-between items-center">
+          <CardContent>
+            <div className="space-y-2">
+              <div className="flex justify-between">
                 <span className="text-sm font-medium">Total Budget:</span>
                 <span className="font-bold">
-                  {formatCurrency(budget.totalAmount)}
+                  {new Intl.NumberFormat("en-US", {
+                    style: "currency",
+                    currency: form.watch("currency"),
+                  }).format(totalAmount)}
                 </span>
               </div>
 
-              <div className="flex justify-between items-center">
+              <div className="flex justify-between">
                 <span className="text-sm font-medium">Allocated:</span>
                 <span
                   className={
-                    getAllocatedPercentage() === 100
-                      ? "text-green-600 font-medium"
+                    !isAllocationValid
+                      ? "text-red-500 font-medium"
                       : "font-medium"
                   }
                 >
-                  {formatCurrency(getTotalAllocated())} (
-                  {getAllocatedPercentage()}%)
+                  {new Intl.NumberFormat("en-US", {
+                    style: "currency",
+                    currency: form.watch("currency"),
+                  }).format(totalAllocated)}
                 </span>
               </div>
 
-              <div className="flex justify-between items-center">
-                <span className="text-sm font-medium">Unallocated:</span>
+              <div className="flex justify-between">
+                <span className="text-sm font-medium">Remaining:</span>
                 <span
                   className={
-                    getUnallocatedAmount() === 0
+                    remainingUnallocated === 0
                       ? "text-green-600 font-medium"
-                      : getUnallocatedAmount() < 0
+                      : remainingUnallocated < 0
                       ? "text-red-600 font-medium"
                       : "text-amber-600 font-medium"
                   }
                 >
-                  {formatCurrency(getUnallocatedAmount())} (
-                  {100 - getAllocatedPercentage()}%)
+                  {new Intl.NumberFormat("en-US", {
+                    style: "currency",
+                    currency: form.watch("currency"),
+                  }).format(Math.abs(remainingUnallocated))}
+                  {remainingUnallocated < 0 ? " (over budget)" : ""}
                 </span>
               </div>
 
-              <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+              <div className="w-full bg-gray-200 rounded-full h-2.5 mt-2">
                 <div
-                  className={`h-full ${
-                    getAllocatedPercentage() === 100
-                      ? "bg-green-500"
-                      : getAllocatedPercentage() > 100
-                      ? "bg-red-500"
-                      : "bg-amber-500"
+                  className={`h-full rounded-full ${
+                    !isAllocationValid ? "bg-red-500" : "bg-green-500"
                   }`}
                   style={{
-                    width: `${Math.min(getAllocatedPercentage(), 100)}%`,
+                    width: `${Math.min(
+                      totalAmount > 0
+                        ? (totalAllocated / totalAmount) * 100
+                        : 0,
+                      100
+                    )}%`,
                   }}
                 ></div>
               </div>
 
-              {getUnallocatedAmount() !== 0 && (
+              {remainingUnallocated !== 0 && (
                 <div className="flex justify-center space-x-2 mt-4">
-                  {getUnallocatedAmount() > 0 && (
+                  {remainingUnallocated > 0 && (
                     <Button
                       variant="outline"
                       size="sm"
+                      type="button"
                       onClick={distributeRemaining}
                     >
                       Distribute Remaining
                     </Button>
                   )}
-                  {getAllocatedPercentage() !== 100 && (
-                    <Button variant="outline" size="sm" onClick={adjustToTotal}>
-                      Adjust to 100%
+                  {remainingUnallocated < 0 && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      type="button"
+                      onClick={adjustToTotal}
+                    >
+                      Adjust to Budget
                     </Button>
                   )}
                 </div>
               )}
-
-              {errors.totalAllocation && (
-                <Alert variant="destructive" className="mt-2">
-                  <AlertTriangle className="h-4 w-4" />
-                  <AlertTitle>Error</AlertTitle>
-                  <AlertDescription>{errors.totalAllocation}</AlertDescription>
-                </Alert>
-              )}
             </div>
           </CardContent>
         </Card>
-      </div>
 
-      {/* Categories */}
-      <div className="space-y-4">
-        <div className="flex justify-between items-center">
-          <Label className="text-lg font-medium">Budget Categories</Label>
-          <Button variant="outline" size="sm" onClick={addCategory}>
-            <PlusCircle className="mr-2 h-4 w-4" />
-            Add Category
-          </Button>
-        </div>
-
-        {categories.length === 0 ? (
-          <div className="border border-dashed border-gray-300 rounded-md p-8 text-center">
-            <h3 className="text-lg font-medium text-muted-foreground">
-              No Categories Added
-            </h3>
-            <p className="text-sm text-muted-foreground mt-1 mb-4">
-              Add categories to allocate your budget
-            </p>
-            <Button onClick={addCategory}>
-              <PlusCircle className="mr-2 h-4 w-4" />
-              Add First Category
+        {/* Budget Categories */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold">Budget Categories</h3>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                append({ name: "", description: "", allocatedAmount: 0 })
+              }
+            >
+              <PlusCircle className="h-4 w-4 mr-2" />
+              Add Category
             </Button>
           </div>
-        ) : (
-          <div className="border rounded-md">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[30%]">Category Name</TableHead>
-                  <TableHead className="w-[30%]">Description</TableHead>
-                  <TableHead className="w-[15%]">Amount</TableHead>
-                  <TableHead className="w-[15%]">Percentage</TableHead>
-                  <TableHead className="w-[10%]">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {categories.map((category, index) => (
-                  <TableRow key={index}>
-                    <TableCell>
-                      <Input
-                        value={category.name}
-                        onChange={(e) =>
-                          handleCategoryChange(index, "name", e.target.value)
-                        }
-                        placeholder="Category name"
-                        className={
-                          errors[`category-${index}-name`]
-                            ? "border-red-500"
-                            : ""
-                        }
-                      />
-                      {errors[`category-${index}-name`] && (
-                        <p className="text-xs text-red-500">
-                          {errors[`category-${index}-name`]}
-                        </p>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <Input
-                        value={category.description}
-                        onChange={(e) =>
-                          handleCategoryChange(
-                            index,
-                            "description",
-                            e.target.value
-                          )
-                        }
-                        placeholder="Brief description"
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <div className="relative">
-                        <Input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={category.allocatedAmount || ""}
-                          onChange={(e) =>
-                            handleCategoryChange(
-                              index,
-                              "allocatedAmount",
-                              parseFloat(e.target.value) || 0
-                            )
-                          }
-                          className={`pl-6 ${
-                            errors[`category-${index}-allocatedAmount`]
-                              ? "border-red-500"
-                              : ""
-                          }`}
-                        />
-                        <div className="absolute inset-y-0 left-0 flex items-center pl-2 pointer-events-none">
-                          <span className="text-xs text-muted-foreground">
-                            $
-                          </span>
-                        </div>
-                        {errors[`category-${index}-allocatedAmount`] && (
-                          <p className="text-xs text-red-500">
-                            {errors[`category-${index}-allocatedAmount`]}
-                          </p>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="relative">
-                        <Input
-                          type="number"
-                          min="0"
-                          max="100"
-                          value={category.allocatedPercentage || ""}
-                          onChange={(e) =>
-                            handleCategoryChange(
-                              index,
-                              "allocatedPercentage",
-                              parseFloat(e.target.value) || 0
-                            )
-                          }
-                          className="pr-8"
-                        />
-                        <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
-                          <span className="text-xs text-muted-foreground">
-                            %
-                          </span>
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell>
+
+          <div className="space-y-4">
+            {fields.map((field, index) => (
+              <Card key={field.id}>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm flex items-center justify-between">
+                    <span>Category {index + 1}</span>
+                    {fields.length > 1 && (
                       <Button
                         variant="ghost"
-                        size="icon"
-                        onClick={() => removeCategory(index)}
+                        size="sm"
+                        onClick={() => remove(index)}
+                        type="button"
                       >
-                        <XCircle className="h-5 w-5 text-red-500" />
+                        <Trash2 className="h-4 w-4" />
                       </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        )}
-      </div>
+                    )}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4 py-2">
+                  <FormField
+                    control={form.control}
+                    name={`categories.${index}.name`}
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Name</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Category name" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
 
-      <div className="flex justify-end space-x-2 pt-4">
-        <Button variant="outline" onClick={onCancel}>
-          Cancel
-        </Button>
-        <Button onClick={handleSubmit} disabled={loading}>
-          {loading ? (
-            <LoadingSpinner />
-          ) : initialData?.budget?.id ? (
-            "Update Budget"
-          ) : (
-            "Create Budget"
-          )}
-        </Button>
-      </div>
-    </div>
+                  <FormField
+                    control={form.control}
+                    name={`categories.${index}.allocatedAmount`}
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Allocated Amount</FormLabel>
+                        <FormControl>
+                          <div className="relative">
+                            <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                              <span className="text-sm text-gray-500">
+                                {form.watch("currency") === "INR" ? "₹" : "$"}
+                              </span>
+                            </div>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              placeholder="0.00"
+                              className="pl-7"
+                              {...field}
+                              onChange={(e) => {
+                                field.onChange(e);
+                                form.trigger(
+                                  `categories.${index}.allocatedAmount`
+                                );
+                              }}
+                            />
+                          </div>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name={`categories.${index}.description`}
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Description</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="Optional description"
+                            {...field}
+                            value={field.value || ""}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </CardContent>
+              </Card>
+            ))}
+
+            {fields.length === 0 && (
+              <div className="border border-dashed border-gray-300 rounded-md p-8 text-center">
+                <h3 className="text-lg font-medium text-muted-foreground">
+                  No Categories
+                </h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Add categories to allocate your budget
+                </p>
+                <Button
+                  type="button"
+                  onClick={() =>
+                    append({ name: "", description: "", allocatedAmount: 0 })
+                  }
+                  className="mt-4"
+                >
+                  <PlusCircle className="mr-2 h-4 w-4" />
+                  Add First Category
+                </Button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Form Actions */}
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="outline" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            disabled={isSubmitting || (totalAmount > 0 && !isAllocationValid)}
+          >
+            {isSubmitting
+              ? "Saving..."
+              : budget
+              ? "Update Budget"
+              : "Create Budget"}
+          </Button>
+        </div>
+      </form>
+    </Form>
   );
 };

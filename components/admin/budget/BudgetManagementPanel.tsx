@@ -1,9 +1,14 @@
 import React, { useState, useEffect } from "react";
-import axios from "axios";
 import { useRouter } from "next/router";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -11,213 +16,186 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { RefreshCw, FileBarChart } from "lucide-react";
+import { RefreshCcw, FileText } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { useBudget } from "@/contexts/BudgetContext";
 import BudgetOverviewPanel from "./BudgetOverviewPanel";
 import ExpenseManagementPanel from "./ExpenseManagementPanel";
 import PendingApprovalsPanel from "./PendingApprovalsPanel";
+import LoadingSpinner from "@/components/ui/LoadingSpinner";
 
-// Type definitions
-type StartupCall = {
+export type StartupCall = {
   id: string;
-  title: string;
-  startDate: string;
-  endDate: string;
-  status: string;
+  name: string;
+  startupId: string;
+  startup: {
+    name: string;
+  };
 };
 
 interface BudgetManagementPanelProps {
-  startupCallId?: string;
+  initialStartupCallId?: string;
 }
 
 export default function BudgetManagementPanel({
-  startupCallId: defaultStartupCallId,
+  initialStartupCallId,
 }: BudgetManagementPanelProps) {
   const router = useRouter();
   const { toast } = useToast();
-  const {
-    fetchBudgets,
-    fetchExpenses,
-    isLoading: budgetsLoading,
-  } = useBudget();
-
-  // State
   const [activeTab, setActiveTab] = useState("overview");
   const [startupCalls, setStartupCalls] = useState<StartupCall[]>([]);
-  const [selectedCallId, setSelectedCallId] = useState<string | undefined>(
-    defaultStartupCallId
+  const [selectedCallId, setSelectedCallId] = useState<string | null>(
+    initialStartupCallId || null
   );
-  const [isLoading, setIsLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  // Fetch all startup calls
+  // Fetch startup calls on component mount
   useEffect(() => {
-    const fetchStartupCalls = async () => {
-      try {
-        const { data } = await axios.get("/api/startup-calls");
-        setStartupCalls(data);
-
-        // If no default ID is provided, select the first call
-        if (!defaultStartupCallId && data.length > 0) {
-          setSelectedCallId(data[0].id);
-        }
-
-        setIsLoading(false);
-      } catch (error) {
-        console.error("Error fetching startup calls:", error);
-        toast({
-          title: "Error",
-          description: "Failed to fetch startup calls",
-          variant: "destructive",
-        });
-        setIsLoading(false);
-      }
-    };
-
     fetchStartupCalls();
-  }, [defaultStartupCallId, toast]);
+  }, []);
+
+  // Fetch all startup calls from the API
+  const fetchStartupCalls = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch("/api/admin/startup-calls");
+      if (!response.ok) throw new Error("Failed to fetch startup calls");
+
+      const data = await response.json();
+      setStartupCalls(data);
+
+      // Set first startup call as selected if none is selected
+      if (!selectedCallId && data.length > 0) {
+        setSelectedCallId(data[0].id);
+      }
+    } catch (error) {
+      console.error("Error fetching startup calls:", error);
+      toast({
+        title: "Error",
+        description: "Failed to load startup calls. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Handle startup call selection change
   const handleStartupCallChange = (callId: string) => {
     setSelectedCallId(callId);
 
-    // If we're on a specific startup call page, redirect to the generic budget management page
-    if (defaultStartupCallId) {
-      router.push(`/admin/startup-calls/${callId}/budgets`);
-    }
+    // Update URL query parameter without full page reload
+    router.push(
+      {
+        pathname: router.pathname,
+        query: { ...router.query, id: callId },
+      },
+      undefined,
+      { shallow: true }
+    );
   };
-
-  // Load data when selected call changes
-  useEffect(() => {
-    if (selectedCallId) {
-      fetchBudgets(selectedCallId);
-      fetchExpenses(selectedCallId);
-    }
-  }, [selectedCallId, fetchBudgets, fetchExpenses]);
 
   // Refresh data
   const handleRefresh = async () => {
-    if (!selectedCallId) return;
-
-    try {
-      await Promise.all([
-        fetchBudgets(selectedCallId),
-        fetchExpenses(selectedCallId),
-      ]);
-
-      toast({
-        title: "Refreshed",
-        description: "Budget data has been refreshed",
-      });
-    } catch (error) {
-      console.error("Error refreshing data:", error);
-      toast({
-        title: "Error",
-        description: "Failed to refresh data",
-        variant: "destructive",
-      });
-    }
+    setRefreshing(true);
+    await fetchStartupCalls();
+    setRefreshing(false);
   };
 
-  // Navigate to reports
+  // Navigate to reports page
   const navigateToReports = () => {
     if (selectedCallId) {
-      router.push(`/admin/startup-calls/${selectedCallId}/budget-reports`);
+      router.push(`/admin/startup-calls/${selectedCallId}/reports`);
     }
   };
 
   return (
-    <div className="container py-6 space-y-6">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <h1 className="text-3xl font-bold tracking-tight">Budget Management</h1>
-
-        <div className="flex items-center gap-2 w-full sm:w-auto">
-          <Select
-            value={selectedCallId}
-            onValueChange={handleStartupCallChange}
-            disabled={isLoading || !!defaultStartupCallId}
-          >
-            <SelectTrigger className="w-full sm:w-[260px]">
-              <SelectValue placeholder="Select a startup call" />
-            </SelectTrigger>
-            <SelectContent>
-              {startupCalls.map((call) => (
-                <SelectItem key={call.id} value={call.id}>
-                  {call.title}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={handleRefresh}
-            disabled={isLoading || !selectedCallId}
-            title="Refresh data"
-          >
-            <RefreshCw className="h-4 w-4" />
-          </Button>
-
-          <Button
-            variant="outline"
-            onClick={navigateToReports}
-            disabled={isLoading || !selectedCallId}
-          >
-            <FileBarChart className="h-4 w-4 mr-2" />
-            Reports
-          </Button>
+    <Card className="w-full">
+      <CardHeader>
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div>
+            <CardTitle className="text-2xl">Budget Management</CardTitle>
+            <CardDescription>
+              Manage budgets and expenses for startup calls
+            </CardDescription>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+            <Select
+              value={selectedCallId || ""}
+              onValueChange={handleStartupCallChange}
+              disabled={loading}
+            >
+              <SelectTrigger className="w-full sm:w-[250px]">
+                <SelectValue placeholder="Select a startup call" />
+              </SelectTrigger>
+              <SelectContent>
+                {startupCalls.map((call) => (
+                  <SelectItem key={call.id} value={call.id}>
+                    {call.startup.name} - {call.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={handleRefresh}
+                disabled={refreshing}
+              >
+                {refreshing ? (
+                  <LoadingSpinner size={16} />
+                ) : (
+                  <RefreshCcw className="h-4 w-4" />
+                )}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={navigateToReports}
+                disabled={!selectedCallId}
+              >
+                <FileText className="h-4 w-4 mr-2" />
+                Reports
+              </Button>
+            </div>
+          </div>
         </div>
-      </div>
-
-      {isLoading ? (
-        <Card>
-          <CardContent className="flex items-center justify-center py-6">
-            <div className="flex flex-col items-center">
-              <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
-              <p className="mt-2 text-muted-foreground">Loading...</p>
-            </div>
-          </CardContent>
-        </Card>
-      ) : selectedCallId ? (
-        <Tabs
-          defaultValue="overview"
-          value={activeTab}
-          onValueChange={setActiveTab}
-          className="space-y-6"
-        >
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="overview">Budget Overview</TabsTrigger>
-            <TabsTrigger value="expenses">Expense Management</TabsTrigger>
-            <TabsTrigger value="approvals">Pending Approvals</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="overview" className="space-y-6">
-            <BudgetOverviewPanel startupCallId={selectedCallId} />
-          </TabsContent>
-
-          <TabsContent value="expenses" className="space-y-6">
-            <ExpenseManagementPanel startupCallId={selectedCallId} />
-          </TabsContent>
-
-          <TabsContent value="approvals" className="space-y-6">
-            <PendingApprovalsPanel startupCallId={selectedCallId} />
-          </TabsContent>
-        </Tabs>
-      ) : (
-        <Card>
-          <CardContent className="flex items-center justify-center py-12">
-            <div className="text-center">
-              <h3 className="text-lg font-semibold">
-                No startup call selected
-              </h3>
-              <p className="text-muted-foreground mt-1">
-                Please select a startup call to manage budgets
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-    </div>
+      </CardHeader>
+      <CardContent>
+        {loading ? (
+          <div className="w-full py-12 flex justify-center">
+            <LoadingSpinner size={36} />
+          </div>
+        ) : !selectedCallId ? (
+          <div className="text-center py-8">
+            <p className="text-muted-foreground">
+              Please select a startup call to manage its budget
+            </p>
+          </div>
+        ) : (
+          <Tabs
+            defaultValue="overview"
+            value={activeTab}
+            onValueChange={setActiveTab}
+            className="w-full"
+          >
+            <TabsList className="grid w-full grid-cols-3">
+              <TabsTrigger value="overview">Budget Overview</TabsTrigger>
+              <TabsTrigger value="expenses">Expense Management</TabsTrigger>
+              <TabsTrigger value="approvals">Pending Approvals</TabsTrigger>
+            </TabsList>
+            <TabsContent value="overview" className="mt-4">
+              <BudgetOverviewPanel startupCallId={selectedCallId} />
+            </TabsContent>
+            <TabsContent value="expenses" className="mt-4">
+              <ExpenseManagementPanel startupCallId={selectedCallId} />
+            </TabsContent>
+            <TabsContent value="approvals" className="mt-4">
+              <PendingApprovalsPanel startupCallId={selectedCallId} />
+            </TabsContent>
+          </Tabs>
+        )}
+      </CardContent>
+    </Card>
   );
 }

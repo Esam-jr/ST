@@ -53,6 +53,17 @@ import {
   ThumbsUp,
   ThumbsDown,
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import LoadingSpinner from "@/components/ui/LoadingSpinner";
+import { formatDate, formatCurrency } from "@/lib/utils";
 
 interface PendingApprovalsPanelProps {
   startupCallId: string;
@@ -62,448 +73,234 @@ export default function PendingApprovalsPanel({
   startupCallId,
 }: PendingApprovalsPanelProps) {
   const { toast } = useToast();
-  const { budgets, getBudgetById, getCategoryById } = useBudget();
+  const {
+    expenses,
+    budgets,
+    fetchExpenses,
+    getCategoryById,
+    updateExpenseStatus,
+    isLoading,
+  } = useBudget();
 
-  // State
-  const [pendingExpenses, setPendingExpenses] = useState<any[]>([]);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [selectedExpenses, setSelectedExpenses] = useState<string[]>([]);
-  const [detailsSheetOpen, setDetailsSheetOpen] = useState(false);
-  const [selectedExpense, setSelectedExpense] = useState<any>(null);
-  const [approveDialogOpen, setApproveDialogOpen] = useState(false);
-  const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
-  const [rejectionReason, setRejectionReason] = useState("");
-  const [bulkActionType, setBulkActionType] = useState<
-    "approve" | "reject" | null
-  >(null);
-  const [sortField, setSortField] = useState("date");
-  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
-
-  // Fetch pending expenses
-  const fetchPendingExpenses = async () => {
-    setIsLoading(true);
-    try {
-      const response = await axios.get(
-        `/api/startup-calls/${startupCallId}/expenses?status=pending`
-      );
-      setPendingExpenses(response.data);
-    } catch (error) {
-      console.error("Error fetching pending expenses:", error);
-      toast({
-        title: "Error",
-        description: "Failed to fetch pending expenses",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Initial fetch
-  useEffect(() => {
-    if (startupCallId) {
-      fetchPendingExpenses();
-    }
-  }, [startupCallId]);
-
-  // Format currency
-  const formatCurrency = (amount: number, currency: string = "INR") => {
-    return new Intl.NumberFormat("en-IN", {
-      style: "currency",
-      currency: currency,
-    }).format(amount);
-  };
-
-  // Format date
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString("en-IN", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-    });
-  };
-
-  // Sort handler
-  const handleSort = (field: string) => {
-    if (sortField === field) {
-      setSortDirection(sortDirection === "asc" ? "desc" : "asc");
-    } else {
-      setSortField(field);
-      setSortDirection("asc");
-    }
-  };
-
-  // Apply sorting
-  const sortExpenses = (expensesToSort: any[]) => {
-    return [...expensesToSort].sort((a, b) => {
-      let aValue, bValue;
-
-      switch (sortField) {
-        case "amount":
-          aValue = a.amount;
-          bValue = b.amount;
-          break;
-        case "date":
-          aValue = new Date(a.date).getTime();
-          bValue = new Date(b.date).getTime();
-          break;
-        case "title":
-          aValue = a.title.toLowerCase();
-          bValue = b.title.toLowerCase();
-          break;
-        default:
-          aValue = a[sortField];
-          bValue = b[sortField];
-      }
-
-      if (sortDirection === "asc") {
-        return aValue > bValue ? 1 : -1;
-      } else {
-        return aValue < bValue ? 1 : -1;
-      }
-    });
-  };
-
-  // Filter expenses
-  const filteredExpenses = sortExpenses(
-    pendingExpenses.filter(
-      (expense) =>
-        expense.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        expense.description?.toLowerCase().includes(searchTerm.toLowerCase())
-    )
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedExpense, setSelectedExpense] = useState<any | null>(null);
+  const [viewDialogOpen, setViewDialogOpen] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [processingExpense, setProcessingExpense] = useState<string | null>(
+    null
   );
 
-  // Toggle expense selection
-  const toggleExpenseSelection = (expenseId: string) => {
-    setSelectedExpenses((prev) =>
-      prev.includes(expenseId)
-        ? prev.filter((id) => id !== expenseId)
-        : [...prev, expenseId]
-    );
-  };
+  // Filter expenses to only show pending ones
+  const pendingExpenses = expenses
+    .filter((expense) => {
+      // Only include pending expenses
+      if (expense.status.toLowerCase() !== "pending") {
+        return false;
+      }
 
-  // Select all expenses
-  const toggleSelectAll = () => {
-    if (selectedExpenses.length === filteredExpenses.length) {
-      setSelectedExpenses([]);
-    } else {
-      setSelectedExpenses(filteredExpenses.map((expense) => expense.id));
+      // Filter by search query
+      if (searchQuery.trim() !== "") {
+        const query = searchQuery.toLowerCase();
+        return (
+          expense.title.toLowerCase().includes(query) ||
+          expense.description?.toLowerCase().includes(query)
+        );
+      }
+
+      return true;
+    })
+    .sort((a, b) => {
+      // Sort by date (newest first)
+      return new Date(b.date).getTime() - new Date(a.date).getTime();
+    });
+
+  // Handle refresh
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await fetchExpenses(startupCallId);
+      toast({
+        title: "Refreshed",
+        description: "Pending expenses have been refreshed",
+      });
+    } catch (error) {
+      console.error("Error refreshing expenses:", error);
+      toast({
+        title: "Error",
+        description: "Failed to refresh expenses",
+        variant: "destructive",
+      });
+    } finally {
+      setRefreshing(false);
     }
   };
 
-  // View expense details
-  const handleViewExpenseDetails = (expense: any) => {
+  // Handle view expense details
+  const handleViewExpense = (expense: any) => {
     setSelectedExpense(expense);
-    setDetailsSheetOpen(true);
+    setViewDialogOpen(true);
   };
 
-  // Open approve dialog
-  const handleApproveClick = (expense: any = null) => {
-    if (expense) {
-      setSelectedExpense(expense);
-      setSelectedExpenses([expense.id]);
-    }
-    setApproveDialogOpen(true);
-  };
-
-  // Open reject dialog
-  const handleRejectClick = (expense: any = null) => {
-    if (expense) {
-      setSelectedExpense(expense);
-      setSelectedExpenses([expense.id]);
-    }
-    setRejectionReason("");
-    setRejectDialogOpen(true);
-  };
-
-  // Handle bulk actions
-  const handleBulkAction = (action: "approve" | "reject") => {
-    if (selectedExpenses.length === 0) {
-      toast({
-        title: "No expenses selected",
-        description: "Please select at least one expense",
-      });
-      return;
-    }
-
-    setBulkActionType(action);
-    if (action === "approve") {
-      setApproveDialogOpen(true);
-    } else {
-      setRejectionReason("");
-      setRejectDialogOpen(true);
-    }
-  };
-
-  // Process approval
-  const handleApprove = async () => {
-    if (selectedExpenses.length === 0) return;
-
-    setIsLoading(true);
+  // Handle approve expense
+  const handleApprove = async (expenseId: string) => {
+    setProcessingExpense(expenseId);
     try {
-      // Make API call(s) to approve expenses
-      await Promise.all(
-        selectedExpenses.map((expenseId) =>
-          axios.patch(`/api/expenses/${expenseId}`, {
-            status: "approved",
-          })
-        )
-      );
-
-      // Update UI and show success message
-      await fetchPendingExpenses();
-      setApproveDialogOpen(false);
-      setBulkActionType(null);
-      setSelectedExpenses([]);
-
+      await updateExpenseStatus(startupCallId, expenseId, "approved");
       toast({
-        title: "Success",
-        description: `${selectedExpenses.length} expense${
-          selectedExpenses.length !== 1 ? "s" : ""
-        } approved successfully.`,
+        title: "Expense Approved",
+        description: "The expense has been approved successfully",
       });
     } catch (error) {
-      console.error("Error approving expenses:", error);
+      console.error("Error approving expense:", error);
       toast({
         title: "Error",
-        description: "Failed to approve expenses. Please try again.",
+        description: "Failed to approve expense",
         variant: "destructive",
       });
     } finally {
-      setIsLoading(false);
+      setProcessingExpense(null);
     }
   };
 
-  // Process rejection
-  const handleReject = async () => {
-    if (selectedExpenses.length === 0) return;
-
-    setIsLoading(true);
+  // Handle reject expense
+  const handleReject = async (expenseId: string) => {
+    setProcessingExpense(expenseId);
     try {
-      // Make API call(s) to reject expenses
-      await Promise.all(
-        selectedExpenses.map((expenseId) =>
-          axios.patch(`/api/expenses/${expenseId}`, {
-            status: "rejected",
-            rejectionReason: rejectionReason.trim() || "Rejected by admin",
-          })
-        )
-      );
-
-      // Update UI and show success message
-      await fetchPendingExpenses();
-      setRejectDialogOpen(false);
-      setBulkActionType(null);
-      setSelectedExpenses([]);
-      setRejectionReason("");
-
+      await updateExpenseStatus(startupCallId, expenseId, "rejected");
       toast({
-        title: "Success",
-        description: `${selectedExpenses.length} expense${
-          selectedExpenses.length !== 1 ? "s" : ""
-        } rejected successfully.`,
+        title: "Expense Rejected",
+        description: "The expense has been rejected",
       });
     } catch (error) {
-      console.error("Error rejecting expenses:", error);
+      console.error("Error rejecting expense:", error);
       toast({
         title: "Error",
-        description: "Failed to reject expenses. Please try again.",
+        description: "Failed to reject expense",
         variant: "destructive",
       });
     } finally {
-      setIsLoading(false);
+      setProcessingExpense(null);
     }
   };
 
   return (
-    <div className="space-y-6">
-      {/* Summary Card */}
+    <div className="space-y-4">
+      {/* Search Bar and Refresh Button */}
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1">
+          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Input
+            type="search"
+            placeholder="Search pending expenses..."
+            className="pl-8"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </div>
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={handleRefresh}
+          disabled={refreshing}
+        >
+          {refreshing ? (
+            <LoadingSpinner size={16} />
+          ) : (
+            <RefreshCw className="h-4 w-4" />
+          )}
+        </Button>
+      </div>
+
+      {/* Pending Expenses */}
       <Card>
-        <CardContent className="p-6">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div>
-              <h3 className="text-xl font-semibold">Pending Approvals</h3>
-              <p className="text-muted-foreground mt-1">
-                {pendingExpenses.length} expense
-                {pendingExpenses.length !== 1 ? "s" : ""} awaiting review
-              </p>
+        <CardHeader>
+          <CardTitle>Pending Approvals</CardTitle>
+          <CardDescription>Expenses awaiting your approval</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <div className="flex justify-center py-8">
+              <LoadingSpinner size={36} />
             </div>
-
-            <div className="flex flex-col sm:flex-row gap-2">
-              <div className="relative w-full sm:w-auto">
-                <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search expenses..."
-                  className="pl-8 w-full"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                />
-              </div>
-
-              <Button
-                variant="outline"
-                onClick={fetchPendingExpenses}
-                disabled={isLoading}
-              >
-                <RefreshCw
-                  className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`}
-                />
-                Refresh
-              </Button>
-
-              <Button
-                variant="default"
-                className="bg-green-600 hover:bg-green-700"
-                onClick={() => handleBulkAction("approve")}
-                disabled={selectedExpenses.length === 0 || isLoading}
-              >
-                <ThumbsUp className="h-4 w-4 mr-2" />
-                Approve Selected
-              </Button>
-
-              <Button
-                variant="destructive"
-                onClick={() => handleBulkAction("reject")}
-                disabled={selectedExpenses.length === 0 || isLoading}
-              >
-                <ThumbsDown className="h-4 w-4 mr-2" />
-                Reject Selected
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Expenses Table */}
-      <Card>
-        <CardContent className="p-0">
-          {filteredExpenses.length === 0 ? (
-            <div className="text-center py-12 border-2 border-dashed rounded-lg mx-6 my-6">
-              <CheckCircle2 className="h-12 w-12 mx-auto text-green-500" />
-              <h3 className="mt-4 text-lg font-semibold">
-                No pending expenses
-              </h3>
-              <p className="mt-1 text-muted-foreground">
-                {searchTerm
-                  ? "Try adjusting your search"
-                  : "All expenses have been reviewed"}
+          ) : pendingExpenses.length === 0 ? (
+            <div className="text-center py-8">
+              <h3 className="font-medium text-lg">No pending expenses</h3>
+              <p className="text-muted-foreground">
+                All expenses have been reviewed
               </p>
-              <Button
-                variant="outline"
-                onClick={fetchPendingExpenses}
-                className="mt-4"
-              >
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Refresh
-              </Button>
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="rounded-md border">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-[50px]">
-                      <Checkbox
-                        checked={
-                          selectedExpenses.length === filteredExpenses.length &&
-                          filteredExpenses.length > 0
-                        }
-                        onCheckedChange={toggleSelectAll}
-                        aria-label="Select all expenses"
-                      />
-                    </TableHead>
-                    <TableHead
-                      className="cursor-pointer"
-                      onClick={() => handleSort("title")}
-                    >
-                      <div className="flex items-center">
-                        Title
-                        {sortField === "title" && (
-                          <ArrowUpDown className="ml-2 h-4 w-4" />
-                        )}
-                      </div>
-                    </TableHead>
-                    <TableHead
-                      className="cursor-pointer"
-                      onClick={() => handleSort("amount")}
-                    >
-                      <div className="flex items-center">
-                        Amount
-                        {sortField === "amount" && (
-                          <ArrowUpDown className="ml-2 h-4 w-4" />
-                        )}
-                      </div>
-                    </TableHead>
-                    <TableHead
-                      className="cursor-pointer"
-                      onClick={() => handleSort("date")}
-                    >
-                      <div className="flex items-center">
-                        Date
-                        {sortField === "date" && (
-                          <ArrowUpDown className="ml-2 h-4 w-4" />
-                        )}
-                      </div>
-                    </TableHead>
-                    <TableHead>Submitted By</TableHead>
+                    <TableHead>Title</TableHead>
+                    <TableHead>Amount</TableHead>
                     <TableHead>Budget</TableHead>
-                    <TableHead>Category</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Submitted By</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredExpenses.map((expense) => {
-                    const budget = getBudgetById(expense.budgetId);
-                    const category = getCategoryById(
-                      expense.budgetId,
-                      expense.categoryId
+                  {pendingExpenses.map((expense) => {
+                    // Find the budget for this expense
+                    const budget = budgets.find(
+                      (b) => b.id === expense.budgetId
                     );
 
                     return (
                       <TableRow key={expense.id}>
-                        <TableCell>
-                          <Checkbox
-                            checked={selectedExpenses.includes(expense.id)}
-                            onCheckedChange={() =>
-                              toggleExpenseSelection(expense.id)
-                            }
-                            aria-label={`Select expense ${expense.title}`}
-                          />
-                        </TableCell>
                         <TableCell className="font-medium">
                           {expense.title}
                         </TableCell>
                         <TableCell>
-                          {formatCurrency(expense.amount, expense.currency)}
+                          {formatCurrency(
+                            expense.amount,
+                            expense.currency || "USD"
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {budget?.title || "Unknown Budget"}
                         </TableCell>
                         <TableCell>{formatDate(expense.date)}</TableCell>
-                        <TableCell>{expense.submittedBy || "—"}</TableCell>
-                        <TableCell>{budget?.title || "—"}</TableCell>
-                        <TableCell>{category?.name || "—"}</TableCell>
-                        <TableCell className="text-right whitespace-nowrap">
+                        <TableCell>
+                          {expense.createdBy?.name || "Unknown User"}
+                        </TableCell>
+                        <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
                             <Button
                               variant="outline"
                               size="sm"
-                              onClick={() => handleViewExpenseDetails(expense)}
+                              onClick={() => handleViewExpense(expense)}
                             >
                               <Eye className="h-4 w-4" />
                             </Button>
                             <Button
-                              variant="default"
+                              variant="outline"
                               size="sm"
-                              className="bg-green-600 hover:bg-green-700"
-                              onClick={() => handleApproveClick(expense)}
+                              onClick={() => handleApprove(expense.id)}
+                              disabled={processingExpense === expense.id}
+                              className="bg-green-50 text-green-600 hover:bg-green-100 hover:text-green-700 border-green-200"
                             >
-                              <CheckCircle2 className="h-4 w-4" />
+                              {processingExpense === expense.id ? (
+                                <LoadingSpinner size={16} />
+                              ) : (
+                                <CheckCircle2 className="h-4 w-4" />
+                              )}
                             </Button>
                             <Button
-                              variant="destructive"
+                              variant="outline"
                               size="sm"
-                              onClick={() => handleRejectClick(expense)}
+                              onClick={() => handleReject(expense.id)}
+                              disabled={processingExpense === expense.id}
+                              className="bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-700 border-red-200"
                             >
-                              <XCircle className="h-4 w-4" />
+                              {processingExpense === expense.id ? (
+                                <LoadingSpinner size={16} />
+                              ) : (
+                                <XCircle className="h-4 w-4" />
+                              )}
                             </Button>
                           </div>
                         </TableCell>
@@ -517,185 +314,126 @@ export default function PendingApprovalsPanel({
         </CardContent>
       </Card>
 
-      {/* Expense Details Sheet */}
-      <Sheet open={detailsSheetOpen} onOpenChange={setDetailsSheetOpen}>
-        <SheetContent className="sm:max-w-md">
-          <SheetHeader>
-            <SheetTitle>Expense Details</SheetTitle>
-            <SheetDescription>
+      {/* View Expense Dialog */}
+      <Dialog open={viewDialogOpen} onOpenChange={setViewDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Expense Details</DialogTitle>
+            <DialogDescription>
               Review expense information before approving or rejecting
-            </SheetDescription>
-          </SheetHeader>
-
+            </DialogDescription>
+          </DialogHeader>
           {selectedExpense && (
-            <div className="py-6 space-y-8">
-              <div className="space-y-2">
-                <h3 className="text-lg font-medium">{selectedExpense.title}</h3>
-                <div className="flex items-center">
-                  <Badge className="bg-amber-500">Pending</Badge>
-                  <span className="text-sm text-muted-foreground ml-2">
-                    Submitted on {formatDate(selectedExpense.date)}
-                  </span>
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-muted-foreground">Title</Label>
+                  <div className="font-medium">{selectedExpense.title}</div>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground">Amount</Label>
+                  <div className="font-medium">
+                    {formatCurrency(
+                      selectedExpense.amount,
+                      selectedExpense.currency || "USD"
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground">Date</Label>
+                  <div className="font-medium">
+                    {formatDate(selectedExpense.date)}
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground">Submitted By</Label>
+                  <div className="font-medium">
+                    {selectedExpense.createdBy?.name || "Unknown User"}
+                  </div>
                 </div>
               </div>
 
-              <div className="space-y-4">
-                <div>
-                  <span className="text-sm font-medium text-muted-foreground">
-                    Amount
-                  </span>
-                  <p className="text-xl font-semibold">
-                    {formatCurrency(
-                      selectedExpense.amount,
-                      selectedExpense.currency
-                    )}
-                  </p>
+              <div>
+                <Label className="text-muted-foreground">Description</Label>
+                <div className="mt-1 text-sm">
+                  {selectedExpense.description || "No description provided"}
                 </div>
+              </div>
 
-                {selectedExpense.submittedBy && (
-                  <div>
-                    <span className="text-sm font-medium text-muted-foreground">
-                      Submitted By
-                    </span>
-                    <p>{selectedExpense.submittedBy}</p>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-muted-foreground">Budget</Label>
+                  <div className="font-medium">
+                    {budgets.find((b) => b.id === selectedExpense.budgetId)
+                      ?.title || "Unknown Budget"}
                   </div>
-                )}
-
-                <div>
-                  <span className="text-sm font-medium text-muted-foreground">
-                    Budget
-                  </span>
-                  <p>{getBudgetById(selectedExpense.budgetId)?.title || "—"}</p>
                 </div>
-
                 <div>
-                  <span className="text-sm font-medium text-muted-foreground">
-                    Category
-                  </span>
-                  <p>
+                  <Label className="text-muted-foreground">Category</Label>
+                  <div className="font-medium">
                     {getCategoryById(
                       selectedExpense.budgetId,
                       selectedExpense.categoryId
-                    )?.name || "—"}
-                  </p>
+                    )?.name || "Unknown Category"}
+                  </div>
                 </div>
-
-                {selectedExpense.description && (
-                  <div>
-                    <span className="text-sm font-medium text-muted-foreground">
-                      Description
-                    </span>
-                    <p className="whitespace-pre-wrap mt-1 text-sm">
-                      {selectedExpense.description}
-                    </p>
-                  </div>
-                )}
-
-                {/* Potentially show attachments here */}
-
-                {selectedExpense.notes && (
-                  <div>
-                    <span className="text-sm font-medium text-muted-foreground">
-                      Additional Notes
-                    </span>
-                    <p className="whitespace-pre-wrap mt-1 text-sm">
-                      {selectedExpense.notes}
-                    </p>
-                  </div>
-                )}
               </div>
 
-              <div className="pt-4 flex gap-3">
-                <Button
-                  className="flex-1 bg-green-600 hover:bg-green-700"
-                  onClick={() => {
-                    setDetailsSheetOpen(false);
-                    handleApproveClick(selectedExpense);
-                  }}
-                >
-                  <CheckCircle2 className="h-4 w-4 mr-2" />
-                  Approve
-                </Button>
+              {selectedExpense.receipt && (
+                <div>
+                  <Label className="text-muted-foreground">Receipt</Label>
+                  <div className="mt-2">
+                    <a
+                      href={selectedExpense.receipt}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center"
+                    >
+                      <Button variant="outline" size="sm">
+                        View Receipt
+                      </Button>
+                    </a>
+                  </div>
+                </div>
+              )}
 
+              <DialogFooter className="flex justify-end mt-6 gap-2">
                 <Button
-                  variant="destructive"
-                  className="flex-1"
-                  onClick={() => {
-                    setDetailsSheetOpen(false);
-                    handleRejectClick(selectedExpense);
-                  }}
+                  variant="outline"
+                  onClick={() => setViewDialogOpen(false)}
                 >
-                  <XCircle className="h-4 w-4 mr-2" />
+                  Close
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => handleReject(selectedExpense.id)}
+                  disabled={processingExpense === selectedExpense.id}
+                  className="bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-700 border-red-200"
+                >
+                  {processingExpense === selectedExpense.id ? (
+                    <LoadingSpinner size={16} className="mr-2" />
+                  ) : (
+                    <XCircle className="h-4 w-4 mr-2" />
+                  )}
                   Reject
                 </Button>
-              </div>
+                <Button
+                  onClick={() => handleApprove(selectedExpense.id)}
+                  disabled={processingExpense === selectedExpense.id}
+                  className="bg-green-600 hover:bg-green-700"
+                >
+                  {processingExpense === selectedExpense.id ? (
+                    <LoadingSpinner size={16} className="mr-2" />
+                  ) : (
+                    <CheckCircle2 className="h-4 w-4 mr-2" />
+                  )}
+                  Approve
+                </Button>
+              </DialogFooter>
             </div>
           )}
-        </SheetContent>
-      </Sheet>
-
-      {/* Approve Confirmation Dialog */}
-      <AlertDialog open={approveDialogOpen} onOpenChange={setApproveDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Confirm Approval</AlertDialogTitle>
-            <AlertDialogDescription>
-              {selectedExpenses.length > 1
-                ? `Are you sure you want to approve ${selectedExpenses.length} expenses?`
-                : "Are you sure you want to approve this expense?"}
-              <br />
-              This will update the expense status and notify the submitter.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isLoading}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleApprove}
-              disabled={isLoading}
-              className="bg-green-600 text-white hover:bg-green-700"
-            >
-              {isLoading ? "Processing..." : "Approve"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/* Reject Dialog */}
-      <AlertDialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Confirm Rejection</AlertDialogTitle>
-            <AlertDialogDescription>
-              {selectedExpenses.length > 1
-                ? `Are you sure you want to reject ${selectedExpenses.length} expenses?`
-                : "Are you sure you want to reject this expense?"}
-              <br />
-              Please provide a reason for the rejection. This will be shared
-              with the submitter.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-
-          <div className="py-4">
-            <Textarea
-              placeholder="Reason for rejection (optional)"
-              value={rejectionReason}
-              onChange={(e) => setRejectionReason(e.target.value)}
-              className="min-h-[100px]"
-            />
-          </div>
-
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isLoading}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleReject}
-              disabled={isLoading}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {isLoading ? "Processing..." : "Reject"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

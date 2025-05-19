@@ -47,6 +47,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface BudgetOverviewPanelProps {
   startupCallId: string;
@@ -70,6 +77,9 @@ export default function BudgetOverviewPanel({
   const [editSheetOpen, setEditSheetOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedBudget, setSelectedBudget] = useState<any>(null);
+  const [selectedTemplate, setSelectedTemplate] = useState<any>(null);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
 
   // Format currency
   const formatCurrency = (amount: number, currency: string = "INR") => {
@@ -159,6 +169,18 @@ export default function BudgetOverviewPanel({
   const openDeleteDialog = (budget: any) => {
     setSelectedBudget(budget);
     setDeleteDialogOpen(true);
+  };
+
+  // Open create budget dialog
+  const openCreateDialog = (template: any) => {
+    setSelectedTemplate(template);
+    setCreateDialogOpen(true);
+  };
+
+  // Open edit budget dialog
+  const openEditDialog = (budget: any) => {
+    setSelectedBudget(budget);
+    setEditDialogOpen(true);
   };
 
   return (
@@ -416,6 +438,58 @@ export default function BudgetOverviewPanel({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Create Budget Dialog */}
+      <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-screen overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {selectedTemplate
+                ? `Create Budget from Template: ${selectedTemplate.name}`
+                : "Create New Budget"}
+            </DialogTitle>
+            <DialogDescription>
+              Create a new budget for this startup call
+            </DialogDescription>
+          </DialogHeader>
+          <BudgetForm
+            startupCallId={startupCallId}
+            templateData={selectedTemplate}
+            onSubmit={(data) => {
+              toast({
+                title: "Budget Created",
+                description: `Budget "${data.title}" created successfully`,
+              });
+              setCreateDialogOpen(false);
+              refreshBudgets();
+            }}
+            onCancel={() => setCreateDialogOpen(false)}
+          />
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Budget Dialog */}
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-screen overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit Budget</DialogTitle>
+            <DialogDescription>Update budget details</DialogDescription>
+          </DialogHeader>
+          <BudgetForm
+            startupCallId={startupCallId}
+            budget={selectedBudget}
+            onSubmit={(data) => {
+              toast({
+                title: "Budget Updated",
+                description: `Budget "${data.title}" updated successfully`,
+              });
+              setEditDialogOpen(false);
+              refreshBudgets();
+            }}
+            onCancel={() => setEditDialogOpen(false)}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

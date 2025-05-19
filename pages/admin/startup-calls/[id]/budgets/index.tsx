@@ -1,56 +1,54 @@
-import React, { useState, useEffect } from "react";
+import React from "react";
 import { GetServerSideProps } from "next";
-import axios from "axios";
-import { useRouter } from "next/router";
-import Layout from "@/components/layout";
+import Head from "next/head";
 import { BudgetProvider } from "@/contexts/BudgetContext";
 import BudgetManagementPanel from "@/components/admin/budget/BudgetManagementPanel";
-import { getSession } from "next-auth/react";
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/pages/api/auth/[...nextauth]";
 
-interface BudgetManagementProps {
-  startupCall: any;
-}
-
-export default function BudgetManagement({
-  startupCall,
-}: BudgetManagementProps) {
+export default function BudgetManagementPage({
+  startupCallId,
+}: {
+  startupCallId: string;
+}) {
   return (
-    <Layout>
+    <>
+      <Head>
+        <title>Budget Management | Admin Dashboard</title>
+        <meta
+          name="description"
+          content="Manage budgets and expenses for startup calls"
+        />
+      </Head>
+
       <BudgetProvider>
-        <BudgetManagementPanel startupCallId={startupCall.id} />
+        <div className="container py-6 space-y-6">
+          <BudgetManagementPanel initialStartupCallId={startupCallId} />
+        </div>
       </BudgetProvider>
-    </Layout>
+    </>
   );
 }
 
 export const getServerSideProps: GetServerSideProps = async (context) => {
-  const session = await getSession(context);
+  // Verify the session and check admin access
+  const session = await getServerSession(context.req, context.res, authOptions);
 
-  if (!session || !session.user || session.user.role !== "admin") {
+  if (!session || session.user.role !== "ADMIN") {
     return {
       redirect: {
-        destination: "/auth/signin",
+        destination: "/auth/signin?callbackUrl=/admin",
         permanent: false,
       },
     };
   }
 
-  const { id } = context.params as { id: string };
+  // Get the startup call ID from the URL
+  const startupCallId = context.params?.id as string;
 
-  try {
-    const { data: startupCall } = await axios.get(
-      `${process.env.NEXTAUTH_URL}/api/startup-calls/${id}`
-    );
-
-    return {
-      props: {
-        startupCall,
-      },
-    };
-  } catch (error) {
-    console.error("Error fetching startup call:", error);
-    return {
-      notFound: true,
-    };
-  }
+  return {
+    props: {
+      startupCallId,
+    },
+  };
 };
