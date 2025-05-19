@@ -300,12 +300,12 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
         });
         setRetryCount(0);
       }
-    } catch (err: any) {
-      console.error("Error fetching expense data:", err);
+      } catch (err: any) {
+        console.error("Error fetching expense data:", err);
 
       // Check if error is from axios
       const errorMessage =
-        err.response?.data?.message ||
+          err.response?.data?.message ||
         "Failed to load expense data. Please try again later.";
       const errorCode = err.response?.data?.code;
 
@@ -358,7 +358,7 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
 
         setRetryTimeout(timeout);
       }
-    } finally {
+      } finally {
       if (!isRetry) {
         setLoading(false);
       } else if (retryCount >= 3) {
@@ -480,13 +480,13 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
       }
 
       try {
-        const response = await axios.post("/api/entrepreneur/expenses", {
-          ...newExpense,
+      const response = await axios.post("/api/entrepreneur/expenses", {
+        ...newExpense,
           amount, // Send the properly parsed amount
-          taskId,
-          milestoneId,
-          status: "PENDING", // New expenses start as pending
-        });
+        taskId,
+        milestoneId,
+        status: "PENDING", // New expenses start as pending
+      });
 
         // If we get a successful response, update the UI with the new expense
         const newExpenseData = response.data;
@@ -512,37 +512,37 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
 
         setExpenses([...(expenses || []), newExpenseData]);
 
-        // Update category spending
-        setCategories(
-          categories.map((category) =>
-            category.id === newExpense.categoryId
-              ? {
-                  ...category,
+      // Update category spending
+      setCategories(
+        categories.map((category) =>
+          category.id === newExpense.categoryId
+            ? {
+                ...category,
                   spent: category.spent + amount,
                   remaining: category.remaining - amount,
-                }
-              : category
-          )
-        );
+              }
+            : category
+        )
+      );
 
-        toast({
-          title: "Expense Added",
-          description: "Your expense has been submitted for approval",
-        });
+      toast({
+        title: "Expense Added",
+        description: "Your expense has been submitted for approval",
+      });
 
-        // Reset form with proper values
-        setNewExpense({
-          title: "",
-          description: "",
-          amount: 0,
-          categoryId: "",
-          date: new Date().toISOString().substring(0, 10),
-          taskId: "none",
-          milestoneId: "none",
-        });
+      // Reset form with proper values
+      setNewExpense({
+        title: "",
+        description: "",
+        amount: 0,
+        categoryId: "",
+        date: new Date().toISOString().substring(0, 10),
+        taskId: "none",
+        milestoneId: "none",
+      });
 
-        // Close dialog
-        setCreateDialogOpen(false);
+      // Close dialog
+      setCreateDialogOpen(false);
       } catch (apiError: any) {
         console.error("Error from expense API:", apiError);
 
@@ -650,10 +650,10 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
             <RefreshCw className="mr-2 h-4 w-4" />
             Refresh
           </Button>
-          <Button onClick={() => setCreateDialogOpen(true)}>
-            <PlusCircle className="mr-2 h-4 w-4" />
-            Add Expense
-          </Button>
+        <Button onClick={() => setCreateDialogOpen(true)}>
+          <PlusCircle className="mr-2 h-4 w-4" />
+          Add Expense
+        </Button>
         </div>
       </div>
 
@@ -675,38 +675,38 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
               </div>
             ) : (
               categories.map((category) => {
-                const spentPercentage =
-                  category.allocatedAmount > 0
-                    ? (category.spent / category.allocatedAmount) * 100
-                    : 0;
+              const spentPercentage =
+                category.allocatedAmount > 0
+                  ? (category.spent / category.allocatedAmount) * 100
+                  : 0;
 
-                return (
-                  <div key={category.id}>
-                    <div className="flex justify-between mb-1">
-                      <span className="font-medium">{category.name}</span>
-                      <span className="text-sm text-muted-foreground">
-                        {formatCurrency(category.spent)} of{" "}
-                        {formatCurrency(category.allocatedAmount)}
-                      </span>
-                    </div>
-                    <Progress
-                      value={spentPercentage}
-                      className={`h-2 ${
-                        spentPercentage > 90
-                          ? "bg-red-100"
-                          : spentPercentage > 75
-                          ? "bg-amber-100"
-                          : "bg-green-100"
-                      }`}
-                    />
-                    <div className="flex justify-between text-xs mt-1">
-                      <span>{spentPercentage.toFixed(1)}% used</span>
-                      <span className="text-green-600">
-                        {formatCurrency(category.remaining)} remaining
-                      </span>
-                    </div>
+              return (
+                <div key={category.id}>
+                  <div className="flex justify-between mb-1">
+                    <span className="font-medium">{category.name}</span>
+                    <span className="text-sm text-muted-foreground">
+                      {formatCurrency(category.spent)} of{" "}
+                      {formatCurrency(category.allocatedAmount)}
+                    </span>
                   </div>
-                );
+                  <Progress
+                    value={spentPercentage}
+                    className={`h-2 ${
+                      spentPercentage > 90
+                        ? "bg-red-100"
+                        : spentPercentage > 75
+                        ? "bg-amber-100"
+                        : "bg-green-100"
+                    }`}
+                  />
+                  <div className="flex justify-between text-xs mt-1">
+                    <span>{spentPercentage.toFixed(1)}% used</span>
+                    <span className="text-green-600">
+                      {formatCurrency(category.remaining)} remaining
+                    </span>
+                  </div>
+                </div>
+              );
               })
             )}
           </div>
@@ -814,45 +814,45 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
           </DialogHeader>
 
           <div className="max-h-[60vh] pr-4 overflow-y-auto">
-            <div className="space-y-4 py-2">
-              <div className="space-y-2">
-                <Label htmlFor="title">Title</Label>
-                <Input
-                  id="title"
-                  placeholder="Expense title"
-                  value={newExpense.title}
-                  onChange={(e) => handleInputChange("title", e.target.value)}
-                />
-                {formErrors.title && (
-                  <p className="text-sm text-red-500">{formErrors.title}</p>
-                )}
-              </div>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="title">Title</Label>
+              <Input
+                id="title"
+                placeholder="Expense title"
+                value={newExpense.title}
+                onChange={(e) => handleInputChange("title", e.target.value)}
+              />
+              {formErrors.title && (
+                <p className="text-sm text-red-500">{formErrors.title}</p>
+              )}
+            </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="description">Description (Optional)</Label>
-                <Textarea
-                  id="description"
-                  placeholder="Brief description of the expense"
-                  value={newExpense.description}
-                  onChange={(e) =>
-                    handleInputChange("description", e.target.value)
-                  }
-                  rows={3}
-                />
-              </div>
+            <div className="space-y-2">
+              <Label htmlFor="description">Description (Optional)</Label>
+              <Textarea
+                id="description"
+                placeholder="Brief description of the expense"
+                value={newExpense.description}
+                onChange={(e) =>
+                  handleInputChange("description", e.target.value)
+                }
+                rows={3}
+              />
+            </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="amount">Amount</Label>
-                  <div className="relative">
-                    <DollarSign className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      id="amount"
-                      type="number"
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="amount">Amount</Label>
+                <div className="relative">
+                  <DollarSign className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="amount"
+                    type="number"
                       min="0.01"
-                      step="0.01"
-                      className="pl-8"
-                      value={newExpense.amount || ""}
+                    step="0.01"
+                    className="pl-8"
+                    value={newExpense.amount || ""}
                       onChange={(e) => {
                         // Validate and convert to number immediately
                         const value = e.target.value;
@@ -862,115 +862,115 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
                           handleInputChange("amount", numValue);
                         }
                       }}
-                    />
-                  </div>
-                  {formErrors.amount && (
-                    <p className="text-sm text-red-500">{formErrors.amount}</p>
-                  )}
+                  />
                 </div>
+                {formErrors.amount && (
+                  <p className="text-sm text-red-500">{formErrors.amount}</p>
+                )}
+              </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="date">Date</Label>
-                  <div className="relative">
-                    <Calendar className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      id="date"
-                      type="date"
-                      className="pl-8"
-                      value={newExpense.date}
+              <div className="space-y-2">
+                <Label htmlFor="date">Date</Label>
+                <div className="relative">
+                  <Calendar className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="date"
+                    type="date"
+                    className="pl-8"
+                    value={newExpense.date}
                       onChange={(e) =>
                         handleInputChange("date", e.target.value)
                       }
-                    />
-                  </div>
-                  {formErrors.date && (
-                    <p className="text-sm text-red-500">{formErrors.date}</p>
-                  )}
+                  />
                 </div>
+                {formErrors.date && (
+                  <p className="text-sm text-red-500">{formErrors.date}</p>
+                )}
               </div>
+            </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="category">Category</Label>
-                <Select
-                  value={newExpense.categoryId}
-                  onValueChange={(value) =>
-                    handleInputChange("categoryId", value)
-                  }
-                >
-                  <SelectTrigger id="category">
-                    <SelectValue placeholder="Select category" />
-                  </SelectTrigger>
-                  <SelectContent>
+            <div className="space-y-2">
+              <Label htmlFor="category">Category</Label>
+              <Select
+                value={newExpense.categoryId}
+                onValueChange={(value) =>
+                  handleInputChange("categoryId", value)
+                }
+              >
+                <SelectTrigger id="category">
+                  <SelectValue placeholder="Select category" />
+                </SelectTrigger>
+                <SelectContent>
                     {(categories || []).map((category) => (
-                      <SelectItem key={category.id} value={category.id}>
-                        {category.name} ({formatCurrency(category.remaining)}{" "}
-                        remaining)
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {formErrors.categoryId && (
+                    <SelectItem key={category.id} value={category.id}>
+                      {category.name} ({formatCurrency(category.remaining)}{" "}
+                      remaining)
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {formErrors.categoryId && (
                   <p className="text-sm text-red-500">
                     {formErrors.categoryId}
                   </p>
-                )}
+              )}
 
-                {newExpense.categoryId && (
-                  <div className="mt-2 text-sm">
-                    <div className="flex justify-between items-center">
-                      <span>Budget remaining:</span>
-                      <span className="font-medium">
-                        {formatCurrency(
-                          categories.find(
-                            (cat) => cat.id === newExpense.categoryId
-                          )?.remaining || 0
-                        )}
-                      </span>
-                    </div>
+              {newExpense.categoryId && (
+                <div className="mt-2 text-sm">
+                  <div className="flex justify-between items-center">
+                    <span>Budget remaining:</span>
+                    <span className="font-medium">
+                      {formatCurrency(
+                        categories.find(
+                          (cat) => cat.id === newExpense.categoryId
+                        )?.remaining || 0
+                      )}
+                    </span>
                   </div>
-                )}
-              </div>
+                </div>
+              )}
+            </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="milestone">Related Milestone (Optional)</Label>
-                <Select
-                  value={newExpense.milestoneId}
-                  onValueChange={(value) =>
-                    handleInputChange("milestoneId", value)
-                  }
-                >
-                  <SelectTrigger id="milestone">
-                    <SelectValue placeholder="Select milestone" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">None</SelectItem>
+            <div className="space-y-2">
+              <Label htmlFor="milestone">Related Milestone (Optional)</Label>
+              <Select
+                value={newExpense.milestoneId}
+                onValueChange={(value) =>
+                  handleInputChange("milestoneId", value)
+                }
+              >
+                <SelectTrigger id="milestone">
+                  <SelectValue placeholder="Select milestone" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None</SelectItem>
                     {(milestones || []).map((milestone) => (
-                      <SelectItem key={milestone.id} value={milestone.id}>
-                        {milestone.title}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+                    <SelectItem key={milestone.id} value={milestone.id}>
+                      {milestone.title}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="task">Related Task (Optional)</Label>
-                <Select
-                  value={newExpense.taskId}
-                  onValueChange={(value) => handleInputChange("taskId", value)}
-                >
-                  <SelectTrigger id="task">
-                    <SelectValue placeholder="Select task" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">None</SelectItem>
-                    {getFilteredTasks().map((task) => (
-                      <SelectItem key={task.id} value={task.id}>
-                        {task.title}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+            <div className="space-y-2">
+              <Label htmlFor="task">Related Task (Optional)</Label>
+              <Select
+                value={newExpense.taskId}
+                onValueChange={(value) => handleInputChange("taskId", value)}
+              >
+                <SelectTrigger id="task">
+                  <SelectValue placeholder="Select task" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None</SelectItem>
+                  {getFilteredTasks().map((task) => (
+                    <SelectItem key={task.id} value={task.id}>
+                      {task.title}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               </div>
             </div>
           </div>

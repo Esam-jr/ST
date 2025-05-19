@@ -7,7 +7,6 @@ import React, {
   ReactNode,
 } from "react";
 import axios from "axios";
-import { useToast } from "@/hooks/use-toast";
 
 // Define types
 export interface Budget {
@@ -22,7 +21,6 @@ export interface Budget {
   updatedAt: string;
   categories: BudgetCategory[];
   expenses?: Expense[];
-  startupCallId: string;
 }
 
 export interface BudgetCategory {
@@ -108,7 +106,6 @@ interface BudgetContextType {
     budgetId: string,
     expenseId: string
   ) => Promise<void>;
-  updateExpenseLocally: (updatedExpense: Expense) => void;
 
   // Filter setters
   setSelectedBudgetId: (id: string | null) => void;
@@ -137,7 +134,6 @@ export const BudgetProvider: React.FC<{ children: ReactNode }> = ({
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
-  const { toast } = useToast();
 
   // UI state
   const [selectedBudgetId, setSelectedBudgetId] = useState<string | null>(null);
@@ -155,9 +151,9 @@ export const BudgetProvider: React.FC<{ children: ReactNode }> = ({
 
       try {
         const response = await axios.get(
-          `/api/admin/budgets?startupCallId=${startupCallId}`
+          `/api/startup-calls/${startupCallId}/budgets`
         );
-        const fetchedBudgets = response.data.budgets || [];
+        const fetchedBudgets = response.data;
 
         // Set the first budget as selected by default if none is selected
         if (fetchedBudgets.length > 0 && !selectedBudgetId) {
@@ -191,11 +187,6 @@ export const BudgetProvider: React.FC<{ children: ReactNode }> = ({
       } catch (err) {
         setError(err as Error);
         console.error("Error fetching budgets:", err);
-        toast({
-          title: "Error",
-          description: "Failed to fetch budgets",
-          variant: "destructive",
-        });
       } finally {
         setIsLoading(false);
       }
@@ -212,25 +203,19 @@ export const BudgetProvider: React.FC<{ children: ReactNode }> = ({
       setIsLoading(true);
 
       try {
-        const response = await axios.post(`/api/admin/budgets`, budgetData);
+        const response = await axios.post(
+          `/api/startup-calls/${startupCallId}/budgets`,
+          budgetData
+        );
 
         // Update local state with new budget
         setBudgets((prev) => [...prev, response.data]);
-        toast({
-          title: "Success",
-          description: "Budget created successfully",
-        });
 
         return response.data;
       } catch (err) {
         const error = err as Error;
         setError(error);
         console.error("Error creating budget:", error);
-        toast({
-          title: "Error",
-          description: "Failed to create budget",
-          variant: "destructive",
-        });
         throw error;
       } finally {
         setIsLoading(false);
@@ -250,7 +235,7 @@ export const BudgetProvider: React.FC<{ children: ReactNode }> = ({
 
       try {
         const response = await axios.put(
-          `/api/admin/budgets/${budgetId}`,
+          `/api/startup-calls/${startupCallId}/budgets/${budgetId}`,
           budgetData
         );
 
@@ -260,21 +245,12 @@ export const BudgetProvider: React.FC<{ children: ReactNode }> = ({
             budget.id === budgetId ? { ...budget, ...response.data } : budget
           )
         );
-        toast({
-          title: "Success",
-          description: "Budget updated successfully",
-        });
 
         return response.data;
       } catch (err) {
         const error = err as Error;
         setError(error);
         console.error("Error updating budget:", error);
-        toast({
-          title: "Error",
-          description: "Failed to update budget",
-          variant: "destructive",
-        });
         throw error;
       } finally {
         setIsLoading(false);
@@ -289,7 +265,9 @@ export const BudgetProvider: React.FC<{ children: ReactNode }> = ({
       setIsLoading(true);
 
       try {
-        await axios.delete(`/api/admin/budgets/${budgetId}`);
+        await axios.delete(
+          `/api/startup-calls/${startupCallId}/budgets/${budgetId}`
+        );
 
         // Update local state
         setBudgets((prev) => prev.filter((budget) => budget.id !== budgetId));
@@ -304,19 +282,10 @@ export const BudgetProvider: React.FC<{ children: ReactNode }> = ({
             remainingBudgets.length > 0 ? remainingBudgets[0].id : null
           );
         }
-        toast({
-          title: "Success",
-          description: "Budget deleted successfully",
-        });
       } catch (err) {
         const error = err as Error;
         setError(error);
         console.error("Error deleting budget:", error);
-        toast({
-          title: "Error",
-          description: "Failed to delete budget",
-          variant: "destructive",
-        });
         throw error;
       } finally {
         setIsLoading(false);
@@ -726,32 +695,6 @@ export const BudgetProvider: React.FC<{ children: ReactNode }> = ({
     [budgets, getBudgetById, getTotalExpenseAmount]
   );
 
-  // New method to update expense locally after approval/rejection
-  const updateExpenseLocally = useCallback((updatedExpense: Expense) => {
-    setExpenses((prevExpenses) =>
-      prevExpenses.map((expense) =>
-        expense.id === updatedExpense.id
-          ? {
-              ...expense,
-              ...updatedExpense,
-              // Make sure to preserve the category reference to avoid UI issues
-              category: expense.category,
-            }
-          : expense
-      )
-    );
-
-    // If the expense was approved or rejected, we may need to update budget totals
-    // This would typically be handled by refetching the budgets, but for immediate UI feedback:
-    if (
-      updatedExpense.status === "APPROVED" ||
-      updatedExpense.status === "REJECTED"
-    ) {
-      // In a real implementation, you might want to recalculate budget totals here
-      // or trigger a budget refresh
-    }
-  }, []);
-
   const contextValue: BudgetContextType = {
     // Data
     budgets,
@@ -780,9 +723,6 @@ export const BudgetProvider: React.FC<{ children: ReactNode }> = ({
     createExpense,
     updateExpense,
     deleteExpense,
-
-    // New method to update expense locally - useful for approval updates
-    updateExpenseLocally,
 
     // Filter setters
     setSelectedBudgetId,
