@@ -63,9 +63,9 @@ export default function ExpenseTrackingPanel() {
   const [startupCalls, setStartupCalls] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({
-    startupCallId: "",
-    status: "",
-    startupId: "",
+    startupCallId: "all",
+    status: "all",
+    startupId: "all",
   });
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedExpense, setSelectedExpense] = useState<any>(null);
@@ -84,10 +84,12 @@ export default function ExpenseTrackingPanel() {
     try {
       // Build query parameters from filters
       const params = new URLSearchParams();
-      if (filters.startupCallId)
+      if (filters.startupCallId && filters.startupCallId !== "all")
         params.append("startupCallId", filters.startupCallId);
-      if (filters.status) params.append("status", filters.status);
-      if (filters.startupId) params.append("startupId", filters.startupId);
+      if (filters.status && filters.status !== "all")
+        params.append("status", filters.status);
+      if (filters.startupId && filters.startupId !== "all")
+        params.append("startupId", filters.startupId);
 
       const response = await axios.get(
         `/api/admin/expenses?${params.toString()}`
@@ -204,7 +206,13 @@ export default function ExpenseTrackingPanel() {
       // Update expense in the list
       setExpenses((prevExpenses) =>
         prevExpenses.map((exp) =>
-          exp.id === selectedExpense.id ? { ...exp, status: "REJECTED" } : exp
+          exp.id === selectedExpense.id
+            ? {
+                ...exp,
+                status: "REJECTED",
+                description: `Rejected: ${rejectionReason}`,
+              }
+            : exp
         )
       );
 
@@ -252,11 +260,13 @@ export default function ExpenseTrackingPanel() {
     } else if (expense.status === "APPROVED") {
       return <Badge className="bg-green-100 text-green-800">Approved</Badge>;
     } else if (expense.status === "REJECTED") {
+      // Use description to show rejection reason if it starts with "Rejected:"
+      const reason = expense.description?.startsWith("Rejected:")
+        ? expense.description
+        : "Rejected";
+
       return (
-        <Badge
-          className="bg-red-100 text-red-800"
-          title={expense.rejectionReason || "No reason provided"}
-        >
+        <Badge className="bg-red-100 text-red-800" title={reason}>
           Rejected
         </Badge>
       );
@@ -304,7 +314,7 @@ export default function ExpenseTrackingPanel() {
               <SelectValue placeholder="Filter by startup call" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">All Startup Calls</SelectItem>
+              <SelectItem value="all">All Startup Calls</SelectItem>
               {startupCalls.map((call) => (
                 <SelectItem key={call.id} value={call.id}>
                   {call.title}
@@ -321,7 +331,7 @@ export default function ExpenseTrackingPanel() {
               <SelectValue placeholder="Filter by status" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">All Status</SelectItem>
+              <SelectItem value="all">All Status</SelectItem>
               <SelectItem value="PENDING">Pending</SelectItem>
               <SelectItem value="APPROVED">Approved</SelectItem>
               <SelectItem value="REJECTED">Rejected</SelectItem>

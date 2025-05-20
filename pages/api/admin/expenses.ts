@@ -16,10 +16,10 @@ export default async function handler(
   // Check if user is admin
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: { isAdmin: true },
+    select: { role: true },
   });
 
-  if (!user?.isAdmin) {
+  if (user?.role !== "ADMIN") {
     return res
       .status(403)
       .json({ message: "Forbidden: Admin access required" });
@@ -34,32 +34,28 @@ export default async function handler(
       // Build filter conditions
       const whereConditions: any = {};
 
-      if (startupCallId) {
-        whereConditions.startupCallId = startupCallId as string;
+      if (startupCallId && typeof startupCallId === "string") {
+        whereConditions.budget = {
+          startupCallId,
+        };
       }
 
-      if (status) {
-        whereConditions.status = status as string;
-      }
-
-      if (startupId) {
-        whereConditions.startupId = startupId as string;
+      if (status && typeof status === "string") {
+        whereConditions.status = status;
       }
 
       // Fetch expenses with related data
       const expenses = await prisma.expense.findMany({
         where: whereConditions,
         include: {
-          startupCall: {
-            select: {
-              id: true,
-              title: true,
-            },
-          },
-          startup: {
-            select: {
-              id: true,
-              name: true,
+          budget: {
+            include: {
+              startupCall: {
+                select: {
+                  id: true,
+                  title: true,
+                },
+              },
             },
           },
           category: {
@@ -79,9 +75,10 @@ export default async function handler(
         select: {
           id: true,
           title: true,
+          status: true,
         },
         orderBy: {
-          startDate: "desc",
+          createdAt: "desc",
         },
       });
 
@@ -89,6 +86,7 @@ export default async function handler(
       const transformedExpenses = expenses.map((expense) => ({
         ...expense,
         categoryName: expense.category?.name || "Uncategorized",
+        startupCall: expense.budget.startupCall,
         receipt: expense.receipt
           ? expense.receipt.startsWith("http")
             ? expense.receipt
@@ -109,7 +107,8 @@ export default async function handler(
   // Handle expense approval/rejection
   if (req.method === "PATCH") {
     try {
-      const { id, status, rejectionReason } = req.body;
+      const { id, status } = req.body;
+      const rejectionReason = req.body.rejectionReason;
 
       if (!id || !status) {
         return res.status(400).json({ message: "Missing required fields" });
@@ -121,12 +120,16 @@ export default async function handler(
       }
 
       // Update expense status
+      const updateData: any = { status };
+      if (status === "REJECTED" && rejectionReason) {
+        // Only store rejectionReason if your schema has this field
+        // Otherwise, handle it differently
+        updateData.description = `Rejected: ${rejectionReason}`;
+      }
+
       const updatedExpense = await prisma.expense.update({
         where: { id },
-        data: {
-          status,
-          rejectionReason: status === "REJECTED" ? rejectionReason : null,
-        },
+        data: updateData,
       });
 
       return res.status(200).json({
