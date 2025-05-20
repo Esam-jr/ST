@@ -82,8 +82,8 @@ export default function BudgetOverviewPanel({
   const [editDialogOpen, setEditDialogOpen] = useState(false);
 
   // Format currency
-  const formatCurrency = (amount: number, currency: string = "INR") => {
-    return new Intl.NumberFormat("en-IN", {
+  const formatCurrency = (amount: number, currency: string = "USD") => {
+    return new Intl.NumberFormat("en-US", {
       style: "currency",
       currency: currency,
     }).format(amount);
@@ -461,7 +461,7 @@ export default function BudgetOverviewPanel({
                 description: `Budget "${data.title}" created successfully`,
               });
               setCreateDialogOpen(false);
-              refreshBudgets();
+              fetchBudgets(startupCallId);
             }}
             onCancel={() => setCreateDialogOpen(false)}
           />
@@ -484,7 +484,7 @@ export default function BudgetOverviewPanel({
                 description: `Budget "${data.title}" updated successfully`,
               });
               setEditDialogOpen(false);
-              refreshBudgets();
+              fetchBudgets(startupCallId);
             }}
             onCancel={() => setEditDialogOpen(false)}
           />

@@ -1,176 +1,170 @@
 import { NextApiRequest, NextApiResponse } from "next";
-import { getServerSession } from "next-auth/next";
+import { getServerSession } from "next-auth";
 import { authOptions } from "@/pages/api/auth/[...nextauth]";
-import { withPrisma } from "@/lib/prisma-wrapper";
-import { PrismaClient } from "@prisma/client";
+import prisma from "@/lib/prisma";
+import formidable from "formidable";
+import fs from "fs";
+import path from "path";
+import { v4 as uuidv4 } from "uuid";
+
+// Disable the default body parser for file uploads
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+};
 
 // Handler for budget expenses operations
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
-  // Get session and check if user is authorized
   const session = await getServerSession(req, res, authOptions);
-
   if (!session) {
     return res.status(401).json({ error: "Unauthorized" });
   }
 
-  // Get startup call ID and budget ID from URL
-  const { id, budgetId } = req.query;
+  const { id: startupCallId, budgetId } = req.query;
 
-  if (
-    !id ||
-    typeof id !== "string" ||
-    !budgetId ||
-    typeof budgetId !== "string"
-  ) {
-    return res.status(400).json({ error: "Invalid URL parameters" });
-  }
-
-  // Handle different HTTP methods
-  switch (req.method) {
-    case "GET":
-      return await getExpenses(req, res, budgetId);
-    case "POST":
-      return await createExpense(req, res, budgetId, session.user.id);
-    default:
-      return res.status(405).json({ error: "Method not allowed" });
-  }
-}
-
-// Get all expenses for a budget
-async function getExpenses(
-  req: NextApiRequest,
-  res: NextApiResponse,
-  budgetId: string
-) {
+  // Verify the startup call and budget exist
   try {
-    // Get query parameters
-    const { categoryId, status } = req.query;
-
-    const result = await withPrisma(async () => {
-      const prisma = new PrismaClient();
-      try {
-        // Verify that the budget exists
-        const budget = await prisma.budget.findUnique({
-          where: { id: budgetId },
-        });
-
-        if (!budget) {
-          return null; // Will be checked outside
-        }
-
-        // Build where clause based on query parameters
-        const where: any = { budgetId };
-
-        if (categoryId && typeof categoryId === "string") {
-          where.categoryId = categoryId;
-        }
-
-        if (status && typeof status === "string") {
-          where.status = status;
-        }
-
-        // Get all expenses for the budget
-        const expenses = await prisma.expense.findMany({
-          where,
-          orderBy: { date: "desc" },
-          include: {
-            category: true,
-          },
-        });
-
-        return expenses;
-      } finally {
-        await prisma.$disconnect();
-      }
+    const budget = await prisma.budget.findUnique({
+      where: {
+        id: budgetId as string,
+      },
+      include: {
+        startupCall: true,
+      },
     });
 
-    if (result === null) {
+    if (!budget) {
       return res.status(404).json({ error: "Budget not found" });
     }
 
-    return res.status(200).json(result);
+    if (budget.startupCallId !== startupCallId) {
+      return res.status(400).json({
+        error: "Budget does not belong to the specified startup call",
+      });
+    }
   } catch (error) {
-    console.error("Error fetching budget expenses:", error);
-    return res.status(500).json({ error: "Failed to fetch budget expenses" });
-  }
-}
-
-// Create a new expense for a budget
-async function createExpense(
-  req: NextApiRequest,
-  res: NextApiResponse,
-  budgetId: string,
-  userId: string
-) {
-  const { title, description, amount, currency, date, status, categoryId } =
-    req.body;
-
-  if (!title || amount === undefined || !currency || !date || !status) {
-    return res.status(400).json({ error: "Missing required fields" });
+    console.error("Error verifying budget:", error);
+    return res.status(500).json({ error: "Failed to verify budget" });
   }
 
-  try {
-    const result = await withPrisma(async () => {
-      const prisma = new PrismaClient();
-      try {
-        // Verify that the budget exists
-        const budget = await prisma.budget.findUnique({
-          where: { id: budgetId },
+  // GET: Fetch all expenses for a budget
+  if (req.method === "GET") {
+    try {
+      const expenses = await prisma.expense.findMany({
+        where: {
+          budgetId: budgetId as string,
+        },
+        orderBy: {
+          date: "desc",
+        },
+      });
+
+      return res.status(200).json(expenses);
+    } catch (error) {
+      console.error("Error fetching expenses:", error);
+      return res.status(500).json({ error: "Failed to fetch expenses" });
+    }
+  }
+
+  // POST: Create a new expense with receipt upload support
+  if (req.method === "POST") {
+    try {
+      // Parse form data with file upload
+      const form = formidable({
+        maxFiles: 1,
+        maxFileSize: 5 * 1024 * 1024, // 5MB
+        keepExtensions: true,
+        filter: (part) => {
+          // Only allow receipt files
+          if (part.name === "receipt" && part.mimetype) {
+            return (
+              part.mimetype.includes("image/jpeg") ||
+              part.mimetype.includes("image/png") ||
+              part.mimetype.includes("application/pdf")
+            );
+          }
+          return true; // Allow all other fields
+        },
+      });
+
+      // Parse the form
+      const [fields, files] = await new Promise<
+        [formidable.Fields, formidable.Files]
+      >((resolve, reject) => {
+        form.parse(req, (err, fields, files) => {
+          if (err) reject(err);
+          resolve([fields, files]);
         });
+      });
 
-        if (!budget) {
-          return null; // Will be checked outside
-        }
+      // Extract expense data from fields
+      const expenseData: any = {};
 
-        // Verify that the category exists if provided
-        if (categoryId) {
-          const category = await prisma.budgetCategory.findUnique({
-            where: { id: categoryId },
-          });
-
-          if (!category || category.budgetId !== budgetId) {
-            return {
-              error: "Category not found or does not belong to this budget",
-            };
+      // Process all form fields
+      Object.keys(fields).forEach((key) => {
+        const value = fields[key]?.[0];
+        if (value !== undefined) {
+          // Convert numeric values
+          if (key === "amount") {
+            expenseData[key] = parseFloat(value);
+          } else {
+            expenseData[key] = value;
           }
         }
+      });
 
-        // Create the expense
-        const expense = await prisma.expense.create({
-          data: {
-            title,
-            description,
-            amount: parseFloat(amount.toString()),
-            currency,
-            date: new Date(date),
-            status,
-            budget: { connect: { id: budgetId } },
-            ...(categoryId
-              ? { category: { connect: { id: categoryId } } }
-              : {}),
-          },
-        });
+      // Set budget ID
+      expenseData.budgetId = budgetId as string;
 
-        return expense;
-      } finally {
-        await prisma.$disconnect();
+      // Process receipt file if present
+      let receiptPath = null;
+      const receiptFile = files.receipt?.[0];
+
+      if (receiptFile) {
+        // Create uploads directory if it doesn't exist
+        const uploadsDir = path.join(process.cwd(), "public", "uploads");
+        if (!fs.existsSync(uploadsDir)) {
+          fs.mkdirSync(uploadsDir, { recursive: true });
+        }
+
+        // Generate unique filename
+        const uniqueFilename = `${uuidv4()}-${receiptFile.originalFilename}`;
+        const newPath = path.join(uploadsDir, uniqueFilename);
+
+        // Move the file from temp location to uploads directory
+        await fs.promises.copyFile(receiptFile.filepath, newPath);
+
+        // Clean up the temp file
+        await fs.promises.unlink(receiptFile.filepath);
+
+        // Set the receipt path to be stored in the database
+        receiptPath = `/uploads/${uniqueFilename}`;
       }
-    });
 
-    if (result === null) {
-      return res.status(404).json({ error: "Budget not found" });
+      // Add receipt path to expense data if a file was uploaded
+      if (receiptPath) {
+        expenseData.receipt = receiptPath;
+      }
+
+      // Add user ID as creator
+      expenseData.createdById = session.user.id;
+
+      // Create the expense in the database
+      const expense = await prisma.expense.create({
+        data: expenseData,
+      });
+
+      return res.status(201).json(expense);
+    } catch (error) {
+      console.error("Error creating expense:", error);
+      return res.status(500).json({ error: "Failed to create expense" });
     }
-
-    if (result && "error" in result) {
-      return res.status(400).json({ error: result.error });
-    }
-
-    return res.status(201).json(result);
-  } catch (error) {
-    console.error("Error creating budget expense:", error);
-    return res.status(500).json({ error: "Failed to create budget expense" });
   }
+
+  // Method not allowed
+  return res.status(405).json({ error: "Method not allowed" });
 }

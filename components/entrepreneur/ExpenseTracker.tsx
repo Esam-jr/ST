@@ -68,6 +68,7 @@ interface Expense {
   milestoneId?: string | null;
   taskTitle?: string;
   milestoneTitle?: string;
+  receipt?: string;
 }
 
 interface Category {
@@ -121,6 +122,8 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
     taskId: "none",
     milestoneId: "none",
   });
+  const [receiptFile, setReceiptFile] = useState<File | null>(null);
+  const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
 
   // Fetch all data when component mounts
   useEffect(() => {
@@ -300,12 +303,12 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
         });
         setRetryCount(0);
       }
-      } catch (err: any) {
-        console.error("Error fetching expense data:", err);
+    } catch (err: any) {
+      console.error("Error fetching expense data:", err);
 
       // Check if error is from axios
       const errorMessage =
-          err.response?.data?.message ||
+        err.response?.data?.message ||
         "Failed to load expense data. Please try again later.";
       const errorCode = err.response?.data?.code;
 
@@ -358,7 +361,7 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
 
         setRetryTimeout(timeout);
       }
-      } finally {
+    } finally {
       if (!isRetry) {
         setLoading(false);
       } else if (retryCount >= 3) {
@@ -457,6 +460,57 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
     return Object.keys(errors).length === 0;
   };
 
+  // Handle receipt file selection
+  const handleReceiptChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files && files.length > 0) {
+      const file = files[0];
+      // Validate file type and size
+      const validTypes = ["image/jpeg", "image/png", "application/pdf"];
+      const maxSize = 5 * 1024 * 1024; // 5MB
+
+      if (!validTypes.includes(file.type)) {
+        setFormErrors({
+          ...formErrors,
+          receipt: "Only JPEG, PNG, and PDF files are allowed",
+        });
+        return;
+      }
+
+      if (file.size > maxSize) {
+        setFormErrors({
+          ...formErrors,
+          receipt: "File size must be less than 5MB",
+        });
+        return;
+      }
+
+      setReceiptFile(file);
+
+      // Create preview URL for images
+      if (file.type.startsWith("image/")) {
+        const previewUrl = URL.createObjectURL(file);
+        setReceiptPreview(previewUrl);
+      } else {
+        setReceiptPreview(null);
+      }
+
+      // Clear any previous errors
+      const updatedErrors = { ...formErrors };
+      delete updatedErrors.receipt;
+      setFormErrors(updatedErrors);
+    }
+  };
+
+  // Remove receipt file
+  const handleRemoveReceipt = () => {
+    setReceiptFile(null);
+    if (receiptPreview) {
+      URL.revokeObjectURL(receiptPreview);
+      setReceiptPreview(null);
+    }
+  };
+
   // Submit expense form
   const submitExpenseForm = async () => {
     if (!validateExpenseForm()) return;
@@ -480,13 +534,33 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
       }
 
       try {
-      const response = await axios.post("/api/entrepreneur/expenses", {
-        ...newExpense,
-          amount, // Send the properly parsed amount
-        taskId,
-        milestoneId,
-        status: "PENDING", // New expenses start as pending
-      });
+        // Create FormData for multipart form data (file upload)
+        const formData = new FormData();
+
+        // Add form fields
+        formData.append("title", newExpense.title);
+        formData.append("description", newExpense.description || "");
+        formData.append("amount", amount.toString());
+        formData.append("categoryId", newExpense.categoryId);
+        formData.append("date", newExpense.date);
+        formData.append("taskId", taskId || "none");
+        formData.append("milestoneId", milestoneId || "none");
+
+        // Add receipt file if present
+        if (receiptFile) {
+          formData.append("receipt", receiptFile);
+        }
+
+        // Send multipart form data
+        const response = await axios.post(
+          "/api/entrepreneur/expenses",
+          formData,
+          {
+            headers: {
+              "Content-Type": "multipart/form-data",
+            },
+          }
+        );
 
         // If we get a successful response, update the UI with the new expense
         const newExpenseData = response.data;
@@ -512,37 +586,42 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
 
         setExpenses([...(expenses || []), newExpenseData]);
 
-      // Update category spending
-      setCategories(
-        categories.map((category) =>
-          category.id === newExpense.categoryId
-            ? {
-                ...category,
+        // Update category spending
+        setCategories(
+          categories.map((category) =>
+            category.id === newExpense.categoryId
+              ? {
+                  ...category,
                   spent: category.spent + amount,
                   remaining: category.remaining - amount,
-              }
-            : category
-        )
-      );
+                }
+              : category
+          )
+        );
 
-      toast({
-        title: "Expense Added",
-        description: "Your expense has been submitted for approval",
-      });
+        toast({
+          title: "Expense Added",
+          description: "Your expense has been submitted for approval",
+        });
 
-      // Reset form with proper values
-      setNewExpense({
-        title: "",
-        description: "",
-        amount: 0,
-        categoryId: "",
-        date: new Date().toISOString().substring(0, 10),
-        taskId: "none",
-        milestoneId: "none",
-      });
+        // Reset form with proper values
+        setNewExpense({
+          title: "",
+          description: "",
+          amount: 0,
+          categoryId: "",
+          date: new Date().toISOString().substring(0, 10),
+          taskId: "none",
+          milestoneId: "none",
+        });
+        setReceiptFile(null);
+        if (receiptPreview) {
+          URL.revokeObjectURL(receiptPreview);
+          setReceiptPreview(null);
+        }
 
-      // Close dialog
-      setCreateDialogOpen(false);
+        // Close dialog
+        setCreateDialogOpen(false);
       } catch (apiError: any) {
         console.error("Error from expense API:", apiError);
 
@@ -560,6 +639,8 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
           if (errorDetails.categoryId)
             newFormErrors.categoryId = errorDetails.categoryId;
           if (errorDetails.date) newFormErrors.date = errorDetails.date;
+          if (errorDetails.receipt)
+            newFormErrors.receipt = errorDetails.receipt;
 
           setFormErrors(newFormErrors);
 
@@ -614,6 +695,298 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
     );
   };
 
+  // Render the expense list with receipt links
+  const renderExpenseList = () => {
+    if (expenses.length === 0) {
+      return (
+        <div className="text-center py-8">
+          <p className="text-gray-500">No expenses found</p>
+        </div>
+      );
+    }
+
+    return (
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Title</TableHead>
+            <TableHead>Category</TableHead>
+            <TableHead>Amount</TableHead>
+            <TableHead>Date</TableHead>
+            <TableHead>Status</TableHead>
+            <TableHead>Receipt</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {expenses.map((expense) => (
+            <TableRow key={expense.id}>
+              <TableCell className="font-medium">{expense.title}</TableCell>
+              <TableCell>{expense.categoryName}</TableCell>
+              <TableCell>
+                {formatCurrency(expense.amount, expense.currency)}
+              </TableCell>
+              <TableCell>{formatDate(expense.date)}</TableCell>
+              <TableCell>
+                <Badge
+                  variant={
+                    expense.status === "APPROVED"
+                      ? "default"
+                      : expense.status === "REJECTED"
+                      ? "destructive"
+                      : "outline"
+                  }
+                >
+                  {expense.status.charAt(0) +
+                    expense.status.slice(1).toLowerCase()}
+                </Badge>
+              </TableCell>
+              <TableCell>
+                {expense.receipt ? (
+                  <a
+                    href={expense.receipt}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-600 hover:text-blue-800 flex items-center"
+                  >
+                    <Receipt className="h-4 w-4 mr-1" />
+                    View
+                  </a>
+                ) : (
+                  <span className="text-gray-400 text-sm">None</span>
+                )}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    );
+  };
+
+  // Render the expense creation form
+  const renderExpenseForm = () => {
+    return (
+      <div className="space-y-4">
+        <div className="grid grid-cols-1 gap-4">
+          <div>
+            <Label htmlFor="title">Title</Label>
+            <Input
+              id="title"
+              placeholder="Expense title"
+              value={newExpense.title}
+              onChange={(e) => handleInputChange("title", e.target.value)}
+              className={formErrors.title ? "border-red-500" : ""}
+            />
+            {formErrors.title && (
+              <p className="text-red-500 text-sm mt-1">{formErrors.title}</p>
+            )}
+          </div>
+
+          <div>
+            <Label htmlFor="description">Description (Optional)</Label>
+            <Textarea
+              id="description"
+              placeholder="Add details about this expense"
+              value={newExpense.description}
+              onChange={(e) => handleInputChange("description", e.target.value)}
+              rows={3}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="amount">Amount</Label>
+              <Input
+                id="amount"
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="0.00"
+                value={newExpense.amount || ""}
+                onChange={(e) =>
+                  handleInputChange("amount", parseFloat(e.target.value) || 0)
+                }
+                className={formErrors.amount ? "border-red-500" : ""}
+              />
+              {formErrors.amount && (
+                <p className="text-red-500 text-sm mt-1">{formErrors.amount}</p>
+              )}
+            </div>
+
+            <div>
+              <Label htmlFor="date">Date</Label>
+              <Input
+                id="date"
+                type="date"
+                value={newExpense.date}
+                onChange={(e) => handleInputChange("date", e.target.value)}
+                max={new Date().toISOString().substring(0, 10)}
+                className={formErrors.date ? "border-red-500" : ""}
+              />
+              {formErrors.date && (
+                <p className="text-red-500 text-sm mt-1">{formErrors.date}</p>
+              )}
+            </div>
+          </div>
+
+          <div>
+            <Label htmlFor="categoryId">Budget Category</Label>
+            <Select
+              value={newExpense.categoryId}
+              onValueChange={(value) => handleInputChange("categoryId", value)}
+            >
+              <SelectTrigger
+                className={formErrors.categoryId ? "border-red-500" : ""}
+              >
+                <SelectValue placeholder="Select a category" />
+              </SelectTrigger>
+              <SelectContent>
+                {categories.map((category) => (
+                  <SelectItem key={category.id} value={category.id}>
+                    {category.name} ({formatCurrency(category.remaining)}{" "}
+                    remaining)
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {formErrors.categoryId && (
+              <p className="text-red-500 text-sm mt-1">
+                {formErrors.categoryId}
+              </p>
+            )}
+          </div>
+
+          {/* Receipt Upload */}
+          <div>
+            <Label htmlFor="receipt">Receipt (Optional)</Label>
+            {!receiptFile ? (
+              <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-dashed border-gray-300 rounded-md">
+                <div className="space-y-1 text-center">
+                  <Receipt className="mx-auto h-12 w-12 text-gray-400" />
+                  <div className="flex text-sm text-gray-600">
+                    <label
+                      htmlFor="receipt-upload"
+                      className="relative cursor-pointer rounded-md font-medium text-primary hover:text-primary-dark focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-primary"
+                    >
+                      <span>Upload a receipt</span>
+                      <input
+                        id="receipt-upload"
+                        name="receipt"
+                        type="file"
+                        accept="image/jpeg,image/png,application/pdf"
+                        className="sr-only"
+                        onChange={handleReceiptChange}
+                      />
+                    </label>
+                    <p className="pl-1">or drag and drop</p>
+                  </div>
+                  <p className="text-xs text-gray-500">
+                    PNG, JPG, PDF up to 5MB
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-1 flex items-center justify-between p-2 border border-gray-300 rounded-md">
+                <div className="flex items-center">
+                  <Receipt className="h-6 w-6 text-gray-400 mr-2" />
+                  <span className="text-sm truncate max-w-[200px]">
+                    {receiptFile.name}
+                  </span>
+                </div>
+                <div className="flex space-x-2">
+                  {receiptPreview && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => window.open(receiptPreview, "_blank")}
+                    >
+                      Preview
+                    </Button>
+                  )}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleRemoveReceipt}
+                  >
+                    Remove
+                  </Button>
+                </div>
+              </div>
+            )}
+            {formErrors.receipt && (
+              <p className="text-red-500 text-sm mt-1">{formErrors.receipt}</p>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="milestoneId">Related Milestone (Optional)</Label>
+              <Select
+                value={newExpense.milestoneId}
+                onValueChange={(value) =>
+                  handleInputChange("milestoneId", value)
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a milestone" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None</SelectItem>
+                  {milestones.map((milestone) => (
+                    <SelectItem key={milestone.id} value={milestone.id}>
+                      {milestone.title}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label htmlFor="taskId">Related Task (Optional)</Label>
+              <Select
+                value={newExpense.taskId}
+                onValueChange={(value) => handleInputChange("taskId", value)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a task" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None</SelectItem>
+                  {getFilteredTasks().map((task) => (
+                    <SelectItem key={task.id} value={task.id}>
+                      {task.title}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setCreateDialogOpen(false)}
+          >
+            Cancel
+          </Button>
+          <Button type="button" onClick={submitExpenseForm} disabled={loading}>
+            {loading ? (
+              <>
+                <LoadingSpinner size={16} className="mr-2" />
+                Creating...
+              </>
+            ) : (
+              "Create Expense"
+            )}
+          </Button>
+        </DialogFooter>
+      </div>
+    );
+  };
+
   if (loading && (!expenses || expenses.length === 0)) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -647,345 +1020,84 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
             onClick={() => fetchData()}
             disabled={loading}
           >
-            <RefreshCw className="mr-2 h-4 w-4" />
+            <RefreshCw className="h-4 w-4 mr-2" />
             Refresh
           </Button>
-        <Button onClick={() => setCreateDialogOpen(true)}>
-          <PlusCircle className="mr-2 h-4 w-4" />
-          Add Expense
-        </Button>
+          <Button onClick={() => setCreateDialogOpen(true)}>
+            <PlusCircle className="h-4 w-4 mr-2" />
+            Create Expense
+          </Button>
         </div>
       </div>
 
-      {/* Budget Overview */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Budget Categories</CardTitle>
-          <CardDescription>
-            Track spending across budget categories
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {!categories || categories.length === 0 ? (
-              <div className="text-center py-4">
-                <p className="text-muted-foreground">
-                  No budget categories available
-                </p>
-              </div>
-            ) : (
-              categories.map((category) => {
-              const spentPercentage =
-                category.allocatedAmount > 0
-                  ? (category.spent / category.allocatedAmount) * 100
-                  : 0;
-
-              return (
-                <div key={category.id}>
-                  <div className="flex justify-between mb-1">
-                    <span className="font-medium">{category.name}</span>
-                    <span className="text-sm text-muted-foreground">
-                      {formatCurrency(category.spent)} of{" "}
-                      {formatCurrency(category.allocatedAmount)}
-                    </span>
-                  </div>
-                  <Progress
-                    value={spentPercentage}
-                    className={`h-2 ${
-                      spentPercentage > 90
-                        ? "bg-red-100"
-                        : spentPercentage > 75
-                        ? "bg-amber-100"
-                        : "bg-green-100"
-                    }`}
-                  />
-                  <div className="flex justify-between text-xs mt-1">
-                    <span>{spentPercentage.toFixed(1)}% used</span>
-                    <span className="text-green-600">
-                      {formatCurrency(category.remaining)} remaining
-                    </span>
-                  </div>
+      {/* Budget Category Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {categories.map((category) => (
+          <Card key={category.id}>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-lg flex items-center">
+                <Tag className="h-4 w-4 mr-2" />
+                {category.name}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span>Spent:</span>
+                  <span className="font-medium">
+                    {formatCurrency(category.spent)} of{" "}
+                    {formatCurrency(category.allocatedAmount)}
+                  </span>
                 </div>
-              );
-              })
-            )}
-          </div>
-        </CardContent>
-      </Card>
+                <Progress
+                  value={(category.spent / category.allocatedAmount) * 100}
+                  className="h-2"
+                />
+                <div className="flex justify-between text-sm">
+                  <span>Remaining:</span>
+                  <span
+                    className={`font-medium ${
+                      category.remaining < 0 ? "text-red-500" : ""
+                    }`}
+                  >
+                    {formatCurrency(category.remaining)} remaining
+                  </span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
 
-      {/* Expense List */}
+      {/* Expenses List */}
       <Card>
         <CardHeader>
-          <CardTitle>Recent Expenses</CardTitle>
+          <CardTitle>Expense History</CardTitle>
           <CardDescription>
-            View and track your submitted expenses
+            View all expenses and their approval status
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {!expenses || expenses.length === 0 ? (
-            <div className="text-center py-8">
-              <FileText className="mx-auto h-12 w-12 text-muted-foreground opacity-50" />
-              <h3 className="mt-4 text-lg font-medium">No Expenses Found</h3>
-              <p className="mt-2 text-sm text-muted-foreground max-w-sm mx-auto">
-                You haven't added any expenses yet. Click the "Add Expense"
-                button to get started.
-              </p>
-              <Button
-                onClick={() => setCreateDialogOpen(true)}
-                className="mt-6"
-              >
-                <PlusCircle className="mr-2 h-4 w-4" />
-                Add First Expense
-              </Button>
+          {fetchingExpenses ? (
+            <div className="flex justify-center py-8">
+              <LoadingSpinner />
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Title</TableHead>
-                    <TableHead>Category</TableHead>
-                    <TableHead>Amount</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Related To</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {expenses.map((expense) => (
-                    <TableRow key={expense.id}>
-                      <TableCell className="font-medium">
-                        {expense.title}
-                      </TableCell>
-                      <TableCell>{expense.categoryName}</TableCell>
-                      <TableCell>
-                        {formatCurrency(expense.amount, expense.currency)}
-                      </TableCell>
-                      <TableCell>{formatDate(expense.date)}</TableCell>
-                      <TableCell>
-                        <Badge
-                          variant="outline"
-                          className={
-                            expense.status === "APPROVED"
-                              ? "bg-green-50 text-green-700"
-                              : expense.status === "PENDING"
-                              ? "bg-amber-50 text-amber-700"
-                              : expense.status === "REJECTED"
-                              ? "bg-red-50 text-red-700"
-                              : "bg-gray-50 text-gray-700"
-                          }
-                        >
-                          {expense.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {expense.taskTitle ? (
-                          <span className="text-sm">
-                            Task: {expense.taskTitle}
-                          </span>
-                        ) : expense.milestoneTitle ? (
-                          <span className="text-sm">
-                            Milestone: {expense.milestoneTitle}
-                          </span>
-                        ) : (
-                          <span className="text-sm text-muted-foreground">
-                            -
-                          </span>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+            renderExpenseList()
           )}
         </CardContent>
       </Card>
 
-      {/* Add Expense Dialog */}
+      {/* Create Expense Dialog */}
       <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
-        <DialogContent className="max-w-md max-h-[90vh]">
+        <DialogContent className="sm:max-w-[600px]">
           <DialogHeader>
-            <DialogTitle>Add New Expense</DialogTitle>
+            <DialogTitle>Create New Expense</DialogTitle>
             <DialogDescription>
-              Create a new expense for your project. Expenses will be pending
-              until approved.
+              Add a new expense to track your project spending
             </DialogDescription>
           </DialogHeader>
-
-          <div className="max-h-[60vh] pr-4 overflow-y-auto">
-          <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <Label htmlFor="title">Title</Label>
-              <Input
-                id="title"
-                placeholder="Expense title"
-                value={newExpense.title}
-                onChange={(e) => handleInputChange("title", e.target.value)}
-              />
-              {formErrors.title && (
-                <p className="text-sm text-red-500">{formErrors.title}</p>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="description">Description (Optional)</Label>
-              <Textarea
-                id="description"
-                placeholder="Brief description of the expense"
-                value={newExpense.description}
-                onChange={(e) =>
-                  handleInputChange("description", e.target.value)
-                }
-                rows={3}
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="amount">Amount</Label>
-                <div className="relative">
-                  <DollarSign className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    id="amount"
-                    type="number"
-                      min="0.01"
-                    step="0.01"
-                    className="pl-8"
-                    value={newExpense.amount || ""}
-                      onChange={(e) => {
-                        // Validate and convert to number immediately
-                        const value = e.target.value;
-                        const numValue = value === "" ? 0 : parseFloat(value);
-                        // Only update if it's a valid number or empty string (which becomes 0)
-                        if (!isNaN(numValue) || value === "") {
-                          handleInputChange("amount", numValue);
-                        }
-                      }}
-                  />
-                </div>
-                {formErrors.amount && (
-                  <p className="text-sm text-red-500">{formErrors.amount}</p>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="date">Date</Label>
-                <div className="relative">
-                  <Calendar className="absolute left-2 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    id="date"
-                    type="date"
-                    className="pl-8"
-                    value={newExpense.date}
-                      onChange={(e) =>
-                        handleInputChange("date", e.target.value)
-                      }
-                  />
-                </div>
-                {formErrors.date && (
-                  <p className="text-sm text-red-500">{formErrors.date}</p>
-                )}
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="category">Category</Label>
-              <Select
-                value={newExpense.categoryId}
-                onValueChange={(value) =>
-                  handleInputChange("categoryId", value)
-                }
-              >
-                <SelectTrigger id="category">
-                  <SelectValue placeholder="Select category" />
-                </SelectTrigger>
-                <SelectContent>
-                    {(categories || []).map((category) => (
-                    <SelectItem key={category.id} value={category.id}>
-                      {category.name} ({formatCurrency(category.remaining)}{" "}
-                      remaining)
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {formErrors.categoryId && (
-                  <p className="text-sm text-red-500">
-                    {formErrors.categoryId}
-                  </p>
-              )}
-
-              {newExpense.categoryId && (
-                <div className="mt-2 text-sm">
-                  <div className="flex justify-between items-center">
-                    <span>Budget remaining:</span>
-                    <span className="font-medium">
-                      {formatCurrency(
-                        categories.find(
-                          (cat) => cat.id === newExpense.categoryId
-                        )?.remaining || 0
-                      )}
-                    </span>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="milestone">Related Milestone (Optional)</Label>
-              <Select
-                value={newExpense.milestoneId}
-                onValueChange={(value) =>
-                  handleInputChange("milestoneId", value)
-                }
-              >
-                <SelectTrigger id="milestone">
-                  <SelectValue placeholder="Select milestone" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
-                    {(milestones || []).map((milestone) => (
-                    <SelectItem key={milestone.id} value={milestone.id}>
-                      {milestone.title}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="task">Related Task (Optional)</Label>
-              <Select
-                value={newExpense.taskId}
-                onValueChange={(value) => handleInputChange("taskId", value)}
-              >
-                <SelectTrigger id="task">
-                  <SelectValue placeholder="Select task" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
-                  {getFilteredTasks().map((task) => (
-                    <SelectItem key={task.id} value={task.id}>
-                      {task.title}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              </div>
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setCreateDialogOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button onClick={submitExpenseForm} disabled={loading}>
-              {loading ? <LoadingSpinner /> : "Submit Expense"}
-            </Button>
-          </DialogFooter>
+          {renderExpenseForm()}
         </DialogContent>
       </Dialog>
     </div>

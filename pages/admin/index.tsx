@@ -50,7 +50,6 @@ import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import { BudgetProvider } from "@/contexts/BudgetContext";
 import BudgetAllocation from "@/components/admin/budget/BudgetAllocation";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import ExpenseApprovalTable from "@/components/admin/budget/ExpenseApprovalTable";
 
 export default function AdminDashboard() {
   const { data: session, status } = useSession();
@@ -247,7 +246,6 @@ export default function AdminDashboard() {
                 <TabsList className="mb-4">
                   <TabsTrigger value="budgets">Budget Allocation</TabsTrigger>
                   <TabsTrigger value="expenses">Expense Tracking</TabsTrigger>
-                  <TabsTrigger value="approval">Expense Approval</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="budgets">
@@ -270,10 +268,6 @@ export default function AdminDashboard() {
                       />
                     </CardContent>
                   </Card>
-                </TabsContent>
-
-                <TabsContent value="approval">
-                  <ExpenseApprovalTable />
                 </TabsContent>
               </Tabs>
             </div>

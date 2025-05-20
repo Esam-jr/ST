@@ -39,10 +39,10 @@ export interface Expense {
   currency: string;
   date: string;
   receipt: string | null;
-  status: string;
   categoryId: string | null;
   budgetId: string;
   category?: BudgetCategory | null;
+  createdBy?: { id: string; name: string; email: string } | null;
 }
 
 interface BudgetContextType {
@@ -55,11 +55,12 @@ interface BudgetContextType {
   // Filters and selection
   selectedBudgetId: string | null;
   selectedCategoryId: string | null;
-  selectedStatusFilter: string;
+  selectedStartupCallId: string | null;
   searchTerm: string;
 
   // Actions
   fetchBudgets: (startupCallId: string) => Promise<void>;
+  fetchExpenses: (startupCallId: string) => Promise<void>;
   createBudget: (
     startupCallId: string,
     budgetData: Partial<Budget>
@@ -110,13 +111,16 @@ interface BudgetContextType {
   // Filter setters
   setSelectedBudgetId: (id: string | null) => void;
   setSelectedCategoryId: (id: string | null) => void;
-  setSelectedStatusFilter: (status: string) => void;
+  setSelectedStartupCallId: (id: string | null) => void;
   setSearchTerm: (term: string) => void;
 
   // Utility functions
   getFilteredExpenses: () => Expense[];
   getBudgetById: (id: string) => Budget | undefined;
-  getCategoryById: (id: string) => BudgetCategory | undefined;
+  getCategoryById: (
+    budgetId: string,
+    categoryId: string
+  ) => BudgetCategory | undefined;
   getTotalExpenseAmount: (budgetId?: string) => number;
   getRemainingBudget: (budgetId?: string) => number;
   getPercentSpent: (budgetId?: string) => number;
@@ -140,12 +144,15 @@ export const BudgetProvider: React.FC<{ children: ReactNode }> = ({
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(
     null
   );
-  const [selectedStatusFilter, setSelectedStatusFilter] = useState("all");
+  const [selectedStartupCallId, setSelectedStartupCallId] = useState<
+    string | null
+  >(null);
   const [searchTerm, setSearchTerm] = useState("");
 
   // Fetch budgets for a startup call
   const fetchBudgets = useCallback(
     async (startupCallId: string) => {
+      console.log("Fetching budgets for startup call:", startupCallId);
       setIsLoading(true);
       setError(null);
 
@@ -153,6 +160,7 @@ export const BudgetProvider: React.FC<{ children: ReactNode }> = ({
         const response = await axios.get(
           `/api/startup-calls/${startupCallId}/budgets`
         );
+        console.log("Budgets fetched successfully:", response.data);
         const fetchedBudgets = response.data;
 
         // Set the first budget as selected by default if none is selected
@@ -163,35 +171,112 @@ export const BudgetProvider: React.FC<{ children: ReactNode }> = ({
         setBudgets(fetchedBudgets);
 
         // Fetch expenses for all budgets
+        console.log("Fetching expenses for budgets...");
         const allExpenses: Expense[] = [];
 
         for (const budget of fetchedBudgets) {
-          const expenseResponse = await axios.get(
-            `/api/startup-calls/${startupCallId}/budgets/${budget.id}/expenses`
-          );
-          // Enrich expenses with their categories
-          const enrichedExpenses = expenseResponse.data.map(
-            (expense: Expense) => ({
-              ...expense,
-              category: expense.categoryId
-                ? (budget.categories || []).find(
-                    (cat: BudgetCategory) => cat.id === expense.categoryId
-                  )
-                : null,
-            })
-          );
-          allExpenses.push(...enrichedExpenses);
+          try {
+            const expenseResponse = await axios.get(
+              `/api/startup-calls/${startupCallId}/budgets/${budget.id}/expenses`
+            );
+            console.log(
+              `Expenses for budget ${budget.id} fetched:`,
+              expenseResponse.data
+            );
+
+            // Enrich expenses with their categories
+            const enrichedExpenses = expenseResponse.data.map(
+              (expense: Expense) => ({
+                ...expense,
+                category: expense.categoryId
+                  ? (budget.categories || []).find(
+                      (cat: BudgetCategory) => cat.id === expense.categoryId
+                    )
+                  : null,
+              })
+            );
+            allExpenses.push(...enrichedExpenses);
+          } catch (expError) {
+            console.error(
+              `Error fetching expenses for budget ${budget.id}:`,
+              expError
+            );
+            // Continue with other budgets even if one fails
+          }
         }
 
         setExpenses(allExpenses);
       } catch (err) {
-        setError(err as Error);
         console.error("Error fetching budgets:", err);
+        setError(err as Error);
+
+        // Show more specific error information
+        if (axios.isAxiosError(err)) {
+          console.error("Axios error details:", {
+            status: err.response?.status,
+            statusText: err.response?.statusText,
+            data: err.response?.data,
+          });
+        }
+
+        // Set empty arrays to prevent UI from showing stale data
+        setBudgets([]);
+        setExpenses([]);
       } finally {
         setIsLoading(false);
       }
     },
     [selectedBudgetId]
+  );
+
+  // Add a utility method to fetch expenses separately
+  const fetchExpenses = useCallback(
+    async (startupCallId: string) => {
+      console.log("Fetching all expenses for startup call:", startupCallId);
+      if (!budgets.length) {
+        console.log("No budgets available, skipping expense fetch");
+        return;
+      }
+
+      setIsLoading(true);
+      try {
+        const allExpenses: Expense[] = [];
+
+        for (const budget of budgets) {
+          try {
+            const expenseResponse = await axios.get(
+              `/api/startup-calls/${startupCallId}/budgets/${budget.id}/expenses`
+            );
+
+            // Enrich expenses with their categories
+            const enrichedExpenses = expenseResponse.data.map(
+              (expense: Expense) => ({
+                ...expense,
+                category: expense.categoryId
+                  ? (budget.categories || []).find(
+                      (cat: BudgetCategory) => cat.id === expense.categoryId
+                    )
+                  : null,
+              })
+            );
+            allExpenses.push(...enrichedExpenses);
+          } catch (expError) {
+            console.error(
+              `Error fetching expenses for budget ${budget.id}:`,
+              expError
+            );
+          }
+        }
+
+        setExpenses(allExpenses);
+        console.log("All expenses fetched:", allExpenses.length);
+      } catch (err) {
+        console.error("Error fetching expenses:", err);
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [budgets]
   );
 
   // Create a new budget
@@ -455,7 +540,7 @@ export const BudgetProvider: React.FC<{ children: ReactNode }> = ({
     [selectedCategoryId]
   );
 
-  // Create an expense
+  // Create a new expense
   const createExpense = useCallback(
     async (
       startupCallId: string,
@@ -465,9 +550,49 @@ export const BudgetProvider: React.FC<{ children: ReactNode }> = ({
       setIsLoading(true);
 
       try {
+        // Handle FormData if it's already created
+        const isFormData = expenseData instanceof FormData;
+        let requestData: any;
+
+        if (isFormData) {
+          // FormData already created
+          requestData = expenseData;
+          // Make sure budgetId is set
+          if (!requestData.get("budgetId")) {
+            requestData.append("budgetId", budgetId);
+          }
+        } else {
+          // Create FormData for file upload
+          requestData = new FormData();
+
+          // Add all form data
+          Object.entries(expenseData).forEach(([key, value]) => {
+            if (key === "date" && value instanceof Date) {
+              requestData.append(key, value.toISOString());
+            } else if (key !== "receipt" || !value) {
+              requestData.append(key, String(value));
+            }
+          });
+
+          // Add receipt if present
+          if (expenseData.receipt) {
+            requestData.append("receipt", expenseData.receipt);
+          }
+
+          // Make sure budgetId is set
+          if (!expenseData.budgetId) {
+            requestData.append("budgetId", budgetId);
+          }
+        }
+
         const response = await axios.post(
           `/api/startup-calls/${startupCallId}/budgets/${budgetId}/expenses`,
-          expenseData
+          requestData,
+          {
+            headers: {
+              "Content-Type": "multipart/form-data",
+            },
+          }
         );
 
         const newExpense = response.data;
@@ -512,29 +637,54 @@ export const BudgetProvider: React.FC<{ children: ReactNode }> = ({
       setIsLoading(true);
 
       try {
+        // Handle FormData if it's already created
+        const isFormData = expenseData instanceof FormData;
+        let requestData: any;
+
+        if (isFormData) {
+          // FormData already created
+          requestData = expenseData;
+        } else {
+          // Create FormData for file upload
+          requestData = new FormData();
+
+          // Add all form data
+          Object.entries(expenseData).forEach(([key, value]) => {
+            if (key === "date" && value instanceof Date) {
+              requestData.append(key, value.toISOString());
+            } else if (key !== "receipt" || !value) {
+              requestData.append(key, String(value));
+            }
+          });
+
+          // Add receipt if present
+          if (expenseData.receipt) {
+            requestData.append("receipt", expenseData.receipt);
+          }
+        }
+
         const response = await axios.put(
           `/api/startup-calls/${startupCallId}/budgets/${budgetId}/expenses/${expenseId}`,
-          expenseData
+          requestData,
+          {
+            headers: {
+              "Content-Type": "multipart/form-data",
+            },
+          }
         );
 
         const updatedExpense = response.data;
 
-        // Ensure we have the category data if it was updated
-        if (updatedExpense.categoryId !== undefined) {
-          // If category changed, update the category reference
-          if (updatedExpense.categoryId) {
-            const budget = budgets.find((b) => b.id === budgetId);
-            if (budget) {
-              const category = (budget.categories || []).find(
-                (cat: BudgetCategory) => cat.id === updatedExpense.categoryId
-              );
-              if (category) {
-                updatedExpense.category = category;
-              }
+        // Enrich with category data if available
+        if (updatedExpense.categoryId) {
+          const budget = budgets.find((b) => b.id === budgetId);
+          if (budget) {
+            const category = (budget.categories || []).find(
+              (cat: BudgetCategory) => cat.id === updatedExpense.categoryId
+            );
+            if (category) {
+              updatedExpense.category = category;
             }
-          } else {
-            // If category was removed, set to null
-            updatedExpense.category = null;
           }
         }
 
@@ -605,19 +755,9 @@ export const BudgetProvider: React.FC<{ children: ReactNode }> = ({
       const matchesCategory =
         !selectedCategoryId || expense.categoryId === selectedCategoryId;
 
-      const matchesStatus =
-        selectedStatusFilter === "all" ||
-        expense.status === selectedStatusFilter;
-
-      return matchesSearch && matchesBudget && matchesCategory && matchesStatus;
+      return matchesSearch && matchesBudget && matchesCategory;
     });
-  }, [
-    expenses,
-    searchTerm,
-    selectedBudgetId,
-    selectedCategoryId,
-    selectedStatusFilter,
-  ]);
+  }, [expenses, searchTerm, selectedBudgetId, selectedCategoryId]);
 
   // Utility: Get budget by ID
   const getBudgetById = useCallback(
@@ -629,12 +769,10 @@ export const BudgetProvider: React.FC<{ children: ReactNode }> = ({
 
   // Utility: Get category by ID
   const getCategoryById = useCallback(
-    (id: string) => {
-      for (const budget of budgets) {
-        const category = (budget.categories || []).find(
-          (cat: BudgetCategory) => cat.id === id
-        );
-        if (category) return category;
+    (budgetId: string, categoryId: string) => {
+      const budget = budgets.find((b) => b.id === budgetId);
+      if (budget) {
+        return budget.categories.find((c) => c.id === categoryId);
       }
       return undefined;
     },
@@ -705,11 +843,12 @@ export const BudgetProvider: React.FC<{ children: ReactNode }> = ({
     // Filters and selection
     selectedBudgetId,
     selectedCategoryId,
-    selectedStatusFilter,
+    selectedStartupCallId,
     searchTerm,
 
     // Actions
     fetchBudgets,
+    fetchExpenses,
     createBudget,
     updateBudget,
     deleteBudget,
@@ -727,7 +866,7 @@ export const BudgetProvider: React.FC<{ children: ReactNode }> = ({
     // Filter setters
     setSelectedBudgetId,
     setSelectedCategoryId,
-    setSelectedStatusFilter,
+    setSelectedStartupCallId,
     setSearchTerm,
 
     // Utility functions

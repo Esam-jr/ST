@@ -2,6 +2,48 @@ import { NextApiRequest, NextApiResponse } from "next";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "../auth/[...nextauth]";
 import prisma from "@/lib/prisma";
+import formidable from "formidable";
+import fs from "fs";
+import path from "path";
+import { v4 as uuidv4 } from "uuid";
+
+// Disable the default body parser to handle file uploads
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+};
+
+// Parse form data with formidable
+const parseForm = (req: NextApiRequest) => {
+  return new Promise<{ fields: formidable.Fields; files: formidable.Files }>(
+    (resolve, reject) => {
+      const form = formidable({
+        multiples: false,
+        maxFileSize: 5 * 1024 * 1024, // 5MB limit
+        uploadDir: path.join(process.cwd(), "public/uploads/receipts"),
+        keepExtensions: true,
+        filename: (_name, _ext, part) => {
+          const uniqueFilename = `${uuidv4()}${path.extname(
+            part.originalFilename || ""
+          )}`;
+          return uniqueFilename;
+        },
+      });
+
+      // Ensure upload directory exists
+      const uploadDir = path.join(process.cwd(), "public/uploads/receipts");
+      if (!fs.existsSync(uploadDir)) {
+        fs.mkdirSync(uploadDir, { recursive: true });
+      }
+
+      form.parse(req, (err, fields, files) => {
+        if (err) reject(err);
+        else resolve({ fields, files });
+      });
+    }
+  );
+};
 
 export default async function handler(
   req: NextApiRequest,
@@ -170,18 +212,41 @@ export default async function handler(
   // Handle POST request - create expense
   else if (req.method === "POST") {
     try {
-      const {
-        title,
-        description,
-        amount,
-        categoryId,
-        date,
-        taskId,
-        milestoneId,
-      } = req.body;
+      // Parse form data including receipt file
+      const { fields, files } = await parseForm(req);
+
+      // Extract fields from the form data
+      const title = fields.title?.[0] || "";
+      const description = fields.description?.[0] || "";
+      const amount = fields.amount?.[0] ? parseFloat(fields.amount[0]) : 0;
+      const categoryId = fields.categoryId?.[0] || "";
+      const date = fields.date?.[0] || "";
+      const taskId = fields.taskId?.[0] === "none" ? null : fields.taskId?.[0];
+      const milestoneId =
+        fields.milestoneId?.[0] === "none" ? null : fields.milestoneId?.[0];
+
+      // Handle receipt file
+      const receiptFile = files.receipt?.[0];
+      let receiptUrl = null;
+
+      if (receiptFile) {
+        // Get the relative path for the URL
+        const relativePath = path.relative(
+          path.join(process.cwd(), "public"),
+          receiptFile.filepath
+        );
+
+        // Create a URL path for the receipt
+        receiptUrl = `/${relativePath.replace(/\\/g, "/")}`;
+      }
 
       // Validate required fields
       if (!title || amount === undefined || !categoryId || !date) {
+        // Clean up uploaded file if validation fails
+        if (receiptFile && fs.existsSync(receiptFile.filepath)) {
+          fs.unlinkSync(receiptFile.filepath);
+        }
+
         return res.status(400).json({
           message: "Missing required fields",
           code: "VALIDATION_ERROR",
@@ -195,9 +260,12 @@ export default async function handler(
       }
 
       // Validate amount is a valid number
-      const parsedAmount =
-        typeof amount === "string" ? parseFloat(amount) : amount;
-      if (isNaN(parsedAmount) || parsedAmount <= 0) {
+      if (isNaN(amount) || amount <= 0) {
+        // Clean up uploaded file if validation fails
+        if (receiptFile && fs.existsSync(receiptFile.filepath)) {
+          fs.unlinkSync(receiptFile.filepath);
+        }
+
         return res.status(400).json({
           message: "Amount must be a positive number",
           code: "VALIDATION_ERROR",
@@ -214,6 +282,11 @@ export default async function handler(
           },
         });
       } catch (error: any) {
+        // Clean up uploaded file if query fails
+        if (receiptFile && fs.existsSync(receiptFile.filepath)) {
+          fs.unlinkSync(receiptFile.filepath);
+        }
+
         console.error("Database error finding startup:", error);
         return res.status(503).json({
           message: "Database error when trying to find your startup",
@@ -224,6 +297,11 @@ export default async function handler(
       }
 
       if (!startup) {
+        // Clean up uploaded file if startup not found
+        if (receiptFile && fs.existsSync(receiptFile.filepath)) {
+          fs.unlinkSync(receiptFile.filepath);
+        }
+
         return res.status(404).json({
           message: "No startup found for this user",
           code: "NOT_FOUND",
@@ -240,6 +318,11 @@ export default async function handler(
           },
         });
       } catch (error: any) {
+        // Clean up uploaded file if query fails
+        if (receiptFile && fs.existsSync(receiptFile.filepath)) {
+          fs.unlinkSync(receiptFile.filepath);
+        }
+
         console.error("Database error finding application:", error);
         return res.status(503).json({
           message:
@@ -251,6 +334,11 @@ export default async function handler(
       }
 
       if (!approvedApplication) {
+        // Clean up uploaded file if application not found
+        if (receiptFile && fs.existsSync(receiptFile.filepath)) {
+          fs.unlinkSync(receiptFile.filepath);
+        }
+
         return res.status(404).json({
           message: "No approved application found",
           code: "NOT_FOUND",
@@ -272,6 +360,11 @@ export default async function handler(
           });
 
           if (!budget) {
+            // Clean up uploaded file if budget not found
+            if (receiptFile && fs.existsSync(receiptFile.filepath)) {
+              fs.unlinkSync(receiptFile.filepath);
+            }
+
             return res.status(404).json({
               message: "No budget found",
               code: "NOT_FOUND",
@@ -283,6 +376,11 @@ export default async function handler(
             (cat) => cat.id === categoryId
           );
           if (!category) {
+            // Clean up uploaded file if category not found
+            if (receiptFile && fs.existsSync(receiptFile.filepath)) {
+              fs.unlinkSync(receiptFile.filepath);
+            }
+
             return res.status(400).json({
               message: "Invalid category",
               code: "VALIDATION_ERROR",
@@ -301,30 +399,36 @@ export default async function handler(
 
           // Validate budget limit
           const remainingBudget = category.allocatedAmount - categorySpent;
-          if (parsedAmount > remainingBudget) {
+          if (amount > remainingBudget) {
+            // Clean up uploaded file if budget exceeded
+            if (receiptFile && fs.existsSync(receiptFile.filepath)) {
+              fs.unlinkSync(receiptFile.filepath);
+            }
+
             return res.status(400).json({
               message: `Expense exceeds remaining budget for category ${category.name}. Remaining: ${remainingBudget}`,
               code: "BUDGET_EXCEEDED",
               details: {
                 categoryId: category.id,
                 categoryName: category.name,
-                requested: parsedAmount,
+                requested: amount,
                 remaining: remainingBudget,
               },
             });
           }
 
-          // Create expense
+          // Create expense with receipt URL if available
           const expense = await tx.expense.create({
             data: {
               budgetId: budget.id,
               categoryId,
               title,
               description,
-              amount: parsedAmount,
+              amount,
               currency: budget.currency,
               date: new Date(date),
               status: "PENDING", // All new expenses start as pending
+              receipt: receiptUrl, // Add the receipt URL
             },
           });
 
@@ -375,6 +479,11 @@ export default async function handler(
           return res.status(201).json(expenseData);
         });
       } catch (error: any) {
+        // Clean up uploaded file if transaction fails
+        if (receiptFile && fs.existsSync(receiptFile.filepath)) {
+          fs.unlinkSync(receiptFile.filepath);
+        }
+
         console.error("Transaction error creating expense:", error);
 
         if (error.code === "P2002") {

@@ -105,7 +105,7 @@ export const BudgetForm = ({
     title: budget?.title || "",
     description: budget?.description || "",
     totalAmount: budget?.totalAmount || 0,
-    currency: budget?.currency || "INR",
+    currency: budget?.currency || "USD",
     fiscalYear: budget?.fiscalYear || currentYear,
     status: budget?.status || "active",
     categories: budget?.categories?.length
@@ -114,7 +114,13 @@ export const BudgetForm = ({
           description: cat.description || "",
           allocatedAmount: cat.allocatedAmount,
         }))
-      : [{ name: "", description: "", allocatedAmount: 0 }],
+      : [
+          {
+            name: "General",
+            description: "General expenses",
+            allocatedAmount: 0,
+          },
+        ],
   };
 
   // Initialize form
@@ -277,9 +283,7 @@ export const BudgetForm = ({
                   <FormControl>
                     <div className="relative">
                       <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                        <span className="text-sm text-gray-500">
-                          {form.watch("currency") === "INR" ? "₹" : "$"}
-                        </span>
+                        <span className="text-sm text-gray-500">$</span>
                       </div>
                       <Input
                         type="number"
@@ -315,7 +319,6 @@ export const BudgetForm = ({
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="INR">INR - Indian Rupee</SelectItem>
                       <SelectItem value="USD">USD - US Dollar</SelectItem>
                       <SelectItem value="EUR">EUR - Euro</SelectItem>
                       <SelectItem value="GBP">GBP - British Pound</SelectItem>
@@ -544,9 +547,7 @@ export const BudgetForm = ({
                         <FormControl>
                           <div className="relative">
                             <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
-                              <span className="text-sm text-gray-500">
-                                {form.watch("currency") === "INR" ? "₹" : "$"}
-                              </span>
+                              <span className="text-sm text-gray-500">$</span>
                             </div>
                             <Input
                               type="number"

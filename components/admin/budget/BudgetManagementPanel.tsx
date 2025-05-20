@@ -20,7 +20,6 @@ import { RefreshCcw, FileText } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import BudgetOverviewPanel from "./BudgetOverviewPanel";
 import ExpenseManagementPanel from "./ExpenseManagementPanel";
-import PendingApprovalsPanel from "./PendingApprovalsPanel";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 
 export type StartupCall = {
@@ -116,7 +115,7 @@ export default function BudgetManagementPanel({
           <div>
             <CardTitle className="text-2xl">Budget Management</CardTitle>
             <CardDescription>
-              Manage budgets and expenses for startup calls
+              Manage budgets and view expense history for startup calls
             </CardDescription>
           </div>
           <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
@@ -179,19 +178,15 @@ export default function BudgetManagementPanel({
             onValueChange={setActiveTab}
             className="w-full"
           >
-            <TabsList className="grid w-full grid-cols-3">
+            <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="overview">Budget Overview</TabsTrigger>
-              <TabsTrigger value="expenses">Expense Management</TabsTrigger>
-              <TabsTrigger value="approvals">Pending Approvals</TabsTrigger>
+              <TabsTrigger value="expenses">Expense History</TabsTrigger>
             </TabsList>
             <TabsContent value="overview" className="mt-4">
               <BudgetOverviewPanel startupCallId={selectedCallId} />
             </TabsContent>
             <TabsContent value="expenses" className="mt-4">
               <ExpenseManagementPanel startupCallId={selectedCallId} />
-            </TabsContent>
-            <TabsContent value="approvals" className="mt-4">
-              <PendingApprovalsPanel startupCallId={selectedCallId} />
             </TabsContent>
           </Tabs>
         )}
