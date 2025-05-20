@@ -1,4 +1,4 @@
-import { ClassValue, clsx } from "clsx";
+import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 
 /**
@@ -10,15 +10,26 @@ export function cn(...inputs: ClassValue[]) {
 
 /**
  * Format a number as currency
- * @param amount - The amount to format
- * @param currency - The currency code (USD, EUR, etc.)
- * @returns The formatted currency string
+ * @param amount The amount to format
+ * @param currency The currency code (e.g., USD, EUR)
+ * @returns Formatted currency string
  */
 export function formatCurrency(
-  amount: number,
-  currency: string = "USD"
+  amount: number | string | null | undefined,
+  currency = "USD"
 ): string {
-  if (amount === undefined || amount === null) return "N/A";
+  if (amount === null || amount === undefined) {
+    return "N/A";
+  }
+
+  // Convert to number if it's a string
+  const numericAmount =
+    typeof amount === "string" ? parseFloat(amount) : amount;
+
+  // Handle NaN
+  if (isNaN(numericAmount)) {
+    return "Invalid Amount";
+  }
 
   try {
     return new Intl.NumberFormat("en-US", {
@@ -26,28 +37,38 @@ export function formatCurrency(
       currency: currency,
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
-    }).format(amount);
+    }).format(numericAmount);
   } catch (error) {
     console.error("Error formatting currency:", error);
-    return `${amount} ${currency}`;
+    return `${numericAmount} ${currency}`;
   }
 }
 
 /**
- * Format a date in a human-readable format
- * @param date - The date to format
- * @returns The formatted date string
+ * Format a date string or Date object
+ * @param date Date to format
+ * @returns Formatted date string
  */
 export function formatDate(date: string | Date): string {
-  if (!date) return "No date";
+  if (!date) return "N/A";
 
-  const dateObj = typeof date === "string" ? new Date(date) : date;
+  try {
+    const dateObj = typeof date === "string" ? new Date(date) : date;
 
-  return new Intl.DateTimeFormat("en-US", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  }).format(dateObj);
+    // Check if date is valid
+    if (isNaN(dateObj.getTime())) {
+      return "Invalid Date";
+    }
+
+    return dateObj.toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+  } catch (error) {
+    console.error("Error formatting date:", error);
+    return String(date);
+  }
 }
 
 /**

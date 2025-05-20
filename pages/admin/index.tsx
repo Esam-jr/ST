@@ -50,6 +50,7 @@ import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import { BudgetProvider } from "@/contexts/BudgetContext";
 import BudgetAllocation from "@/components/admin/budget/BudgetAllocation";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import ExpenseTrackingPanel from "@/components/admin/budget/ExpenseTrackingPanel";
 
 export default function AdminDashboard() {
   const { data: session, status } = useSession();
@@ -253,21 +254,7 @@ export default function AdminDashboard() {
                 </TabsContent>
 
                 <TabsContent value="expenses">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Expense Tracking</CardTitle>
-                      <CardDescription>
-                        Monitor all expenses across startup calls and budgets
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <iframe
-                        src="/api/embed/expenses-dashboard"
-                        className="w-full h-[70vh] border-none rounded-md"
-                        title="Expense Dashboard"
-                      />
-                    </CardContent>
-                  </Card>
+                  <ExpenseTrackingPanel />
                 </TabsContent>
               </Tabs>
             </div>

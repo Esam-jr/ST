@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
+import { useRouter } from "next/router";
 import {
   Card,
   CardContent,
@@ -62,6 +63,7 @@ const BudgetAllocation: React.FC<BudgetAllocationProps> = ({
 }) => {
   const { toast } = useToast();
   const { budgets, fetchBudgets } = useBudget();
+  const router = useRouter();
 
   const [startupCalls, setStartupCalls] = useState<StartupCall[]>([]);
   const [selectedCallId, setSelectedCallId] = useState<string>(

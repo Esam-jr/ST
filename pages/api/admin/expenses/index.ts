@@ -47,6 +47,18 @@ export default async function handler(
         };
       }
 
+      // Fetch startup calls for the filter UI
+      const startupCalls = await prisma.startupCall.findMany({
+        select: {
+          id: true,
+          title: true,
+          status: true,
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+      });
+
       // Fetch expenses with necessary relations
       const expenses = await prisma.expense.findMany({
         where,
@@ -59,14 +71,10 @@ export default async function handler(
                   title: true,
                 },
               },
-              application: {
-                include: {
-                  startup: {
-                    select: {
-                      id: true,
-                      name: true,
-                    },
-                  },
+              categories: {
+                select: {
+                  id: true,
+                  name: true,
                 },
               },
             },
@@ -77,6 +85,13 @@ export default async function handler(
               name: true,
             },
           },
+          createdBy: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
         },
         orderBy: [
           { status: "asc" }, // PENDING first
@@ -85,10 +100,18 @@ export default async function handler(
       });
 
       // Transform data to add the startup name for convenience
-      const transformedExpenses = expenses.map((expense) => ({
-        ...expense,
-        startupName: expense.budget.application?.startup.name || "Unknown",
-      }));
+      const transformedExpenses = expenses.map((expense) => {
+        const budgetCategory = expense.budget.categories.find(
+          (cat) => cat.id === expense.categoryId
+        );
+
+        return {
+          ...expense,
+          categoryName:
+            expense.category?.name || budgetCategory?.name || "Unknown",
+          startupCall: expense.budget.startupCall,
+        };
+      });
 
       // Get the unique startupCallIds from the expenses
       const startupCallIds = Array.from(
@@ -143,6 +166,7 @@ export default async function handler(
       return res.status(200).json({
         expenses: transformedExpenses,
         startups: startupInfo,
+        startupCalls,
         filters: {
           startupCallId: startupCallId || null,
           status: status || null,
@@ -188,7 +212,7 @@ export default async function handler(
           amount: Number(amount),
           date: new Date(date),
           status: status || "APPROVED", // Admin-created expenses are approved by default
-          currency: "INR", // Hardcoded for now, could be made configurable
+          currency: "USD", // Changed from INR to USD as default
         },
         include: {
           budget: true,
