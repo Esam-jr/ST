@@ -107,8 +107,7 @@ export default async function handler(
   // Handle expense approval/rejection
   if (req.method === "PATCH") {
     try {
-      const { id, status } = req.body;
-      const rejectionReason = req.body.rejectionReason;
+      const { id, status, rejectionReason } = req.body;
 
       if (!id || !status) {
         return res.status(400).json({ message: "Missing required fields" });
@@ -121,12 +120,13 @@ export default async function handler(
 
       // Update expense status
       const updateData: any = { status };
+
+      // If rejecting, store the reason in the description field
       if (status === "REJECTED" && rejectionReason) {
-        // Only store rejectionReason if your schema has this field
-        // Otherwise, handle it differently
         updateData.description = `Rejected: ${rejectionReason}`;
       }
 
+      // Update the expense
       const updatedExpense = await prisma.expense.update({
         where: { id },
         data: updateData,

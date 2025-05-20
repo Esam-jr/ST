@@ -76,6 +76,7 @@ export default function ExpenseTrackingPanel() {
 
   // Load expense data from the API
   useEffect(() => {
+    console.log("Filters changed:", filters);
     fetchExpenses();
   }, [filters]);
 
@@ -84,18 +85,43 @@ export default function ExpenseTrackingPanel() {
     try {
       // Build query parameters from filters
       const params = new URLSearchParams();
-      if (filters.startupCallId && filters.startupCallId !== "all")
+      if (filters.startupCallId && filters.startupCallId !== "all") {
+        console.log("Adding startup call filter:", filters.startupCallId);
         params.append("startupCallId", filters.startupCallId);
-      if (filters.status && filters.status !== "all")
+      }
+      if (filters.status && filters.status !== "all") {
+        console.log("Adding status filter:", filters.status);
         params.append("status", filters.status);
-      if (filters.startupId && filters.startupId !== "all")
+      }
+      if (filters.startupId && filters.startupId !== "all") {
+        console.log("Adding startup filter:", filters.startupId);
         params.append("startupId", filters.startupId);
+      }
 
+      console.log("Fetching expenses with params:", params.toString());
       const response = await axios.get(
         `/api/admin/expenses?${params.toString()}`
       );
-      setExpenses(response.data.expenses || []);
-      setStartupCalls(response.data.startupCalls || []);
+
+      if (response.data.expenses) {
+        // Make sure each expense has the necessary properties
+        const processedExpenses = response.data.expenses.map(
+          (expense: any) => ({
+            ...expense,
+            startupCall: expense.budget?.startupCall || null,
+            categoryName:
+              expense.category?.name || expense.categoryName || "Uncategorized",
+          })
+        );
+
+        setExpenses(processedExpenses);
+      } else {
+        setExpenses([]);
+      }
+
+      if (response.data.startupCalls) {
+        setStartupCalls(response.data.startupCalls);
+      }
 
       toast({
         title: "Expenses loaded",
@@ -113,16 +139,23 @@ export default function ExpenseTrackingPanel() {
     }
   };
 
-  // Filter expenses based on search query
+  // Filter expenses based on search query and properly handle nested properties
   const filteredExpenses = expenses.filter((expense) => {
     if (!searchQuery.trim()) return true;
 
     const query = searchQuery.toLowerCase();
+
+    // Safely check nested properties
+    const startupCallTitle = expense.startupCall?.title || "";
+    const categoryName = expense.categoryName || "";
+    const title = expense.title || "";
+    const description = expense.description || "";
+
     return (
-      expense.title?.toLowerCase().includes(query) ||
-      expense.description?.toLowerCase().includes(query) ||
-      expense.startupCall?.title?.toLowerCase().includes(query) ||
-      expense.categoryName?.toLowerCase().includes(query)
+      title.toLowerCase().includes(query) ||
+      description.toLowerCase().includes(query) ||
+      startupCallTitle.toLowerCase().includes(query) ||
+      categoryName.toLowerCase().includes(query)
     );
   });
 
@@ -156,17 +189,26 @@ export default function ExpenseTrackingPanel() {
         status: "APPROVED",
       });
 
-      toast({
-        title: "Expense Approved",
-        description: "The expense has been approved successfully.",
-      });
+      if (response.data && response.data.expense) {
+        // Update expense in the list with the actual returned data
+        setExpenses((prevExpenses) =>
+          prevExpenses.map((exp) =>
+            exp.id === selectedExpense.id
+              ? { ...exp, ...response.data.expense, status: "APPROVED" }
+              : exp
+          )
+        );
 
-      // Update expense in the list
-      setExpenses((prevExpenses) =>
-        prevExpenses.map((exp) =>
-          exp.id === selectedExpense.id ? { ...exp, status: "APPROVED" } : exp
-        )
-      );
+        toast({
+          title: "Expense Approved",
+          description: "The expense has been approved successfully.",
+        });
+      } else {
+        toast({
+          title: "Warning",
+          description: "Expense approved but the response data was incomplete.",
+        });
+      }
 
       setApproveDialogOpen(false);
       setSelectedExpense(null);
@@ -195,26 +237,34 @@ export default function ExpenseTrackingPanel() {
       const response = await axios.patch(`/api/admin/expenses`, {
         id: selectedExpense.id,
         status: "REJECTED",
-        rejectionReason,
+        rejectionReason: rejectionReason.trim(),
       });
 
-      toast({
-        title: "Expense Rejected",
-        description: "The expense has been rejected successfully.",
-      });
+      if (response.data && response.data.expense) {
+        // Update expense in the list with the actual returned data
+        setExpenses((prevExpenses) =>
+          prevExpenses.map((exp) =>
+            exp.id === selectedExpense.id
+              ? {
+                  ...exp,
+                  ...response.data.expense,
+                  status: "REJECTED",
+                  description: `Rejected: ${rejectionReason}`,
+                }
+              : exp
+          )
+        );
 
-      // Update expense in the list
-      setExpenses((prevExpenses) =>
-        prevExpenses.map((exp) =>
-          exp.id === selectedExpense.id
-            ? {
-                ...exp,
-                status: "REJECTED",
-                description: `Rejected: ${rejectionReason}`,
-              }
-            : exp
-        )
-      );
+        toast({
+          title: "Expense Rejected",
+          description: "The expense has been rejected successfully.",
+        });
+      } else {
+        toast({
+          title: "Warning",
+          description: "Expense rejected but the response data was incomplete.",
+        });
+      }
 
       setRejectDialogOpen(false);
       setSelectedExpense(null);
@@ -376,17 +426,26 @@ export default function ExpenseTrackingPanel() {
                   {filteredExpenses.map((expense) => (
                     <TableRow key={expense.id}>
                       <TableCell className="font-medium">
-                        {expense.title}
+                        {expense.title || "Untitled"}
                       </TableCell>
                       <TableCell>
-                        {formatCurrency(expense.amount, expense.currency)}
+                        {formatCurrency(
+                          expense.amount,
+                          expense.currency || "USD"
+                        )}
                       </TableCell>
-                      <TableCell>{expense.categoryName}</TableCell>
                       <TableCell>
-                        {expense.startupCall?.title || "Unknown"}
+                        {expense.categoryName || "Uncategorized"}
+                      </TableCell>
+                      <TableCell>
+                        {expense.startupCall?.title ||
+                          expense.budget?.startupCall?.title ||
+                          "Unknown"}
                       </TableCell>
                       <TableCell>{formatDate(expense.date)}</TableCell>
-                      <TableCell>{getStatusBadge(expense.status)}</TableCell>
+                      <TableCell>
+                        {getStatusBadge(expense.status || "PENDING")}
+                      </TableCell>
                       <TableCell>
                         {expense.receipt ? (
                           <a
