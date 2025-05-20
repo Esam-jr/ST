@@ -104,6 +104,7 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [milestones, setMilestones] = useState<Milestone[]>([]);
+  const [budget, setBudget] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [fetchingExpenses, setFetchingExpenses] = useState(false);
@@ -197,61 +198,31 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
         }
       }
 
-      if (
-        expenseResponse.status === "fulfilled" &&
-        "data" in expenseResponse.value
-      ) {
-        setExpenses(expenseResponse.value.data || []);
-      } else {
-        const errorReason =
-          expenseResponse.status === "rejected"
-            ? (expenseResponse as PromiseRejectedResult).reason
-            : new Error("Unknown expense error");
-
-        console.error("Error fetching expenses:", errorReason);
-
-        // Check for specific error codes
-        const errorResponse = errorReason?.response?.data;
-        if (errorResponse) {
-          if (
-            errorResponse.code === "CONNECTION_ERROR" ||
-            errorResponse.code === "DB_CONNECTION_ERROR"
-          ) {
-            shouldRetry = true;
-            toast({
-              title: "Connection Issue",
-              description: isRetry
-                ? `Database connection problem. Retry attempt ${retryCount}/3...`
-                : "Database connection problem. Will retry automatically...",
-              variant: "destructive",
-            });
-          } else if (errorResponse.code === "SCHEMA_ERROR") {
-            toast({
-              title: "System Error",
-              description:
-                "There's a technical issue with the database. Our team has been notified.",
-              variant: "destructive",
-            });
-          } else {
-            toast({
-              title: "Warning",
-              description:
-                errorResponse.message ||
-                "Failed to load expenses. Some data may be missing.",
-              variant: "destructive",
-            });
-          }
+      // Handle expenses response
+      if (expenseResponse.status === "fulfilled") {
+        // Check if the response has the new structure (with expenses property)
+        if (expenseResponse.value?.data?.expenses) {
+          const responseData = expenseResponse.value.data;
+          setExpenses(responseData.expenses);
+          setCategories(responseData.categories || []);
+          setBudget(responseData.budget || null);
+        } else if (Array.isArray(expenseResponse.value?.data)) {
+          // Fallback for old response structure
+          setExpenses(expenseResponse.value.data);
         } else {
-          // Generic error handling
-          toast({
-            title: "Warning",
-            description: "Failed to load expenses. Some data may be missing.",
-            variant: "destructive",
-          });
+          console.error(
+            "Unexpected expense data format:",
+            expenseResponse.value?.data
+          );
+          setError(
+            "Received invalid expense data format. Please try again later."
+          );
+          shouldRetry = true;
         }
-
-        // Initialize with empty array to prevent errors
-        setExpenses([]);
+      } else {
+        console.error("Failed to load expenses:", expenseResponse.reason);
+        setError("Failed to load expense data. Please try again later.");
+        shouldRetry = true;
       }
 
       if (taskResponse.status === "fulfilled" && "data" in taskResponse.value) {

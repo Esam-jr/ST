@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from "next";
 import { getServerSession } from "next-auth/next";
-import { authOptions } from "../auth/[...nextauth]";
+import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import formidable from "formidable";
 import fs from "fs";
@@ -49,490 +49,215 @@ export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
-  // Get session
-  const session = await getServerSession(req, res, authOptions);
+  try {
+    // Get session
+    const session = await getServerSession(req, res, authOptions);
 
-  if (!session || !session.user || session.user.role !== "ENTREPRENEUR") {
-    return res.status(401).json({ message: "Unauthorized" });
-  }
-
-  // Handle GET request - list expenses
-  if (req.method === "GET") {
-    try {
-      // First, find the entrepreneur's startup
-      let startup;
-      try {
-        startup = await prisma.startup.findFirst({
-          where: {
-            founderId: session.user.id,
-          },
-        });
-      } catch (error: any) {
-        console.error("Database error finding startup:", error);
-        return res.status(503).json({
-          message: "Unable to connect to the database. Please try again.",
-          code: "DB_CONNECTION_ERROR",
-          details:
-            process.env.NODE_ENV === "development" ? error.message : undefined,
-        });
-      }
-
-      if (!startup) {
-        return res
-          .status(404)
-          .json({ message: "No startup found for this user" });
-      }
-
-      // Find the approved application
-      let approvedApplication;
-      try {
-        approvedApplication = await prisma.startupCallApplication.findFirst({
-          where: {
-            startupId: startup.id,
-            status: "APPROVED",
-          },
-          include: {
-            call: true,
-          },
-        });
-      } catch (error: any) {
-        console.error("Database error finding application:", error);
-        return res.status(503).json({
-          message: "Database error when finding your approved application.",
-          code: "DB_QUERY_ERROR",
-          details:
-            process.env.NODE_ENV === "development" ? error.message : undefined,
-        });
-      }
-
-      if (!approvedApplication) {
-        return res
-          .status(404)
-          .json({ message: "No approved application found" });
-      }
-
-      // Get budget for this call
-      let budget;
-      try {
-        budget = await prisma.budget.findFirst({
-          where: {
-            startupCallId: approvedApplication.callId,
-          },
-          include: {
-            categories: true,
-          },
-        });
-      } catch (error: any) {
-        console.error("Database error finding budget:", error);
-        return res.status(503).json({
-          message: "Database error when retrieving budget information.",
-          code: "BUDGET_QUERY_ERROR",
-          details:
-            process.env.NODE_ENV === "development" ? error.message : undefined,
-        });
-      }
-
-      if (!budget) {
-        return res
-          .status(404)
-          .json({ message: "No budget found for your active project" });
-      }
-
-      // Get expenses
-      let expenses;
-      try {
-        expenses = await prisma.expense.findMany({
-          where: {
-            budgetId: budget.id,
-          },
-          orderBy: {
-            date: "desc",
-          },
-        });
-      } catch (error: any) {
-        console.error("Database error finding expenses:", error);
-        return res.status(503).json({
-          message: "Database error when retrieving your expenses.",
-          code: "EXPENSE_QUERY_ERROR",
-          details:
-            process.env.NODE_ENV === "development" ? error.message : undefined,
-        });
-      }
-
-      // Enrich expenses with category name
-      const enrichedExpenses = expenses.map((expense) => {
-        const category = budget.categories.find(
-          (cat) => cat.id === expense.categoryId
-        );
-        return {
-          ...expense,
-          categoryName: category?.name || "Uncategorized",
-        };
-      });
-
-      return res.status(200).json(enrichedExpenses);
-    } catch (error: any) {
-      console.error("Error fetching expenses:", error);
-
-      // Provide more specific error messages based on error type
-      if (error.code === "P2021") {
-        return res.status(500).json({
-          message:
-            "The database schema appears to be outdated. Please contact support.",
-          code: "SCHEMA_ERROR",
-        });
-      } else if (error.code === "P2023" || error.code === "P2025") {
-        return res.status(400).json({
-          message: "Invalid ID format or record not found",
-          code: "INVALID_INPUT",
-        });
-      } else if (
-        error.message &&
-        (error.message.includes("prepared statement") ||
-          error.message.includes("connection") ||
-          error.message.includes("network"))
-      ) {
-        return res.status(503).json({
-          message: "Database connection issue. Please try again in a moment.",
-          code: "CONNECTION_ERROR",
-          details:
-            process.env.NODE_ENV === "development" ? error.message : undefined,
-        });
-      }
-
-      return res.status(500).json({
-        message: "Failed to load expense data. Please try again later.",
-        code: "SERVER_ERROR",
-        details:
-          process.env.NODE_ENV === "development" ? error.message : undefined,
-      });
+    if (!session || !session.user || session.user.role !== "ENTREPRENEUR") {
+      return res.status(401).json({ message: "Unauthorized" });
     }
-  }
 
-  // Handle POST request - create expense
-  else if (req.method === "POST") {
-    try {
-      // Parse form data including receipt file
-      const { fields, files } = await parseForm(req);
-
-      // Extract fields from the form data
-      const title = fields.title?.[0] || "";
-      const description = fields.description?.[0] || "";
-      const amount = fields.amount?.[0] ? parseFloat(fields.amount[0]) : 0;
-      const categoryId = fields.categoryId?.[0] || "";
-      const date = fields.date?.[0] || "";
-      const taskId = fields.taskId?.[0] === "none" ? null : fields.taskId?.[0];
-      const milestoneId =
-        fields.milestoneId?.[0] === "none" ? null : fields.milestoneId?.[0];
-
-      // Handle receipt file
-      const receiptFile = files.receipt?.[0];
-      let receiptUrl = null;
-
-      if (receiptFile) {
-        // Get the relative path for the URL
-        const relativePath = path.relative(
-          path.join(process.cwd(), "public"),
-          receiptFile.filepath
-        );
-
-        // Create a URL path for the receipt
-        receiptUrl = `/${relativePath.replace(/\\/g, "/")}`;
-      }
-
-      // Validate required fields
-      if (!title || amount === undefined || !categoryId || !date) {
-        // Clean up uploaded file if validation fails
-        if (receiptFile && fs.existsSync(receiptFile.filepath)) {
-          fs.unlinkSync(receiptFile.filepath);
-        }
-
-        return res.status(400).json({
-          message: "Missing required fields",
-          code: "VALIDATION_ERROR",
-          details: {
-            title: !title ? "Title is required" : undefined,
-            amount: amount === undefined ? "Amount is required" : undefined,
-            categoryId: !categoryId ? "Category is required" : undefined,
-            date: !date ? "Date is required" : undefined,
-          },
-        });
-      }
-
-      // Validate amount is a valid number
-      if (isNaN(amount) || amount <= 0) {
-        // Clean up uploaded file if validation fails
-        if (receiptFile && fs.existsSync(receiptFile.filepath)) {
-          fs.unlinkSync(receiptFile.filepath);
-        }
-
-        return res.status(400).json({
-          message: "Amount must be a positive number",
-          code: "VALIDATION_ERROR",
-          details: { amount: "Amount must be a positive number" },
-        });
-      }
-
-      // Find startup with error handling
-      let startup;
+    // Handle GET request - list expenses
+    if (req.method === "GET") {
       try {
-        startup = await prisma.startup.findFirst({
+        // First, find the entrepreneur's startup
+        const startup = await prisma.startup.findFirst({
           where: {
             founderId: session.user.id,
           },
         });
-      } catch (error: any) {
-        // Clean up uploaded file if query fails
-        if (receiptFile && fs.existsSync(receiptFile.filepath)) {
-          fs.unlinkSync(receiptFile.filepath);
+
+        if (!startup) {
+          return res
+            .status(404)
+            .json({ message: "No startup found for this user" });
         }
 
-        console.error("Database error finding startup:", error);
-        return res.status(503).json({
-          message: "Database error when trying to find your startup",
-          code: "DB_ERROR",
-          details:
-            process.env.NODE_ENV === "development" ? error.message : undefined,
-        });
-      }
-
-      if (!startup) {
-        // Clean up uploaded file if startup not found
-        if (receiptFile && fs.existsSync(receiptFile.filepath)) {
-          fs.unlinkSync(receiptFile.filepath);
-        }
-
-        return res.status(404).json({
-          message: "No startup found for this user",
-          code: "NOT_FOUND",
-        });
-      }
-
-      // Find the approved application with error handling
-      let approvedApplication;
-      try {
-        approvedApplication = await prisma.startupCallApplication.findFirst({
-          where: {
-            startupId: startup.id,
-            status: "APPROVED",
-          },
-        });
-      } catch (error: any) {
-        // Clean up uploaded file if query fails
-        if (receiptFile && fs.existsSync(receiptFile.filepath)) {
-          fs.unlinkSync(receiptFile.filepath);
-        }
-
-        console.error("Database error finding application:", error);
-        return res.status(503).json({
-          message:
-            "Database error when trying to find your approved application",
-          code: "DB_ERROR",
-          details:
-            process.env.NODE_ENV === "development" ? error.message : undefined,
-        });
-      }
-
-      if (!approvedApplication) {
-        // Clean up uploaded file if application not found
-        if (receiptFile && fs.existsSync(receiptFile.filepath)) {
-          fs.unlinkSync(receiptFile.filepath);
-        }
-
-        return res.status(404).json({
-          message: "No approved application found",
-          code: "NOT_FOUND",
-        });
-      }
-
-      // Use a transaction for the remaining database operations to ensure atomicity
-      try {
-        return await prisma.$transaction(async (tx) => {
-          // Get budget for this call
-          const budget = await tx.budget.findFirst({
+        // Find the approved application
+        const approvedApplication =
+          await prisma.startupCallApplication.findFirst({
             where: {
-              startupCallId: approvedApplication.callId,
+              startupId: startup.id,
+              status: "APPROVED",
             },
             include: {
-              categories: true,
-              expenses: true,
+              startupCall: {
+                include: {
+                  budget: true,
+                },
+              },
             },
           });
 
-          if (!budget) {
-            // Clean up uploaded file if budget not found
-            if (receiptFile && fs.existsSync(receiptFile.filepath)) {
-              fs.unlinkSync(receiptFile.filepath);
-            }
+        if (!approvedApplication || !approvedApplication.startupCall.budget) {
+          return res
+            .status(404)
+            .json({ message: "No approved application or budget found" });
+        }
 
-            return res.status(404).json({
-              message: "No budget found",
-              code: "NOT_FOUND",
-            });
-          }
+        // Get budget ID from the approved application
+        const budgetId = approvedApplication.startupCall.budget.id;
 
-          // Validate category exists
-          const category = budget.categories.find(
-            (cat) => cat.id === categoryId
-          );
-          if (!category) {
-            // Clean up uploaded file if category not found
-            if (receiptFile && fs.existsSync(receiptFile.filepath)) {
-              fs.unlinkSync(receiptFile.filepath);
-            }
+        // Get expenses for this budget
+        const expenses = await prisma.expense.findMany({
+          where: {
+            budgetId: budgetId,
+            createdById: session.user.id,
+          },
+          include: {
+            category: true,
+          },
+          orderBy: {
+            createdAt: "desc",
+          },
+        });
 
-            return res.status(400).json({
-              message: "Invalid category",
-              code: "VALIDATION_ERROR",
-              details: { categoryId: "Category not found in budget" },
-            });
-          }
+        // Format the receipt URL for each expense
+        const formattedExpenses = expenses.map((expense) => ({
+          ...expense,
+          receipt: expense.receipt
+            ? expense.receipt.startsWith("http")
+              ? expense.receipt
+              : `${process.env.NEXTAUTH_URL || ""}${expense.receipt}`
+            : null,
+        }));
 
-          // Calculate current spending for this category
-          const categoryExpenses = budget.expenses.filter(
-            (expense) => expense.categoryId === categoryId
-          );
-          const categorySpent = categoryExpenses.reduce(
-            (total, expense) => total + expense.amount,
-            0
-          );
+        // Get expense categories
+        const categories = await prisma.expenseCategory.findMany({
+          where: {
+            budgetId: budgetId,
+          },
+          orderBy: {
+            name: "asc",
+          },
+        });
 
-          // Validate budget limit
-          const remainingBudget = category.allocatedAmount - categorySpent;
-          if (amount > remainingBudget) {
-            // Clean up uploaded file if budget exceeded
-            if (receiptFile && fs.existsSync(receiptFile.filepath)) {
-              fs.unlinkSync(receiptFile.filepath);
-            }
+        return res.status(200).json({
+          expenses: formattedExpenses,
+          categories,
+          budget: approvedApplication.startupCall.budget,
+        });
+      } catch (error) {
+        console.error("Error fetching expenses:", error);
+        return res.status(500).json({
+          message: "Failed to fetch expenses. Please try again later.",
+          error:
+            process.env.NODE_ENV === "development" ? String(error) : undefined,
+        });
+      }
+    }
 
-            return res.status(400).json({
-              message: `Expense exceeds remaining budget for category ${category.name}. Remaining: ${remainingBudget}`,
-              code: "BUDGET_EXCEEDED",
-              details: {
-                categoryId: category.id,
-                categoryName: category.name,
-                requested: amount,
-                remaining: remainingBudget,
-              },
-            });
-          }
+    // Handle POST request - create new expense
+    if (req.method === "POST") {
+      try {
+        const { fields, files } = await parseForm(req);
 
-          // Create expense with receipt URL if available
-          const expense = await tx.expense.create({
+        // Validate the form data
+        const title = fields.title?.[0];
+        const description = fields.description?.[0] || null;
+        const amountStr = fields.amount?.[0];
+        const categoryId = fields.categoryId?.[0] || null;
+        const date = fields.date?.[0] ? new Date(fields.date[0]) : new Date();
+        const currency = fields.currency?.[0] || "USD";
+        const budgetId = fields.budgetId?.[0];
+
+        if (!title || !amountStr || !budgetId) {
+          return res.status(400).json({
+            message: "Missing required fields",
+            code: "VALIDATION_ERROR",
+          });
+        }
+
+        const amount = parseFloat(amountStr);
+        if (isNaN(amount)) {
+          return res.status(400).json({
+            message: "Invalid amount",
+            code: "VALIDATION_ERROR",
+          });
+        }
+
+        // Get file path of receipt
+        let receiptPath = null;
+        if (files.receipt) {
+          const file = Array.isArray(files.receipt)
+            ? files.receipt[0]
+            : files.receipt;
+          const relativePath = `/uploads/receipts/${path.basename(
+            file.filepath
+          )}`;
+          receiptPath = relativePath;
+        }
+
+        // Create the expense
+        try {
+          const expense = await prisma.expense.create({
             data: {
-              budgetId: budget.id,
-              categoryId,
               title,
               description,
               amount,
-              currency: budget.currency,
-              date: new Date(date),
-              status: "PENDING", // All new expenses start as pending
-              receipt: receiptUrl, // Add the receipt URL
+              date,
+              currency,
+              receipt: receiptPath,
+              status: "PENDING",
+              createdById: session.user.id,
+              budgetId,
+              categoryId,
             },
           });
 
-          // Collect extra task and milestone data if provided
-          const expenseData: any = { ...expense };
-
-          // If task provided, verify task
-          if (taskId) {
-            // Verify task belongs to this startup
-            const task = await tx.task.findFirst({
-              where: {
-                id: taskId,
-                startupId: startup.id,
-              },
-              select: {
-                id: true,
-                title: true,
-              },
+          return res.status(201).json({
+            message: "Expense created successfully",
+            expense: {
+              ...expense,
+              receipt: expense.receipt
+                ? expense.receipt.startsWith("http")
+                  ? expense.receipt
+                  : `${process.env.NEXTAUTH_URL || ""}${expense.receipt}`
+                : null,
+            },
+          });
+        } catch (error: any) {
+          console.error("Database error creating expense:", error);
+          if (error.code === "P2002") {
+            return res.status(409).json({
+              message: "Duplicate expense entry",
+              code: "DUPLICATE_ERROR",
             });
-
-            if (task) {
-              expenseData.taskTitle = task.title;
-            }
           }
 
-          // If milestone provided, verify milestone
-          if (milestoneId) {
-            // Verify milestone belongs to this startup
-            const milestone = await tx.milestone.findFirst({
-              where: {
-                id: milestoneId,
-                startupId: startup.id,
-              },
-              select: {
-                id: true,
-                title: true,
-              },
-            });
-
-            if (milestone) {
-              expenseData.milestoneTitle = milestone.title;
-            }
-          }
-
-          // Get the category name for the response
-          expenseData.categoryName = category.name;
-
-          return res.status(201).json(expenseData);
-        });
-      } catch (error: any) {
-        // Clean up uploaded file if transaction fails
-        if (receiptFile && fs.existsSync(receiptFile.filepath)) {
-          fs.unlinkSync(receiptFile.filepath);
-        }
-
-        console.error("Transaction error creating expense:", error);
-
-        if (error.code === "P2002") {
-          return res.status(409).json({
-            message: "Duplicate expense entry",
-            code: "DUPLICATE_ERROR",
+          return res.status(500).json({
+            message: "Failed to create expense due to a database error",
+            code: "TRANSACTION_ERROR",
+            details:
+              process.env.NODE_ENV === "development"
+                ? error.message
+                : undefined,
           });
         }
+      } catch (error: any) {
+        console.error("Error creating expense:", error);
 
         return res.status(500).json({
-          message: "Failed to create expense due to a database error",
-          code: "TRANSACTION_ERROR",
+          message: "Failed to create expense. Please try again later.",
+          code: "SERVER_ERROR",
           details:
             process.env.NODE_ENV === "development" ? error.message : undefined,
         });
       }
-    } catch (error: any) {
-      console.error("Error creating expense:", error);
-
-      // Provide specific error information based on error type
-      if (error.code) {
-        if (error.code === "P2021") {
-          return res.status(500).json({
-            message:
-              "The database schema appears to be outdated. Please contact support.",
-            code: "SCHEMA_ERROR",
-          });
-        } else if (error.code === "P2023" || error.code === "P2025") {
-          return res.status(400).json({
-            message: "Invalid data format or record not found",
-            code: "INVALID_INPUT",
-          });
-        }
-      }
-
-      return res.status(500).json({
-        message: "Failed to create expense. Please try again later.",
-        code: "SERVER_ERROR",
-        details:
-          process.env.NODE_ENV === "development" ? error.message : undefined,
-      });
     }
-  }
 
-  // Handle unsupported methods
-  else {
-    res.setHeader("Allow", ["GET", "POST"]);
-    return res
-      .status(405)
-      .json({ message: `Method ${req.method} Not Allowed` });
+    // Handle unsupported methods
+    else {
+      res.setHeader("Allow", ["GET", "POST"]);
+      return res
+        .status(405)
+        .json({ message: `Method ${req.method} Not Allowed` });
+    }
+  } catch (error) {
+    console.error("Unhandled error in API route:", error);
+    return res.status(500).json({
+      message: "An unexpected error occurred. Please try again later.",
+      error: process.env.NODE_ENV === "development" ? String(error) : undefined,
+    });
   }
 }
