@@ -34,6 +34,7 @@ model User {
   createdTasks            Task[]                   @relation("CreatorToTask")
   createdSponsorshipOpportunities SponsorshipOpportunity[]
   reviewerAssignments     ReviewAssignment[]         @relation("ReviewerAssignments")
+  expenses                Expense[]
 }
 
 model Account {
@@ -352,10 +353,12 @@ model Expense {
   date        DateTime
   receipt     String?
   status      String
+  userId      String
   createdAt   DateTime        @default(now())
   updatedAt   DateTime        @updatedAt
   budget      Budget          @relation(fields: [budgetId], references: [id])
   category    BudgetCategory? @relation(fields: [categoryId], references: [id])
+  user        User            @relation(fields: [userId], references: [id])
 }
 
 model SponsorshipOpportunity {

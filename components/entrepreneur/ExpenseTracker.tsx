@@ -200,20 +200,18 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
 
       // Handle expenses response
       if (expenseResponse.status === "fulfilled") {
+        const response = expenseResponse.value as { data: any };
         // Check if the response has the new structure (with expenses property)
-        if (expenseResponse.value?.data?.expenses) {
-          const responseData = expenseResponse.value.data;
+        if (response?.data?.expenses) {
+          const responseData = response.data;
           setExpenses(responseData.expenses);
           setCategories(responseData.categories || []);
           setBudget(responseData.budget || null);
-        } else if (Array.isArray(expenseResponse.value?.data)) {
+        } else if (Array.isArray(response?.data)) {
           // Fallback for old response structure
-          setExpenses(expenseResponse.value.data);
+          setExpenses(response.data);
         } else {
-          console.error(
-            "Unexpected expense data format:",
-            expenseResponse.value?.data
-          );
+          console.error("Unexpected expense data format:", response?.data);
           setError(
             "Received invalid expense data format. Please try again later."
           );

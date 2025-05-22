@@ -81,28 +81,30 @@ export default async function handler(
               status: "APPROVED",
             },
             include: {
-              startupCall: {
+              call: {
                 include: {
-                  budget: true,
+                  budgets: true,
                 },
               },
             },
           });
 
-        if (!approvedApplication || !approvedApplication.startupCall.budget) {
+        if (!approvedApplication || !approvedApplication.call.budgets?.[0]) {
           return res
             .status(404)
             .json({ message: "No approved application or budget found" });
         }
 
         // Get budget ID from the approved application
-        const budgetId = approvedApplication.startupCall.budget.id;
+        const budgetId = approvedApplication.call.budgets[0].id;
 
         // Get expenses for this budget
         const expenses = await prisma.expense.findMany({
           where: {
             budgetId: budgetId,
-            createdById: session.user.id,
+            user: {
+              id: session.user.id,
+            },
           },
           include: {
             category: true,
@@ -123,7 +125,7 @@ export default async function handler(
         }));
 
         // Get expense categories
-        const categories = await prisma.expenseCategory.findMany({
+        const categories = await prisma.budgetCategory.findMany({
           where: {
             budgetId: budgetId,
           },
@@ -135,7 +137,7 @@ export default async function handler(
         return res.status(200).json({
           expenses: formattedExpenses,
           categories,
-          budget: approvedApplication.startupCall.budget,
+          budget: approvedApplication.call.budgets[0],
         });
       } catch (error) {
         console.error("Error fetching expenses:", error);
@@ -199,10 +201,10 @@ export default async function handler(
               currency,
               receipt: receiptPath,
               status: "PENDING",
-              createdById: session.user.id,
+              userId: session.user.id,
               budgetId,
               categoryId,
-            },
+            } as any, // Temporary type assertion until Prisma client is regenerated
           });
 
           return res.status(201).json({
