@@ -1,9 +1,11 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getSession } from 'next-auth/react';
+import { getServerSession } from 'next-auth/next';
+import { authOptions } from '@/pages/api/auth/[...nextauth]';
 import prisma from '../../../../../lib/prisma';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const session = await getSession({ req });
+  // Use getServerSession for authentication
+  const session = await getServerSession(req, res, authOptions);
   
   // Check if user is authenticated
   if (!session) {
@@ -29,7 +31,27 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(404).json({ message: 'Startup not found' });
       }
       
-      // Fetch team members
+      // Check if user has permission to view this startup's team
+      const isFounder = startup.founderId === session.user.id;
+      const user = await prisma.user.findUnique({
+        where: { id: session.user.id },
+      });
+      const isAdmin = user?.role === 'ADMIN';
+      
+      // Determine if user is a team member
+      const isTeamMember = await prisma.teamMember.findFirst({
+        where: {
+          startupId,
+          userId: session.user.id
+        }
+      });
+      
+      // Only allow if: user is founder, admin, team member, or startup is accepted
+      if (!isFounder && !isAdmin && !isTeamMember && startup.status !== 'ACCEPTED') {
+        return res.status(403).json({ message: 'You do not have permission to view the team for this startup' });
+      }
+      
+      // Get all team members including the founder
       const teamMembers = await prisma.teamMember.findMany({
         where: { startupId },
         include: {
@@ -37,30 +59,65 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             select: {
               id: true,
               name: true,
+              email: true,
               image: true,
             },
           },
         },
-        orderBy: { createdAt: 'asc' },
       });
       
-      // Transform the data to simplify the response
-      const formattedTeamMembers = teamMembers.map(member => ({
-        id: member.id,
-        name: member.name || member.user?.name,
-        email: member.email,
-        role: member.role,
-        bio: member.bio,
-        userId: member.userId,
-        image: member.user?.image,
-        startupId: member.startupId,
-        createdAt: member.createdAt,
-      }));
+      // Also get the founder information
+      const founder = await prisma.user.findUnique({
+        where: { id: startup.founderId },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          image: true,
+        },
+      });
       
-      return res.status(200).json(formattedTeamMembers);
+      // Collect unique team members (avoiding duplicates)
+      const allTeamMembers = [
+        ...(founder ? [founder] : []),
+        ...teamMembers.map(member => member.user)
+      ];
+      
+      // Remove duplicates (in case founder is also in team members)
+      const uniqueTeamMembers = Array.from(
+        new Map(allTeamMembers.map(member => [member.id, member])).values()
+      );
+      
+      // For admins, also include other relevant admins
+      if (isAdmin) {
+        const otherAdmins = await prisma.user.findMany({
+          where: {
+            role: 'ADMIN',
+            id: { not: session.user.id },
+          },
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            image: true,
+          },
+        });
+        
+        // Add admins to the team members list (avoiding duplicates)
+        otherAdmins.forEach(admin => {
+          if (!uniqueTeamMembers.some(member => member.id === admin.id)) {
+            uniqueTeamMembers.push(admin);
+          }
+        });
+      }
+      
+      return res.status(200).json(uniqueTeamMembers);
     } catch (error) {
       console.error('Error fetching team members:', error);
-      return res.status(500).json({ message: 'Failed to fetch team members' });
+      return res.status(500).json({ 
+        message: 'Failed to fetch team members',
+        details: process.env.NODE_ENV === 'development' ? String(error) : undefined
+      });
     }
   }
   
@@ -141,6 +198,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
   }
   
-  // Method not allowed
+  // Method not allowed for other methods
   return res.status(405).json({ message: 'Method not allowed' });
 }

@@ -1,9 +1,10 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getSession } from 'next-auth/react';
+import { getServerSession } from 'next-auth/next';
+import { authOptions } from '@/pages/api/auth/[...nextauth]';
 import prisma from '../../../../../lib/prisma';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const session = await getSession({ req });
+  const session = await getServerSession(req, res, authOptions);
   
   // Check if user is authenticated
   if (!session) {
@@ -35,7 +36,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         startupId,
       },
       include: {
-        assignedTo: {
+        assignee: {
           select: {
             id: true,
             name: true,
@@ -55,7 +56,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       where: { id: session.user.id },
     });
     const isAdmin = user?.role === 'ADMIN';
-    const isAssignedToUser = task.assignedToId === session.user.id;
+    const isAssignedToUser = task.assigneeId === session.user.id;
     
     // GET /api/startups/[id]/tasks/[taskId] - Get a specific task
     if (req.method === 'GET') {
@@ -69,7 +70,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(403).json({ message: 'Only the founder or admin can update tasks' });
       }
       
-      const { title, description, dueDate, status, priority, assignedToId } = req.body;
+      const { title, description, dueDate, status, priority, assigneeId } = req.body;
       
       if (!title || !description || !dueDate) {
         return res.status(400).json({ message: 'Missing required fields' });
@@ -83,10 +84,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           dueDate: new Date(dueDate),
           status: status || task.status,
           priority: priority || task.priority,
-          ...(assignedToId ? { assignedTo: { connect: { id: assignedToId } } } : {}),
+          ...(assigneeId ? { assignee: { connect: { id: assigneeId } } } : {}),
         },
         include: {
-          assignedTo: {
+          assignee: {
             select: {
               id: true,
               name: true,
@@ -118,9 +119,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       
       const updatedTask = await prisma.task.update({
         where: { id: tId },
-        data: { status },
+        data: { 
+          status,
+          ...(status === 'COMPLETED' ? { completedDate: new Date() } : {})
+        },
         include: {
-          assignedTo: {
+          assignee: {
             select: {
               id: true,
               name: true,

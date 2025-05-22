@@ -1,7 +1,8 @@
 import { NextApiRequest, NextApiResponse } from "next";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/pages/api/auth/[...nextauth]";
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "../../../../../auth/[...nextauth]";
 import prisma from "@/lib/prisma";
+import { validateExpense } from "@/lib/validation";
 import formidable from "formidable";
 import fs from "fs";
 import path from "path";
@@ -25,6 +26,16 @@ export default async function handler(
   }
 
   const { id: startupCallId, budgetId } = req.query;
+
+  // Get the user id from the session
+  const user = await prisma.user.findUnique({
+    where: { email: session.user.email || "" },
+    select: { id: true, role: true },
+  });
+
+  if (!user) {
+    return res.status(401).json({ error: "User not found" });
+  }
 
   // Verify the startup call and budget exist
   try {
@@ -58,6 +69,16 @@ export default async function handler(
         where: {
           budgetId: budgetId as string,
         },
+        include: {
+          category: true,
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+        },
         orderBy: {
           date: "desc",
         },
@@ -70,98 +91,127 @@ export default async function handler(
     }
   }
 
-  // POST: Create a new expense with receipt upload support
+  // POST: Create a new expense
   if (req.method === "POST") {
     try {
-      // Parse form data with file upload
-      const form = formidable({
-        maxFiles: 1,
-        maxFileSize: 5 * 1024 * 1024, // 5MB
-        keepExtensions: true,
-        filter: (part) => {
-          // Only allow receipt files
-          if (part.name === "receipt" && part.mimetype) {
-            return (
-              part.mimetype.includes("image/jpeg") ||
-              part.mimetype.includes("image/png") ||
-              part.mimetype.includes("application/pdf")
-            );
-          }
-          return true; // Allow all other fields
-        },
-      });
-
-      // Parse the form
-      const [fields, files] = await new Promise<
-        [formidable.Fields, formidable.Files]
-      >((resolve, reject) => {
-        form.parse(req, (err, fields, files) => {
-          if (err) reject(err);
-          resolve([fields, files]);
+      const form = new formidable.IncomingForm();
+      
+      const parseForm = () => {
+        return new Promise((resolve, reject) => {
+          form.parse(req, (err, fields, files) => {
+            if (err) return reject(err);
+            resolve({ fields, files });
+          });
         });
+      };
+      
+      const { fields, files } = await parseForm() as any;
+      
+      // Extract and validate data
+      const title = fields.title?.[0] || fields.title;
+      const description = fields.description?.[0] || fields.description || '';
+      const amount = parseFloat(fields.amount?.[0] || fields.amount || '0');
+      const currency = fields.currency?.[0] || fields.currency || 'USD';
+      const date = fields.date?.[0] || fields.date;
+      const categoryId = fields.categoryId?.[0] || fields.categoryId;
+      const status = fields.status?.[0] || fields.status || "PENDING";
+      const providedUserId = fields.userId?.[0] || fields.userId;
+      
+      // Use the validation utility
+      const validation = validateExpense({
+        title,
+        description,
+        amount,
+        currency,
+        date,
       });
-
-      // Extract expense data from fields
-      const expenseData: any = {};
-
-      // Process all form fields
-      Object.keys(fields).forEach((key) => {
-        const value = fields[key]?.[0];
-        if (value !== undefined) {
-          // Convert numeric values
-          if (key === "amount") {
-            expenseData[key] = parseFloat(value);
-          } else {
-            expenseData[key] = value;
-          }
-        }
-      });
-
-      // Set budget ID
-      expenseData.budgetId = budgetId as string;
-
-      // Process receipt file if present
+      
+      if (!validation.isValid) {
+        return res.status(400).json({ 
+          error: validation.error,
+          details: validation.details
+        });
+      }
+      
+      // Process receipt file if exists
       let receiptPath = null;
-      const receiptFile = files.receipt?.[0];
-
+      const receiptFile = files.receipt as formidable.File;
+      
       if (receiptFile) {
-        // Create uploads directory if it doesn't exist
-        const uploadsDir = path.join(process.cwd(), "public", "uploads");
-        if (!fs.existsSync(uploadsDir)) {
-          fs.mkdirSync(uploadsDir, { recursive: true });
+        try {
+          const fileExtension = path.extname(receiptFile.originalFilename || '');
+          const fileName = `${uuidv4()}${fileExtension}`;
+          const uploadDir = path.join(process.cwd(), 'public', 'uploads');
+          
+          // Ensure uploads directory exists
+          if (!fs.existsSync(uploadDir)) {
+            fs.mkdirSync(uploadDir, { recursive: true });
+          }
+          
+          const newPath = path.join(uploadDir, fileName);
+          
+          // Copy file to uploads directory
+          const rawData = fs.readFileSync(receiptFile.filepath);
+          fs.writeFileSync(newPath, rawData);
+          
+          // Set path for database
+          receiptPath = `/uploads/${fileName}`;
+        } catch (fileError) {
+          console.error('Error processing receipt file:', fileError);
         }
-
-        // Generate unique filename
-        const uniqueFilename = `${uuidv4()}-${receiptFile.originalFilename}`;
-        const newPath = path.join(uploadsDir, uniqueFilename);
-
-        // Move the file from temp location to uploads directory
-        await fs.promises.copyFile(receiptFile.filepath, newPath);
-
-        // Clean up the temp file
-        await fs.promises.unlink(receiptFile.filepath);
-
-        // Set the receipt path to be stored in the database
-        receiptPath = `/uploads/${uniqueFilename}`;
+      }
+      
+      // Determine the userId to use - provided or current user
+      const expenseUserId = providedUserId || user.id;
+      
+      // If userId is provided, verify it exists
+      if (providedUserId && providedUserId !== user.id) {
+        const userExists = await prisma.user.findUnique({
+          where: { id: providedUserId },
+          select: { id: true }
+        });
+        
+        if (!userExists) {
+          return res.status(400).json({ 
+            error: "Invalid user ID", 
+            details: "The specified user does not exist" 
+          });
+        }
       }
 
-      // Add receipt path to expense data if a file was uploaded
-      if (receiptPath) {
-        expenseData.receipt = receiptPath;
-      }
-
-      // Add user ID as creator
-      expenseData.createdById = session.user.id;
-
-      // Create the expense in the database
+      // Create the expense
       const expense = await prisma.expense.create({
-        data: expenseData,
+        data: {
+          title: validation.data.title,
+          description: validation.data.description,
+          amount: validation.data.amount,
+          currency: validation.data.currency,
+          date: validation.data.date,
+          status,
+          receipt: receiptPath,
+          userId: expenseUserId,
+          budgetId: budgetId as string,
+          categoryId: categoryId || null,
+        },
+        include: {
+          category: true,
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+        },
       });
 
       return res.status(201).json(expense);
     } catch (error) {
       console.error("Error creating expense:", error);
-      return res.status(500).json({ error: "Failed to create expense" });
+      return res.status(500).json({
+        error: "Failed to create expense",
+        details: process.env.NODE_ENV === 'development' ? String(error) : undefined
+      });
     }
   }
 

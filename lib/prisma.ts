@@ -37,32 +37,81 @@ const retry = async (fn: () => Promise<any>, retries = 3, delay = 300) => {
   }
 };
 
-// Configure Prisma Client with better connection handling
+// Create a more robust PrismaClient with better connection handling
+class EnhancedPrismaClient extends PrismaClient {
+  constructor(options?: any) {
+    super(options);
+  }
+
+  // Override the $connect method to ensure proper connection
+  async $connect() {
+    try {
+      await super.$connect();
+      console.log('Database connection established successfully');
+    } catch (error) {
+      console.error('Error establishing database connection:', error);
+      // Try to reconnect with a clean connection
+      try {
+        await this.$disconnect();
+        await super.$connect();
+        console.log('Database reconnection successful');
+      } catch (reconnectError) {
+        console.error('Failed to reconnect to database:', reconnectError);
+        throw reconnectError; 
+      }
+    }
+  }
+
+  // Explicitly add a method to run a query with retries
+  async executeWithRetry<T>(operation: () => Promise<T>): Promise<T> {
+    return retry(operation, 3, 300);
+  }
+}
+
+// Configure Prisma Client with connection pooling and better error handling
 const prismaClientSingleton = () => {
-  return new PrismaClient({
+  const client = new PrismaClient({
     log: ["error", "warn"],
     errorFormat: "pretty",
-    // Add connection pooling settings
     datasources: {
       db: {
         url: process.env.DATABASE_URL,
       },
     },
-  }).$extends({
-    query: {
-      $allOperations({ operation, model, args, query }) {
-        // Add retry logic for connection issues
-        return retry(async () => {
-          try {
-            return await query(args);
-          } catch (error: any) {
-            console.error(`Prisma ${model}.${operation} error:`, error);
-            throw error;
-          }
-        });
-      },
-    },
   });
+
+  // Add connection error handling
+  client.$on('query', (e) => {
+    console.log('Query:', e.query);
+    console.log('Params:', e.params);
+    console.log('Duration:', `${e.duration}ms`);
+  });
+
+  client.$on('error', (e) => {
+    console.error('Prisma Error:', e);
+  });
+
+  // Handle connection issues
+  client.$use(async (params, next) => {
+    try {
+      return await next(params);
+    } catch (error: any) {
+      if (
+        error.message?.includes('prepared statement') ||
+        error.message?.includes('statement does not exist') ||
+        error.code === '26000' ||
+        error.code === '42P05'
+      ) {
+        console.log('Connection error detected, attempting to reconnect...');
+        await client.$disconnect();
+        await client.$connect();
+        return next(params);
+      }
+      throw error;
+    }
+  });
+
+  return client;
 };
 
 // Check if we already have an instance of PrismaClient and reuse it if we're in development

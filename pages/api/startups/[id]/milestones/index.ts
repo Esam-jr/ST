@@ -1,9 +1,11 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getSession } from 'next-auth/react';
+import { getServerSession } from 'next-auth/next';
+import { authOptions } from '@/pages/api/auth/[...nextauth]';
 import prisma from '../../../../../lib/prisma';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const session = await getSession({ req });
+  // Use getServerSession instead of getSession for more reliable authentication
+  const session = await getServerSession(req, res, authOptions);
   
   // Check if user is authenticated
   if (!session) {
@@ -43,19 +45,45 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(403).json({ message: 'You do not have permission to view milestones for this startup' });
       }
       
-      // Fetch milestones
+      // Fetch milestones with related tasks information
       const milestones = await prisma.milestone.findMany({
         where: { startupId },
+        include: {
+          tasks: {
+            select: {
+              id: true,
+              title: true,
+              status: true,
+            }
+          }
+        },
         orderBy: [
           { status: 'asc' }, // PENDING, IN_PROGRESS first, then COMPLETED, DELAYED
           { dueDate: 'asc' }
         ],
       });
       
-      return res.status(200).json(milestones);
+      // Calculate progress for each milestone based on tasks
+      const milestonesWithProgress = milestones.map(milestone => {
+        const totalTasks = milestone.tasks.length;
+        const completedTasks = milestone.tasks.filter(task => task.status === 'COMPLETED').length;
+        const progressPercentage = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+        
+        return {
+          ...milestone,
+          progressPercentage,
+          tasksCount: totalTasks,
+          completedTasksCount: completedTasks
+        };
+      });
+      
+      return res.status(200).json(milestonesWithProgress);
     } catch (error) {
       console.error('Error fetching milestones:', error);
-      return res.status(500).json({ message: 'Failed to fetch milestones' });
+      return res.status(500).json({ 
+        message: 'Failed to fetch milestones',
+        details: process.env.NODE_ENV === 'development' ? String(error) : undefined
+      });
     }
   }
   
@@ -63,8 +91,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method === 'POST') {
     const { title, description, dueDate, status } = req.body;
     
+    // Validate required fields
     if (!title || !description || !dueDate) {
-      return res.status(400).json({ message: 'Missing required fields' });
+      return res.status(400).json({ 
+        message: 'Missing required fields',
+        details: 'Title, description, and dueDate are required'
+      });
     }
     
     try {
@@ -88,21 +120,68 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(403).json({ message: 'Only the founder or admin can add milestones' });
       }
       
+      // Validate date
+      const parsedDueDate = new Date(dueDate);
+      const today = new Date();
+      
+      if (isNaN(parsedDueDate.getTime())) {
+        return res.status(400).json({ message: 'Invalid due date format' });
+      }
+      
+      // Optional: Validation if due date is in the past
+      if (parsedDueDate < today) {
+        // Could return an error, but might be valid for historical milestones
+        // Instead, we'll just warn in the response
+        console.warn(`Milestone created with past due date: ${parsedDueDate.toISOString()}`);
+      }
+      
+      // Check for milestone title uniqueness within the startup
+      const existingMilestone = await prisma.milestone.findFirst({
+        where: {
+          startupId,
+          title: {
+            equals: title,
+            mode: 'insensitive' // Case insensitive
+          }
+        }
+      });
+      
+      if (existingMilestone) {
+        return res.status(409).json({ 
+          message: 'A milestone with this title already exists for this startup',
+          existingMilestoneId: existingMilestone.id
+        });
+      }
+      
       // Create the milestone
       const milestone = await prisma.milestone.create({
         data: {
           title,
           description,
-          dueDate: new Date(dueDate),
+          dueDate: parsedDueDate,
           status: status || 'PENDING',
           startup: { connect: { id: startupId } },
         },
+        include: {
+          tasks: true
+        }
       });
       
-      return res.status(201).json(milestone);
+      // Add progress information
+      const milestoneWithProgress = {
+        ...milestone,
+        progressPercentage: 0,
+        tasksCount: 0,
+        completedTasksCount: 0
+      };
+      
+      return res.status(201).json(milestoneWithProgress);
     } catch (error) {
       console.error('Error creating milestone:', error);
-      return res.status(500).json({ message: 'Failed to create milestone' });
+      return res.status(500).json({ 
+        message: 'Failed to create milestone',
+        details: process.env.NODE_ENV === 'development' ? String(error) : undefined
+      });
     }
   }
   

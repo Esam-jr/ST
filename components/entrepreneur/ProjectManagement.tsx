@@ -20,7 +20,38 @@ import {
   Calendar,
   AlertTriangle,
   DollarSign,
+  PlusCircle,
+  Clock4,
+  ArrowUpCircle,
+  ArrowDownCircle,
+  AlertOctagon,
 } from "lucide-react";
+import CreateTaskDialog from "../dialogs/CreateTaskDialog";
+import CreateMilestoneDialog from "../dialogs/CreateMilestoneDialog";
+
+interface Task {
+  id: string;
+  title: string;
+  description: string;
+  status: string;
+  priority: string;
+  dueDate: string;
+  startDate: string;
+  completedDate?: string;
+  assignee?: {
+    id: string;
+    name: string;
+    image?: string;
+  };
+  milestone?: {
+    id: string;
+    title: string;
+  };
+  creator?: {
+    id: string;
+    name: string;
+  };
+}
 
 interface Project {
   id: string;
@@ -64,35 +95,160 @@ interface Project {
 
 export default function ProjectManagement() {
   const [project, setProject] = useState<Project | null>(null);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [tasksLoading, setTasksLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
 
-  useEffect(() => {
-    const fetchProject = async () => {
-      try {
-        setLoading(true);
-        const response = await axios.get("/api/entrepreneur/project");
-        setProject(response.data);
-        setError(null);
-      } catch (error: any) {
-        console.error("Error fetching project data:", error);
-        setError(
-          error.response?.data?.message ||
-            "Failed to load project data. Please try again later."
-        );
-        toast({
-          title: "Error",
-          description: "Failed to load project data",
-          variant: "destructive",
-        });
-      } finally {
-        setLoading(false);
-      }
-    };
+  const fetchProject = async () => {
+    try {
+      setLoading(true);
+      const response = await axios.get("/api/entrepreneur/project");
+      setProject(response.data);
+      setError(null);
+    } catch (error: any) {
+      console.error("Error fetching project data:", error);
+      setError(
+        error.response?.data?.message ||
+          "Failed to load project data. Please try again later."
+      );
+      toast({
+        title: "Error",
+        description: "Failed to load project data",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  const fetchTasks = async () => {
+    if (!project) return;
+    
+    try {
+      setTasksLoading(true);
+      const response = await axios.get(`/api/startups/${project.id}/tasks`);
+      setTasks(response.data);
+    } catch (error: any) {
+      console.error("Error fetching tasks data:", error);
+      toast({
+        title: "Error",
+        description: "Failed to load tasks data",
+        variant: "destructive",
+      });
+    } finally {
+      setTasksLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchProject();
   }, [toast]);
+
+  useEffect(() => {
+    if (project) {
+      fetchTasks();
+    }
+  }, [project]);
+
+  // Handle task status update
+  const handleTaskStatusUpdate = async (taskId: string, newStatus: string) => {
+    try {
+      await axios.patch(`/api/startups/${project?.id}/tasks`, {
+        taskId,
+        status: newStatus
+      });
+      
+      toast({
+        title: "Success",
+        description: "Task status updated successfully",
+      });
+      
+      // Refresh tasks
+      fetchTasks();
+      // Also refresh project data to update summary stats
+      fetchProject();
+    } catch (error: any) {
+      console.error("Error updating task status:", error);
+      toast({
+        title: "Error",
+        description: error.response?.data?.message || "Failed to update task status",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Format priority for display
+  const getPriorityBadge = (priority: string) => {
+    switch (priority) {
+      case 'HIGH':
+        return (
+          <Badge className="bg-red-50 text-red-600 hover:bg-red-50 flex items-center gap-1">
+            <ArrowUpCircle className="h-3 w-3" />
+            High
+          </Badge>
+        );
+      case 'MEDIUM':
+        return (
+          <Badge className="bg-amber-50 text-amber-600 hover:bg-amber-50 flex items-center gap-1">
+            <Clock4 className="h-3 w-3" />
+            Medium
+          </Badge>
+        );
+      case 'LOW':
+        return (
+          <Badge className="bg-blue-50 text-blue-600 hover:bg-blue-50 flex items-center gap-1">
+            <ArrowDownCircle className="h-3 w-3" />
+            Low
+          </Badge>
+        );
+      default:
+        return (
+          <Badge className="bg-gray-50 text-gray-600">
+            {priority}
+          </Badge>
+        );
+    }
+  };
+
+  // Format status for display
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'TODO':
+        return (
+          <Badge className="bg-gray-50 text-gray-600">
+            To Do
+          </Badge>
+        );
+      case 'IN_PROGRESS':
+        return (
+          <Badge className="bg-blue-50 text-blue-600">
+            In Progress
+          </Badge>
+        );
+      case 'BLOCKED':
+        return (
+          <Badge className="bg-red-50 text-red-600 flex items-center gap-1">
+            <AlertOctagon className="h-3 w-3" />
+            Blocked
+          </Badge>
+        );
+      case 'COMPLETED':
+        return (
+          <Badge className="bg-green-50 text-green-600 flex items-center gap-1">
+            <CheckCircle className="h-3 w-3" />
+            Completed
+          </Badge>
+        );
+      default:
+        return (
+          <Badge className="bg-gray-50 text-gray-600">
+            {status}
+          </Badge>
+        );
+    }
+  };
 
   if (loading) {
     return (
@@ -174,6 +330,25 @@ export default function ProjectManagement() {
       console.error("Error checking if milestone is overdue:", error);
       return false;
     }
+  };
+
+  // Handler for when a new task is created
+  const handleTaskCreated = () => {
+    toast({
+      title: "Success",
+      description: "Task has been created successfully",
+    });
+    fetchProject(); // Refresh project data
+    fetchTasks();   // Refresh tasks data
+  };
+
+  // Handler for when a new milestone is created
+  const handleMilestoneCreated = () => {
+    toast({
+      title: "Success",
+      description: "Milestone has been created successfully",
+    });
+    fetchProject(); // Refresh data
   };
 
   return (
@@ -277,6 +452,20 @@ export default function ProjectManagement() {
                   </div>
                 </>
               )}
+              <div className="mt-3">
+                {project && (
+                  <CreateTaskDialog
+                    startupId={project.id}
+                    onTaskCreated={handleTaskCreated}
+                    trigger={
+                      <Button size="sm" variant="outline" className="w-full">
+                        <PlusCircle className="h-4 w-4 mr-1" />
+                        Add Task
+                      </Button>
+                    }
+                  />
+                )}
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -337,6 +526,20 @@ export default function ProjectManagement() {
                   </div>
                 </>
               )}
+              <div className="mt-3">
+                {project && (
+                  <CreateMilestoneDialog
+                    startupId={project.id}
+                    onMilestoneCreated={handleMilestoneCreated}
+                    trigger={
+                      <Button size="sm" variant="outline" className="w-full">
+                        <PlusCircle className="h-4 w-4 mr-1" />
+                        Add Milestone
+                      </Button>
+                    }
+                  />
+                )}
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -490,17 +693,34 @@ export default function ProjectManagement() {
       {/* Timeline Milestones */}
       <Card className="shadow-md">
         <CardHeader>
-          <CardTitle>Timeline Milestones</CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle>Timeline Milestones</CardTitle>
+            {project && (
+              <CreateMilestoneDialog
+                startupId={project.id}
+                onMilestoneCreated={handleMilestoneCreated}
+                trigger={
+                  <Button variant="outline" size="sm">
+                    <PlusCircle className="h-4 w-4 mr-1" />
+                    New Milestone
+                  </Button>
+                }
+              />
+            )}
+          </div>
           <CardDescription>
             Track your project milestones and deadlines
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {project.timeline.milestones.length === 0 ? (
+          {!project?.timeline.milestones.length ? (
             <div className="text-center py-8">
               <Clock className="h-12 w-12 mx-auto text-muted-foreground opacity-50" />
               <p className="mt-2 text-muted-foreground">
                 No milestones defined yet
+              </p>
+              <p className="text-sm text-muted-foreground mt-1">
+                Add your first milestone to start tracking progress
               </p>
             </div>
           ) : (
@@ -545,6 +765,142 @@ export default function ProjectManagement() {
                         </span>
                       </div>
                     )}
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Tasks List */}
+      <Card className="shadow-md">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle>Tasks</CardTitle>
+            {project && (
+              <CreateTaskDialog
+                startupId={project.id}
+                onTaskCreated={handleTaskCreated}
+                trigger={
+                  <Button variant="outline" size="sm">
+                    <PlusCircle className="h-4 w-4 mr-1" />
+                    New Task
+                  </Button>
+                }
+              />
+            )}
+          </div>
+          <CardDescription>
+            Manage your project tasks and assignments
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {!project || project.tasks.total === 0 ? (
+            <div className="text-center py-8">
+              <CheckCircle className="h-12 w-12 mx-auto text-muted-foreground opacity-50" />
+              <p className="mt-2 text-muted-foreground">
+                No tasks created yet
+              </p>
+              <p className="text-sm text-muted-foreground mt-1">
+                Add your first task to start tracking work items
+              </p>
+            </div>
+          ) : tasksLoading ? (
+            <div className="flex justify-center py-8">
+              <LoadingSpinner />
+            </div>
+          ) : tasks.length === 0 ? (
+            <div className="text-center py-8">
+              <p className="mt-2 text-muted-foreground">
+                Failed to load task details. Please refresh the page.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {tasks.map((task) => (
+                <div 
+                  key={task.id} 
+                  className="border rounded-md p-4 hover:bg-gray-50 transition-colors"
+                >
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h3 className="font-medium">{task.title}</h3>
+                      <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
+                        {task.description}
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      {getPriorityBadge(task.priority)}
+                      {getStatusBadge(task.status)}
+                    </div>
+                  </div>
+                  
+                  <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                    <div className="flex items-center">
+                      <Calendar className="h-4 w-4 mr-2 text-muted-foreground" />
+                      <span className="text-muted-foreground">Due: </span>
+                      <span className="ml-1 font-medium">{formatDate(task.dueDate)}</span>
+                    </div>
+                    
+                    <div className="flex items-center">
+                      <span className="text-muted-foreground">Assigned to: </span>
+                      <span className="ml-1 font-medium">
+                        {task.assignee ? task.assignee.name : "Unassigned"}
+                      </span>
+                    </div>
+                    
+                    {task.milestone && (
+                      <div className="flex items-center col-span-2">
+                        <span className="text-muted-foreground">Part of milestone: </span>
+                        <span className="ml-1 font-medium">{task.milestone.title}</span>
+                      </div>
+                    )}
+                  </div>
+                  
+                  {task.status !== "COMPLETED" && (
+                    <div className="mt-4 flex justify-end gap-2">
+                      {task.status === "TODO" && (
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          onClick={() => handleTaskStatusUpdate(task.id, "IN_PROGRESS")}
+                        >
+                          Start Task
+                        </Button>
+                      )}
+                      
+                      {task.status === "BLOCKED" && (
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          onClick={() => handleTaskStatusUpdate(task.id, "IN_PROGRESS")}
+                        >
+                          Unblock
+                        </Button>
+                      )}
+                      
+                      {task.status === "IN_PROGRESS" && (
+                        <>
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            className="text-red-600 border-red-200 hover:bg-red-50"
+                            onClick={() => handleTaskStatusUpdate(task.id, "BLOCKED")}
+                          >
+                            Block
+                          </Button>
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            className="text-green-600 border-green-200 hover:bg-green-50"
+                            onClick={() => handleTaskStatusUpdate(task.id, "COMPLETED")}
+                          >
+                            Complete
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

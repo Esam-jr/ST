@@ -8,12 +8,17 @@
     "start": "next start",
     "lint": "next lint",
     "test": "jest",
+    "test:validation": "node scripts/test-helpers/test-validation.js",
+    "test:endpoints": "node scripts/test-helpers/test-endpoints.js",
     "prisma:seed": "ts-node prisma/seed.ts",
     "prisma:seed-budget": "node prisma/budget-seed.js",
-    "prisma:direct-seed": "node prisma/direct-seed.js"
+    "prisma:direct-seed": "node prisma/direct-seed.js",
+    "prisma:unified-seed": "ts-node prisma/unified-seed.ts",
+    "db:verify-migrations": "node scripts/database/verify-migrations.js",
+    "db:cleanup-migrations": "node scripts/database/cleanup-migrations.js"
   },
   "prisma": {
-    "seed": "ts-node prisma/seed.ts"
+    "seed": "ts-node prisma/unified-seed.ts"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.9.0",

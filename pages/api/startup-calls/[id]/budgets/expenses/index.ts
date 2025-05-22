@@ -2,6 +2,7 @@ import { NextApiRequest, NextApiResponse } from "next";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "../../../../auth/[...nextauth]";
 import prisma from "@/lib/prisma";
+import { validateExpense } from "@/lib/validation";
 
 export default async function handler(
   req: NextApiRequest,
@@ -16,7 +17,7 @@ export default async function handler(
   // Get user role from database
   const user = await prisma.user.findUnique({
     where: { email: session.user.email || "" },
-    select: { role: true },
+    select: { role: true, id: true },
   });
 
   // Check if user has admin role
@@ -50,6 +51,13 @@ export default async function handler(
         where: { budgetId },
         include: {
           category: true,
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
         },
         orderBy: { date: "desc" },
       });
@@ -73,11 +81,23 @@ export default async function handler(
         date,
         receipt,
         status,
+        userId,
       } = req.body;
 
-      // Validate required fields
-      if (!title || !amount || !currency || !date) {
-        return res.status(400).json({ error: "Missing required fields" });
+      // Use the validation utility to validate the expense data
+      const validation = validateExpense({
+        title,
+        description,
+        amount,
+        currency,
+        date,
+      });
+      
+      if (!validation.isValid) {
+        return res.status(400).json({ 
+          error: validation.error,
+          details: validation.details
+        });
       }
 
       // If categoryId is provided, check if the category belongs to the budget
@@ -96,16 +116,39 @@ export default async function handler(
         }
       }
 
-      // Create the expense
+      // Ensure userId is provided or use the current admin's ID
+      const expenseUserId = userId || user.id;
+      if (!expenseUserId) {
+        return res.status(400).json({ 
+          error: "User ID is required", 
+          details: "Please provide a userId or ensure the session user has an ID" 
+        });
+      }
+
+      // Verify that the user exists
+      const expenseUser = await prisma.user.findUnique({
+        where: { id: expenseUserId },
+        select: { id: true }
+      });
+
+      if (!expenseUser) {
+        return res.status(400).json({ 
+          error: "Invalid user ID", 
+          details: "The specified user does not exist" 
+        });
+      }
+
+      // Create the expense with validated data
       const expense = await prisma.expense.create({
         data: {
-          title,
-          description,
-          amount,
-          currency,
-          date: new Date(date),
+          title: validation.data.title,
+          description: validation.data.description || null,
+          amount: validation.data.amount,
+          currency: validation.data.currency,
+          date: validation.data.date,
           receipt,
-          status,
+          status: status || "PENDING",
+          userId: expenseUserId, // Always use the verified userId
           budget: {
             connect: { id: budgetId },
           },
@@ -117,13 +160,23 @@ export default async function handler(
         },
         include: {
           category: true,
+          user: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
         },
       });
 
       return res.status(201).json(expense);
     } catch (error) {
       console.error("Error creating expense:", error);
-      return res.status(500).json({ error: "Error creating expense" });
+      return res.status(500).json({ 
+        error: "Error creating expense",
+        details: process.env.NODE_ENV === 'development' ? String(error) : undefined
+      });
     }
   }
 
