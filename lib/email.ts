@@ -1,33 +1,64 @@
 import nodemailer from 'nodemailer';
 
-// Configure email transporter
+// Debug: Log environment variables (remove in production)
+console.log('Email Config:', {
+  user: process.env.EMAIL_USER,
+  from: process.env.EMAIL_FROM,
+  hasPassword: !!process.env.EMAIL_PASSWORD
+});
+
+if (!process.env.EMAIL_USER || !process.env.EMAIL_PASSWORD) {
+  console.error('Missing required email configuration. Please set EMAIL_USER and EMAIL_PASSWORD environment variables.');
+}
+
+// Create reusable transporter object using SMTP transport
 const transporter = nodemailer.createTransport({
-  host: process.env.EMAIL_SERVER_HOST,
-  port: Number(process.env.EMAIL_SERVER_PORT || 587),
-  secure: process.env.EMAIL_SERVER_SECURE === 'true',
+  host: 'smtp.gmail.com',
+  port: 587,
+  secure: false, // true for 465, false for other ports
   auth: {
-    user: process.env.EMAIL_SERVER_USER,
-    pass: process.env.EMAIL_SERVER_PASSWORD,
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASSWORD,
   },
+  debug: true, // Enable debug output
+  logger: true // Enable logger
+});
+
+// Verify the transporter configuration
+transporter.verify(function(error, success) {
+  if (error) {
+    console.error('SMTP Configuration Error:', error);
+  } else {
+    console.log('SMTP Server is ready to take our messages');
+  }
 });
 
 interface EmailOptions {
   to: string;
   subject: string;
   html: string;
-  text?: string;
+  text?: string; // Add text as optional parameter
 }
 
 /**
  * Send an email
  */
-export async function sendEmail(options: EmailOptions) {
+export async function sendEmail({ to, subject, html, text }: EmailOptions) {
+  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASSWORD) {
+    throw new Error('Email configuration is missing. Please set EMAIL_USER and EMAIL_PASSWORD environment variables.');
+  }
+
   try {
-    const info = await transporter.sendMail({
-      from: process.env.EMAIL_FROM || 'no-reply@startupapp.com',
-      ...options,
-    });
-    console.log(`Email sent: ${info.messageId}`);
+    const mailOptions = {
+      from: process.env.EMAIL_FROM || process.env.EMAIL_USER,
+      to,
+      subject,
+      html,
+      text, // Include text if provided
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    console.log('Email sent:', info.messageId);
     return info;
   } catch (error) {
     console.error('Error sending email:', error);

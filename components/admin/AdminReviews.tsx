@@ -49,22 +49,12 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from '@/components/ui/accordion';
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
 import ApplicationReviewDetails from './ApplicationReviewDetails';
+import MassNotificationSender from './MassNotificationSender';
 
 // Define types
-type ReviewStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'OVERDUE';
 type ApplicationStatus = 'SUBMITTED' | 'UNDER_REVIEW' | 'APPROVED' | 'REJECTED' | 'WITHDRAWN';
+type ReviewStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'REJECTED' | 'WITHDRAWN';
 type StartupCallStatus = 'DRAFT' | 'PUBLISHED' | 'CLOSED' | 'ARCHIVED';
 
 interface ApplicationReview {
@@ -136,6 +126,7 @@ const AdminReviews: React.FC = () => {
   const [newStatus, setNewStatus] = useState<ApplicationStatus | ''>('');
   const [feedbackMessage, setFeedbackMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedApplications, setSelectedApplications] = useState<string[]>([]);
 
   // Fetch startup calls with applications and reviews
   useEffect(() => {
@@ -291,6 +282,22 @@ const AdminReviews: React.FC = () => {
     };
   };
 
+  // Add this function to handle application selection
+  const handleApplicationSelect = (applicationId: string) => {
+    setSelectedApplications(prev => 
+      prev.includes(applicationId)
+        ? prev.filter(id => id !== applicationId)
+        : [...prev, applicationId]
+    );
+  };
+
+  // Add this function to handle successful notification sending
+  const handleNotificationSuccess = () => {
+    setSelectedApplications([]);
+    // Refresh the applications list
+    fetchStartupCalls();
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -311,6 +318,19 @@ const AdminReviews: React.FC = () => {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
+          {/* Add the mass notification sender */}
+          {selectedApplications.length > 0 && (
+            <div className="mb-4 flex items-center justify-between">
+              <div className="text-sm text-muted-foreground">
+                {selectedApplications.length} application{selectedApplications.length !== 1 ? 's' : ''} selected
+              </div>
+              <MassNotificationSender 
+                selectedApplications={selectedApplications}
+                onSuccess={handleNotificationSuccess}
+              />
+            </div>
+          )}
+
           {startupCalls.length === 0 ? (
             <div className="text-center py-8">
               <AlertTriangle className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
@@ -455,15 +475,16 @@ const AdminReviews: React.FC = () => {
                               className={`cursor-pointer ${expandedApplications.includes(app.id) ? 'bg-muted/30' : ''}`}
                               onClick={() => toggleApplicationExpansion(app.id)}
                             >
-                              <TableCell className="font-medium">
-                                <div className="flex items-center">
-                                  {expandedApplications.includes(app.id) ? (
-                                    <ChevronDown className="h-4 w-4 mr-2 text-muted-foreground" />
-                                  ) : (
-                                    <ChevronRight className="h-4 w-4 mr-2 text-muted-foreground" />
-                                  )}
-                                  {app.rank}
-                                </div>
+                              <TableCell className="w-[50px]">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedApplications.includes(app.id)}
+                                  onChange={(e) => {
+                                    e.stopPropagation();
+                                    handleApplicationSelect(app.id);
+                                  }}
+                                  className="h-4 w-4 rounded border-gray-300"
+                                />
                               </TableCell>
                               <TableCell>
                                 <div className="font-medium">{app.startupName}</div>
