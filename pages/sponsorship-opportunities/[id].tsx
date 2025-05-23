@@ -32,14 +32,21 @@ import ApplySponsorshipForm from "@/components/sponsor/ApplySponsorshipForm";
 interface SponsorshipOpportunity {
   id: string;
   title: string;
+  slug: string;
   description: string;
   benefits: string[];
+  industryFocus?: string;
+  tags: string[];
   minAmount: number;
   maxAmount: number;
-  currency: string;
   status: string;
+  eligibility?: string;
   createdAt: string;
   deadline?: string;
+  coverImage?: string;
+  viewsCount: number;
+  shareCount: number;
+  source?: string;
   startupCallId: string | null;
   startupCall?: {
     title: string;

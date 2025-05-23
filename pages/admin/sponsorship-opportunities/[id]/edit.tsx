@@ -42,6 +42,8 @@ import {
   Tag,
   CalendarIcon,
   Trash,
+  Save,
+  ArrowLeft,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -52,6 +54,7 @@ import {
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
+import Layout from '@/components/layout/Layout';
 
 // Define the form schema
 const formSchema = z.object({
@@ -67,6 +70,9 @@ const formSchema = z.object({
   status: z.string().min(1, "Status is required"),
   deadline: z.date().nullable().optional(),
   startupCallId: z.string().optional(),
+  industryFocus: z.string().optional(),
+  eligibility: z.string().optional(),
+  coverImage: z.string().optional(),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -85,6 +91,10 @@ interface SponsorshipOpportunity {
   startupCallId: string;
   createdAt: string;
   updatedAt: string;
+  industryFocus?: string;
+  tags: string[];
+  eligibility?: string;
+  coverImage?: string;
 }
 
 interface StartupCall {
@@ -104,6 +114,8 @@ export default function EditSponsorshipOpportunityPage() {
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [newBenefit, setNewBenefit] = useState("");
+  const [tags, setTags] = useState<string[]>([]);
+  const [newTag, setNewTag] = useState("");
 
   // Initialize the form
   const form = useForm<FormValues>({
@@ -118,6 +130,9 @@ export default function EditSponsorshipOpportunityPage() {
       status: "DRAFT",
       deadline: null,
       startupCallId: "",
+      industryFocus: "",
+      eligibility: "",
+      coverImage: "",
     },
   });
 
@@ -148,6 +163,7 @@ export default function EditSponsorshipOpportunityPage() {
       const data = response.data;
 
       setOpportunity(data);
+      setTags(data.tags || []);
 
       // Set form values from fetched data
       form.reset({
@@ -160,6 +176,9 @@ export default function EditSponsorshipOpportunityPage() {
         status: data.status,
         deadline: data.deadline ? new Date(data.deadline) : null,
         startupCallId: data.startupCallId || "none",
+        industryFocus: data.industryFocus,
+        eligibility: data.eligibility,
+        coverImage: data.coverImage,
       });
     } catch (error) {
       console.error("Error fetching opportunity:", error);
@@ -195,6 +214,7 @@ export default function EditSponsorshipOpportunityPage() {
         ...values,
         startupCallId:
           values.startupCallId === "none" ? "" : values.startupCallId,
+        tags,
       };
 
       await axios.patch(
@@ -240,356 +260,262 @@ export default function EditSponsorshipOpportunityPage() {
     );
   };
 
+  // Handle adding a new tag
+  const handleAddTag = () => {
+    if (newTag.trim()) {
+      setTags([...tags, newTag.trim()]);
+      setNewTag("");
+    }
+  };
+
+  // Handle removing a tag
+  const handleRemoveTag = (index: number) => {
+    setTags(tags.filter((_, i) => i !== index));
+  };
+
+  if (sessionStatus === "loading" || loading) {
+    return (
+      <Layout title="Edit Sponsorship Opportunity">
+        <div className="container mx-auto py-8 px-4">
+          <div className="flex items-center justify-center h-64">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
+
+  if (!opportunity) {
+    return (
+      <Layout title="Opportunity Not Found">
+        <div className="container mx-auto py-8 px-4">
+          <div className="flex items-center mb-6">
+            <Link href="/admin/sponsorship-opportunities" className="mr-4">
+              <Button variant="ghost" size="sm">
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Back
+              </Button>
+            </Link>
+            <h1 className="text-3xl font-bold">Opportunity Not Found</h1>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
+
   return (
-    <>
-      <Head>
-        <title>Edit Sponsorship Opportunity</title>
-      </Head>
-      <div className="min-h-screen bg-gray-50">
-        <div className="mx-auto max-w-7xl bg-white shadow-sm rounded-lg my-6 p-8">
-          <div className="mb-6">
-            <Button
-              variant="ghost"
-              onClick={() => router.push("/admin/sponsorship-opportunities")}
-              className="mb-2"
-            >
-              <ChevronLeft className="mr-2 h-4 w-4" />
-              Back to Opportunities
+    <Layout title="Edit Sponsorship Opportunity">
+      <div className="container mx-auto py-8 px-4">
+        <div className="flex items-center mb-6">
+          <Link href="/admin/sponsorship-opportunities" className="mr-4">
+            <Button variant="ghost" size="sm">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back
             </Button>
-            <h1 className="text-2xl font-bold">Edit Sponsorship Opportunity</h1>
+          </Link>
+          <h1 className="text-3xl font-bold">Edit Sponsorship Opportunity</h1>
+        </div>
+
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">Title</label>
+                <Input
+                  value={opportunity.title}
+                  onChange={(e) =>
+                    setOpportunity({ ...opportunity, title: e.target.value })
+                  }
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Description</label>
+                <Textarea
+                  value={opportunity.description}
+                  onChange={(e) =>
+                    setOpportunity({ ...opportunity, description: e.target.value })
+                  }
+                  required
+                  rows={4}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Industry Focus</label>
+                <Input
+                  value={opportunity.industryFocus || ''}
+                  onChange={(e) =>
+                    setOpportunity({ ...opportunity, industryFocus: e.target.value })
+                  }
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Eligibility</label>
+                <Textarea
+                  value={opportunity.eligibility || ''}
+                  onChange={(e) =>
+                    setOpportunity({ ...opportunity, eligibility: e.target.value })
+                  }
+                  rows={2}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1">Min Amount</label>
+                  <Input
+                    type="number"
+                    value={opportunity.minAmount}
+                    onChange={(e) =>
+                      setOpportunity({
+                        ...opportunity,
+                        minAmount: parseFloat(e.target.value),
+                      })
+                    }
+                    required
+                    min="0"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Max Amount</label>
+                  <Input
+                    type="number"
+                    value={opportunity.maxAmount}
+                    onChange={(e) =>
+                      setOpportunity({
+                        ...opportunity,
+                        maxAmount: parseFloat(e.target.value),
+                      })
+                    }
+                    required
+                    min="0"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Status</label>
+                <Select
+                  value={opportunity.status}
+                  onValueChange={(value) =>
+                    setOpportunity({ ...opportunity, status: value })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="DRAFT">Draft</SelectItem>
+                    <SelectItem value="OPEN">Open</SelectItem>
+                    <SelectItem value="CLOSED">Closed</SelectItem>
+                    <SelectItem value="ARCHIVED">Archived</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Deadline</label>
+                <Input
+                  type="datetime-local"
+                  value={opportunity.deadline ? opportunity.deadline.slice(0, 16) : ''}
+                  onChange={(e) =>
+                    setOpportunity({ ...opportunity, deadline: e.target.value })
+                  }
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Cover Image URL</label>
+                <Input
+                  value={opportunity.coverImage || ''}
+                  onChange={(e) =>
+                    setOpportunity({ ...opportunity, coverImage: e.target.value })
+                  }
+                />
+              </div>
+            </div>
           </div>
 
-          {loading ? (
-            <div className="flex items-center justify-center h-64">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            </div>
-          ) : (
-            <Form {...form}>
-              <form
-                onSubmit={form.handleSubmit(onSubmit)}
-                className="space-y-8"
-              >
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Opportunity Details</CardTitle>
-                    <CardDescription>
-                      Edit the details of this sponsorship opportunity.
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-6">
-                    <FormField
-                      control={form.control}
-                      name="title"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Title</FormLabel>
-                          <FormControl>
-                            <Input
-                              placeholder="Enter opportunity title"
-                              {...field}
-                            />
-                          </FormControl>
-                          <FormDescription>
-                            A clear, concise title for the sponsorship
-                            opportunity.
-                          </FormDescription>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <FormField
-                      control={form.control}
-                      name="description"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Description</FormLabel>
-                          <FormControl>
-                            <Textarea
-                              placeholder="Describe the sponsorship opportunity..."
-                              className="h-32 resize-none"
-                              {...field}
-                            />
-                          </FormControl>
-                          <FormDescription>
-                            Provide details about what this sponsorship is for
-                            and why sponsors should be interested.
-                          </FormDescription>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <FormField
-                      control={form.control}
-                      name="benefits"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Benefits</FormLabel>
-                          <div className="flex flex-wrap gap-2 mb-2">
-                            {field.value.map((benefit, index) => (
-                              <Badge
-                                key={index}
-                                variant="secondary"
-                                className="flex items-center gap-1 px-3 py-1"
-                              >
-                                {benefit}
-                                <button
-                                  type="button"
-                                  onClick={() => handleRemoveBenefit(index)}
-                                  className="ml-1 rounded-full hover:bg-gray-200 p-1"
-                                >
-                                  <Trash className="h-3 w-3" />
-                                  <span className="sr-only">Remove</span>
-                                </button>
-                              </Badge>
-                            ))}
-                          </div>
-                          <div className="flex gap-2">
-                            <Input
-                              placeholder="Add a new benefit"
-                              value={newBenefit}
-                              onChange={(e) => setNewBenefit(e.target.value)}
-                              className="flex-1"
-                            />
-                            <Button
-                              type="button"
-                              variant="outline"
-                              onClick={handleAddBenefit}
-                            >
-                              <Tag className="h-4 w-4 mr-2" />
-                              Add
-                            </Button>
-                          </div>
-                          <FormDescription>
-                            List the benefits that sponsors will receive.
-                          </FormDescription>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                      <FormField
-                        control={form.control}
-                        name="minAmount"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Minimum Amount</FormLabel>
-                            <FormControl>
-                              <Input
-                                type="number"
-                                placeholder="100"
-                                {...field}
-                                onChange={(e) =>
-                                  field.onChange(Number(e.target.value))
-                                }
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="maxAmount"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Maximum Amount</FormLabel>
-                            <FormControl>
-                              <Input
-                                type="number"
-                                placeholder="10000"
-                                {...field}
-                                onChange={(e) =>
-                                  field.onChange(Number(e.target.value))
-                                }
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="currency"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Currency</FormLabel>
-                            <Select
-                              onValueChange={field.onChange}
-                              defaultValue={field.value}
-                            >
-                              <FormControl>
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Select currency" />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                <SelectItem value="USD">
-                                  USD - US Dollar
-                                </SelectItem>
-                                <SelectItem value="EUR">EUR - Euro</SelectItem>
-                                <SelectItem value="GBP">
-                                  GBP - British Pound
-                                </SelectItem>
-                                <SelectItem value="CAD">
-                                  CAD - Canadian Dollar
-                                </SelectItem>
-                                <SelectItem value="AUD">
-                                  AUD - Australian Dollar
-                                </SelectItem>
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <FormField
-                        control={form.control}
-                        name="status"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Status</FormLabel>
-                            <Select
-                              onValueChange={field.onChange}
-                              defaultValue={field.value}
-                            >
-                              <FormControl>
-                                <SelectTrigger>
-                                  <SelectValue placeholder="Select status" />
-                                </SelectTrigger>
-                              </FormControl>
-                              <SelectContent>
-                                <SelectItem value="DRAFT">Draft</SelectItem>
-                                <SelectItem value="OPEN">Open</SelectItem>
-                                <SelectItem value="CLOSED">Closed</SelectItem>
-                              </SelectContent>
-                            </Select>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="deadline"
-                        render={({ field }) => (
-                          <FormItem className="flex flex-col">
-                            <FormLabel>Application Deadline</FormLabel>
-                            <Popover>
-                              <PopoverTrigger asChild>
-                                <FormControl>
-                                  <Button
-                                    variant={"outline"}
-                                    className={cn(
-                                      "w-full pl-3 text-left font-normal",
-                                      !field.value && "text-muted-foreground"
-                                    )}
-                                  >
-                                    {field.value ? (
-                                      format(field.value, "PPP")
-                                    ) : (
-                                      <span>No deadline</span>
-                                    )}
-                                    <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                                  </Button>
-                                </FormControl>
-                              </PopoverTrigger>
-                              <PopoverContent
-                                className="w-auto p-0"
-                                align="start"
-                              >
-                                <Calendar
-                                  mode="single"
-                                  selected={field.value || undefined}
-                                  onSelect={field.onChange}
-                                  disabled={(date) =>
-                                    date <
-                                    new Date(new Date().setHours(0, 0, 0, 0))
-                                  }
-                                  initialFocus
-                                />
-                              </PopoverContent>
-                            </Popover>
-                            <FormDescription>
-                              When applications for this opportunity will close.
-                            </FormDescription>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-
-                    <FormField
-                      control={form.control}
-                      name="startupCallId"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>
-                            Associated Startup Call (Optional)
-                          </FormLabel>
-                          <Select
-                            onValueChange={field.onChange}
-                            defaultValue={field.value || "none"}
-                          >
-                            <FormControl>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Select a startup call" />
-                              </SelectTrigger>
-                            </FormControl>
-                            <SelectContent>
-                              <SelectItem value="none">None</SelectItem>
-                              {startupCalls.map((call) => (
-                                <SelectItem key={call.id} value={call.id}>
-                                  {call.title}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          <FormDescription>
-                            Link this opportunity to a specific startup call.
-                          </FormDescription>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-                  </CardContent>
-                  <CardFooter className="flex justify-between">
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">Benefits</label>
+              <div className="flex gap-2 mb-2">
+                <Input
+                  value={newBenefit}
+                  onChange={(e) => setNewBenefit(e.target.value)}
+                  placeholder="Add a benefit"
+                />
+                <Button type="button" onClick={handleAddBenefit}>
+                  Add
+                </Button>
+              </div>
+              <div className="space-y-2">
+                {opportunity.benefits.map((benefit, index) => (
+                  <div key={index} className="flex items-center gap-2">
+                    <Input value={benefit} readOnly />
                     <Button
-                      variant="outline"
-                      onClick={() =>
-                        router.push("/admin/sponsorship-opportunities")
-                      }
                       type="button"
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => handleRemoveBenefit(index)}
                     >
-                      Cancel
+                      Remove
                     </Button>
-                    <Button type="submit" disabled={isSubmitting}>
-                      {isSubmitting ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Updating...
-                        </>
-                      ) : (
-                        <>
-                          <CheckCircle className="mr-2 h-4 w-4" />
-                          Save Changes
-                        </>
-                      )}
-                    </Button>
-                  </CardFooter>
-                </Card>
-              </form>
-            </Form>
-          )}
-        </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1">Tags</label>
+              <div className="flex gap-2 mb-2">
+                <Input
+                  value={newTag}
+                  onChange={(e) => setNewTag(e.target.value)}
+                  placeholder="Add a tag"
+                />
+                <Button type="button" onClick={handleAddTag}>
+                  Add
+                </Button>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {tags.map((tag, index) => (
+                  <div
+                    key={index}
+                    className="bg-gray-100 px-3 py-1 rounded-full flex items-center gap-2"
+                  >
+                    <span>{tag}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveTag(index)}
+                      className="text-gray-500 hover:text-gray-700"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-4">
+            <Link href="/admin/sponsorship-opportunities">
+              <Button type="button" variant="outline">
+                Cancel
+              </Button>
+            </Link>
+            <Button type="submit" disabled={isSubmitting}>
+              <Save className="mr-2 h-4 w-4" />
+              {isSubmitting ? 'Saving...' : 'Save Changes'}
+            </Button>
+          </div>
+        </form>
       </div>
-    </>
+    </Layout>
   );
 }

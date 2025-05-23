@@ -739,31 +739,31 @@ export default function ReviewerReview() {
                     </div>
 
                     <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-                      {/* Innovation Score */}
+                    {/* Innovation Score */}
                       <div className="space-y-2">
                         <div className="flex items-center justify-between">
                           <Label htmlFor="innovationScore" className="text-base">
                             Innovation
-                          </Label>
+                      </Label>
                           <Badge variant="outline" className="ml-2">
                             {innovationScore}/100
                           </Badge>
                         </div>
-                        <Input
-                          id="innovationScore"
+                      <Input
+                        id="innovationScore"
                           type="range"
-                          min="0"
-                          max="100"
-                          value={innovationScore}
+                        min="0"
+                        max="100"
+                        value={innovationScore}
                           onChange={(e) => setInnovationScore(Number(e.target.value))}
                           className="w-full"
-                        />
+                      />
                         <p className="text-sm text-muted-foreground">
                           How innovative and unique is the solution?
                         </p>
-                      </div>
+                    </div>
 
-                      {/* Market Score */}
+                    {/* Market Score */}
                       <div className="space-y-2">
                         <div className="flex items-center justify-between">
                           <Label htmlFor="marketScore" className="text-base">
@@ -773,21 +773,21 @@ export default function ReviewerReview() {
                             {marketScore}/100
                           </Badge>
                         </div>
-                        <Input
-                          id="marketScore"
+                      <Input
+                        id="marketScore"
                           type="range"
-                          min="0"
-                          max="100"
-                          value={marketScore}
-                          onChange={(e) => setMarketScore(Number(e.target.value))}
+                        min="0"
+                        max="100"
+                        value={marketScore}
+                        onChange={(e) => setMarketScore(Number(e.target.value))}
                           className="w-full"
-                        />
+                      />
                         <p className="text-sm text-muted-foreground">
                           How large and accessible is the target market?
                         </p>
-                      </div>
+                    </div>
 
-                      {/* Team Score */}
+                    {/* Team Score */}
                       <div className="space-y-2">
                         <div className="flex items-center justify-between">
                           <Label htmlFor="teamScore" className="text-base">
@@ -797,39 +797,39 @@ export default function ReviewerReview() {
                             {teamScore}/100
                           </Badge>
                         </div>
-                        <Input
-                          id="teamScore"
+                      <Input
+                        id="teamScore"
                           type="range"
-                          min="0"
-                          max="100"
-                          value={teamScore}
-                          onChange={(e) => setTeamScore(Number(e.target.value))}
+                        min="0"
+                        max="100"
+                        value={teamScore}
+                        onChange={(e) => setTeamScore(Number(e.target.value))}
                           className="w-full"
-                        />
+                      />
                         <p className="text-sm text-muted-foreground">
                           How strong and experienced is the team?
                         </p>
-                      </div>
+                    </div>
 
-                      {/* Execution Score */}
+                    {/* Execution Score */}
                       <div className="space-y-2">
                         <div className="flex items-center justify-between">
                           <Label htmlFor="executionScore" className="text-base">
                             Execution
-                          </Label>
+                      </Label>
                           <Badge variant="outline" className="ml-2">
                             {executionScore}/100
                           </Badge>
                         </div>
-                        <Input
-                          id="executionScore"
+                      <Input
+                        id="executionScore"
                           type="range"
-                          min="0"
-                          max="100"
-                          value={executionScore}
+                        min="0"
+                        max="100"
+                        value={executionScore}
                           onChange={(e) => setExecutionScore(Number(e.target.value))}
                           className="w-full"
-                        />
+                      />
                         <p className="text-sm text-muted-foreground">
                           How feasible and well-planned is the execution?
                         </p>

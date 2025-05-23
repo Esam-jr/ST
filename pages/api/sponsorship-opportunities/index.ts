@@ -6,164 +6,80 @@ import { z } from 'zod';
 
 // Define the schema for creating a sponsorship opportunity
 const createOpportunitySchema = z.object({
-  title: z.string().min(3, { message: 'Title must be at least 3 characters' })
-    .max(100, { message: 'Title must not exceed 100 characters' }),
-  description: z.string().min(10, { message: 'Description must be at least 10 characters' })
-    .max(2000, { message: 'Description must not exceed 2000 characters' }),
-  benefits: z.array(
-    z.string().min(1, { message: 'Benefit cannot be empty' })
-      .max(200, { message: 'Benefit must not exceed 200 characters' })
-  ).min(1, { message: 'At least one benefit is required' }),
-  minAmount: z.coerce.number().positive({ message: 'Min amount must be positive' }),
-  maxAmount: z.coerce.number().positive({ message: 'Max amount must be positive' }),
-  currency: z.string().min(1, { message: 'Currency is required' }),
-  startupCallId: z.string().optional().nullable(),
-  status: z.enum(['draft', 'active', 'closed', 'archived']),
-  deadline: z.string().optional().nullable()
-}).refine(data => data.maxAmount >= data.minAmount, {
-  message: "Maximum amount must be greater than or equal to minimum amount",
-  path: ["maxAmount"]
+  title: z.string().min(1, 'Title is required'),
+  description: z.string().min(1, 'Description is required'),
+  benefits: z.array(z.string()),
+  minAmount: z.number().min(0),
+  maxAmount: z.number().min(0),
+  industryFocus: z.string().optional(),
+  tags: z.array(z.string()),
+  status: z.enum(['DRAFT', 'OPEN', 'CLOSED', 'ARCHIVED']),
+  eligibility: z.string().optional(),
+  deadline: z.string().optional(),
+  coverImage: z.string().optional(),
+  startupCallId: z.string().optional(),
 });
 
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
-  // Check if user is authenticated
   const session = await getServerSession(req, res, authOptions);
+
   if (!session) {
-    return res.status(401).json({ message: 'Unauthorized' });
+    return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  // Only admins can access this endpoint
-  if (session.user.role !== 'ADMIN') {
-    return res.status(403).json({ message: 'Forbidden: Admin access required' });
-  }
-
-  // Handle GET request to fetch all opportunities
   if (req.method === 'GET') {
     try {
       const opportunities = await prisma.sponsorshipOpportunity.findMany({
-        orderBy: {
-          createdAt: 'desc'
-        },
         include: {
           startupCall: {
             select: {
-              id: true,
-              title: true
-            }
+              title: true,
+            },
           },
-          applications: {
-            select: {
-              id: true
-            }
-          }
-        }
+        },
+        orderBy: {
+          createdAt: 'desc',
+        },
       });
-      
+
       return res.status(200).json(opportunities);
     } catch (error) {
       console.error('Error fetching opportunities:', error);
-      return res.status(500).json({ 
-        message: 'Failed to fetch sponsorship opportunities',
-        error: error instanceof Error ? error.message : 'Unknown error'
-      });
+      return res.status(500).json({ error: 'Failed to fetch opportunities' });
     }
-  } 
-  
-  // Handle POST request to create a new opportunity
-  else if (req.method === 'POST') {
-    try {
-      // Validate request body against schema
-      const validationResult = createOpportunitySchema.safeParse(req.body);
-      
-      if (!validationResult.success) {
-        return res.status(400).json({ 
-          message: 'Validation error',
-          errors: validationResult.error.errors
-        });
-      }
-      
-      const data = validationResult.data;
-      
-      // Format the deadline if provided
-      const deadline = data.deadline ? new Date(data.deadline) : null;
-      
-      // Check if the deadline is in the future
-      if (deadline && deadline <= new Date()) {
-        return res.status(400).json({
-          message: 'Validation error',
-          errors: [{ path: ['deadline'], message: 'Deadline must be in the future' }]
-        });
-      }
-      
-      // Create the opportunity with properly formatted data
-      const createData: any = {
-        title: data.title,
-        description: data.description,
-        benefits: data.benefits,
-        minAmount: data.minAmount,
-        maxAmount: data.maxAmount,
-        currency: data.currency,
-        status: data.status.toUpperCase(),
-        createdById: session.user.id,
-        // Connect to startup call if ID is provided
-        startupCall: data.startupCallId ? {
-          connect: { id: data.startupCallId }
-        } : undefined
-      };
-
-      // Only add deadline if provided
-      if (deadline) {
-        createData.deadline = deadline;
-      }
-      
-      const createdOpportunity = await prisma.sponsorshipOpportunity.create({
-        data: createData,
-        include: {
-          startupCall: {
-            select: {
-              id: true,
-              title: true
-            }
-          }
-        }
-      });
-      
-      return res.status(201).json(createdOpportunity);
-    } catch (error) {
-      console.error('Error creating opportunity:', error);
-      
-      // Handle Prisma-specific errors
-      if (error instanceof Error && error.name === 'PrismaClientKnownRequestError') {
-        // Cast to any to access code
-        const prismaError = error as any;
-        
-        if (prismaError.code === 'P2025') {
-          return res.status(404).json({ 
-            message: 'Startup call not found',
-            error: error.message
-          });
-        }
-        
-        if (prismaError.code === 'P2002') {
-          return res.status(409).json({ 
-            message: 'Duplicate entry',
-            error: error.message
-          });
-        }
-      }
-      
-      return res.status(500).json({ 
-        message: 'Failed to create sponsorship opportunity',
-        error: error instanceof Error ? error.message : 'Unknown error'
-      });
-    }
-  } 
-  
-  // Handle unsupported methods
-  else {
-    return res.status(405).json({ message: 'Method not allowed' });
   }
+
+  if (req.method === 'POST') {
+    if (session.user.role !== 'ADMIN') {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    try {
+      const validatedData = createOpportunitySchema.parse(req.body);
+
+      const opportunity = await prisma.sponsorshipOpportunity.create({
+        data: {
+          ...validatedData,
+          slug: validatedData.title
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/(^-|-$)/g, ''),
+          createdById: session.user.id,
+        },
+      });
+
+      return res.status(201).json(opportunity);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      console.error('Error creating opportunity:', error);
+      return res.status(500).json({ error: 'Failed to create opportunity' });
+    }
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' });
 } 

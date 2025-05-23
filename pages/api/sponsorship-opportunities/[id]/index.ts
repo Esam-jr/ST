@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '../../auth/[...nextauth]';
 import prisma from '@/lib/prisma';
 import { z } from 'zod';
+import slugify from 'slugify';
 
 // Define interfaces to match Prisma schema
 interface SponsorshipApplication {
@@ -35,223 +36,118 @@ interface SponsorshipOpportunity {
 
 // Define schema for updating a sponsorship opportunity
 const updateOpportunitySchema = z.object({
-  title: z.string().min(3, { message: 'Title must be at least 3 characters' })
-    .max(100, { message: 'Title must not exceed 100 characters' })
-    .optional(),
-  description: z.string().min(10, { message: 'Description must be at least 10 characters' })
-    .max(2000, { message: 'Description must not exceed 2000 characters' })
-    .optional(),
-  benefits: z.array(
-    z.string().min(1, { message: 'Benefit cannot be empty' })
-      .max(200, { message: 'Benefit must not exceed 200 characters' })
-  ).min(1, { message: 'At least one benefit is required' })
-    .optional(),
-  minAmount: z.coerce.number().positive({ message: 'Min amount must be positive' })
-    .optional(),
-  maxAmount: z.coerce.number().positive({ message: 'Max amount must be positive' })
-    .optional(),
-  currency: z.string().min(1, { message: 'Currency is required' })
-    .optional(),
-  startupCallId: z.string().optional().nullable(),
-  status: z.enum(['draft', 'active', 'closed', 'archived'])
-    .optional(),
-  deadline: z.string().optional().nullable(),
+  title: z.string().min(1, 'Title is required').optional(),
+  slug: z.string().optional(),
+  description: z.string().min(1, 'Description is required').optional(),
+  benefits: z.array(z.string()).optional(),
+  minAmount: z.number().min(0).optional(),
+  maxAmount: z.number().min(0).optional(),
+  industryFocus: z.string().optional(),
+  tags: z.array(z.string()).optional(),
+  status: z.enum(['DRAFT', 'OPEN', 'CLOSED', 'ARCHIVED']).optional(),
+  eligibility: z.string().optional(),
+  deadline: z.string().optional(),
+  coverImage: z.string().optional(),
+  startupCallId: z.string().optional(),
 });
 
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
+  const session = await getServerSession(req, res, authOptions);
+
+  if (!session) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+
   const { id } = req.query;
 
-  // Check if the ID is valid
   if (!id || typeof id !== 'string') {
-    return res.status(400).json({ message: 'Invalid opportunity ID' });
+    return res.status(400).json({ error: 'Invalid ID' });
   }
 
-  // Check if the user is authenticated
-  const session = await getServerSession(req, res, authOptions);
-  if (!session) {
-    return res.status(401).json({ message: 'Unauthorized' });
-  }
-
-  // Only admins can modify opportunities
-  if (req.method !== 'GET' && session.user.role !== 'ADMIN') {
-    return res.status(403).json({ message: 'Forbidden: Admin access required for this operation' });
-  }
-
-  try {
-    // Check if the opportunity exists
+  if (req.method === 'GET') {
+    try {
     const opportunity = await prisma.sponsorshipOpportunity.findUnique({
       where: { id },
       include: {
         startupCall: {
           select: {
-            id: true,
             title: true,
           },
         },
-        applications: {
+          createdBy: {
           select: {
-            id: true,
-            sponsorId: true,
-            amount: true,
-            status: true,
-            createdAt: true,
+              name: true,
+              email: true,
           },
         },
       },
-    }) as SponsorshipOpportunity | null;
+      });
 
     if (!opportunity) {
-      return res.status(404).json({ message: 'Sponsorship opportunity not found' });
-    }
-
-    // Handle GET request (view opportunity)
-    if (req.method === 'GET') {
-      // Non-admin users can only view active opportunities
-      // Check status case-insensitively
-      if (session.user.role !== 'ADMIN' && opportunity.status.toUpperCase() !== 'ACTIVE') {
-        return res.status(403).json({ message: 'This opportunity is not available for viewing' });
+        return res.status(404).json({ error: 'Opportunity not found' });
       }
       
       return res.status(200).json(opportunity);
+    } catch (error) {
+      console.error('Error fetching opportunity:', error);
+      return res.status(500).json({ error: 'Failed to fetch opportunity' });
     }
-    
-    // Handle PATCH request (update opportunity)
-    else if (req.method === 'PATCH') {
-      // Validate request body
-      const validationResult = updateOpportunitySchema.safeParse(req.body);
-      
-      if (!validationResult.success) {
-        return res.status(400).json({ 
-          message: 'Validation error',
-          errors: validationResult.error.errors
-        });
-      }
-      
-      const data = validationResult.data;
-      
-      // Prepare update data
-      const updateData: any = {};
-      
-      // Only include fields that were provided in the request
-      if (data.title) updateData.title = data.title;
-      if (data.description) updateData.description = data.description;
-      if (data.benefits) updateData.benefits = data.benefits;
-      if (data.minAmount !== undefined) updateData.minAmount = data.minAmount;
-      if (data.maxAmount !== undefined) updateData.maxAmount = data.maxAmount;
-      if (data.currency) updateData.currency = data.currency;
-      if (data.status) updateData.status = data.status.toUpperCase();
+  }
 
-      // Format deadline if provided
-      if (data.deadline !== undefined) {
-        updateData.deadline = data.deadline ? new Date(data.deadline) : null;
-        
-        // Check if the deadline is in the future
-        if (updateData.deadline && updateData.deadline <= new Date()) {
-          return res.status(400).json({
-            message: 'Validation error',
-            errors: [{ path: ['deadline'], message: 'Deadline must be in the future' }]
-          });
+  if (req.method === 'PUT') {
+    if (session.user.role !== 'ADMIN') {
+      return res.status(403).json({ error: 'Forbidden' });
         }
-      }
-      
-      // Restrict changes if applications exist
-      if (opportunity.applications && opportunity.applications.length > 0) {
-        // Don't allow changing currency if applications exist
-        if (data.currency && data.currency !== opportunity.currency) {
-          return res.status(400).json({
-            message: 'Cannot change currency for opportunities with existing applications',
-          });
-        }
-      }
-      
-      // Handle startup call connection/disconnection
-      if (data.startupCallId !== undefined) {
-        if (data.startupCallId) {
-          // Try to connect to the provided startup call ID
-          updateData.startupCall = {
-            connect: { id: data.startupCallId }
-          };
-        } else {
-          // Disconnect from current startup call
-          updateData.startupCall = {
-            disconnect: true
+
+    try {
+      const validatedData = updateOpportunitySchema.parse(req.body);
+
+      // If title is being updated, generate a new slug
+      let updateData = { ...validatedData };
+      if (validatedData.title) {
+        updateData = {
+          ...updateData,
+          slug: validatedData.title
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/(^-|-$)/g, ''),
           };
         }
-      }
-      
-      // Update the opportunity
-      const updatedOpportunity = await prisma.sponsorshipOpportunity.update({
+
+      const opportunity = await prisma.sponsorshipOpportunity.update({
         where: { id },
         data: updateData,
-        include: {
-          startupCall: {
-            select: {
-              id: true,
-              title: true,
-            },
-          },
-          applications: {
-            select: {
-              id: true,
-            },
-          },
-        },
-      }) as SponsorshipOpportunity;
-      
-      return res.status(200).json(updatedOpportunity);
+      });
+
+      return res.status(200).json(opportunity);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      console.error('Error updating opportunity:', error);
+      return res.status(500).json({ error: 'Failed to update opportunity' });
     }
-    
-    // Handle DELETE request (delete opportunity)
-    else if (req.method === 'DELETE') {
-      // Prevent deletion if there are existing applications
-      if (opportunity.applications && opportunity.applications.length > 0) {
-        return res.status(400).json({
-          message: 'Cannot delete opportunity with existing applications'
-        });
+  }
+
+  if (req.method === 'DELETE') {
+    if (session.user.role !== 'ADMIN') {
+      return res.status(403).json({ error: 'Forbidden' });
       }
       
-      // Delete the opportunity
+    try {
       await prisma.sponsorshipOpportunity.delete({
-        where: { id }
+        where: { id },
       });
       
       return res.status(204).end();
-    }
-    
-    // Handle unsupported methods
-    else {
-      return res.status(405).json({ message: 'Method not allowed' });
-    }
-    
   } catch (error) {
-    console.error('Error handling sponsorship opportunity:', error);
-    
-    // Handle Prisma-specific errors
-    if (error instanceof Error && error.name === 'PrismaClientKnownRequestError') {
-      // Cast to any to access code
-      const prismaError = error as any;
-      
-      if (prismaError.code === 'P2025') {
-        return res.status(404).json({ 
-          message: 'Resource not found',
-          error: error.message
-        });
-      }
-      
-      if (prismaError.code === 'P2002') {
-        return res.status(409).json({ 
-          message: 'Duplicate entry',
-          error: error.message
-        });
+      console.error('Error deleting opportunity:', error);
+      return res.status(500).json({ error: 'Failed to delete opportunity' });
       }
     }
     
-    return res.status(500).json({ 
-      message: 'Error processing request',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
-  }
+  return res.status(405).json({ error: 'Method not allowed' });
 } 

@@ -212,11 +212,11 @@ export const BudgetForm = ({
           variant: "destructive",
         });
       } else {
-        toast({
-          title: "Error",
+      toast({
+        title: "Error",
           description: error.response?.data?.error || "Failed to save budget. Please try again.",
-          variant: "destructive",
-        });
+        variant: "destructive",
+      });
       }
     } finally {
       setIsSubmitting(false);
@@ -303,9 +303,9 @@ export const BudgetForm = ({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>End Date</FormLabel>
-                  <FormControl>
+                    <FormControl>
                     <Input type="date" {...field} />
-                  </FormControl>
+                    </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
@@ -360,25 +360,25 @@ export const BudgetForm = ({
                 )}
               />
 
-              <FormField
-                control={form.control}
+            <FormField
+              control={form.control}
                 name={`categories.${index}.description`}
-                render={({ field }) => (
-                  <FormItem>
+              render={({ field }) => (
+                <FormItem>
                     <FormLabel>Description (Optional)</FormLabel>
                     <FormControl>
                       <Textarea {...field} value={field.value || ""} />
                     </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
-              <FormField
-                control={form.control}
+            <FormField
+              control={form.control}
                 name={`categories.${index}.allocatedAmount`}
-                render={({ field }) => (
-                  <FormItem>
+              render={({ field }) => (
+                <FormItem>
                     <FormLabel>Allocated Amount</FormLabel>
                     <FormControl>
                       <Input
@@ -390,11 +390,11 @@ export const BudgetForm = ({
                         }
                       />
                     </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
           ))}
         </div>
 
@@ -495,9 +495,9 @@ export const BudgetForm = ({
         </Card>
 
         <div className="flex justify-end space-x-4">
-          <Button
-            type="button"
-            variant="outline"
+            <Button
+              type="button"
+              variant="outline"
             onClick={onCancel}
             disabled={isSubmitting}
           >
