@@ -41,12 +41,20 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
-import LoadingSpinner from "@/components/ui/LoadingSpinner";
+import { Loader2 } from "lucide-react";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
+import { format } from "date-fns";
+import { Calendar } from "@/components/ui/calendar";
 import {
   DollarSign,
   PlusCircle,
   FileText,
-  Calendar,
+  Calendar as CalendarIcon,
   AlertTriangle,
   AlertCircle,
   Receipt,
@@ -96,6 +104,16 @@ interface ExpenseTrackerProps {
   projectId?: string;
 }
 
+interface NewExpense {
+  title: string;
+  description: string;
+  amount: number;
+  date: Date;
+  categoryId: string;
+  milestoneId: string;
+  receipt?: File | null;
+}
+
 const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
   const { toast } = useToast();
 
@@ -114,17 +132,18 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
   // Expense form state
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
-  const [newExpense, setNewExpense] = useState({
+  const [newExpense, setNewExpense] = useState<NewExpense>({
     title: "",
     description: "",
     amount: 0,
+    date: new Date(),
     categoryId: "",
-    date: new Date().toISOString().substring(0, 10),
-    taskId: "none",
-    milestoneId: "none",
+    milestoneId: "",
+    receipt: null,
   });
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Fetch all data when component mounts
   useEffect(() => {
@@ -413,6 +432,10 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
       errors.date = "Date is required";
     }
 
+    if (!newExpense.milestoneId) {
+      errors.milestoneId = "Milestone is required";
+    }
+
     // Check if the expense exceeds the category budget
     if (newExpense.categoryId) {
       const selectedCategory = categories.find(
@@ -481,187 +504,67 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
   };
 
   // Submit expense form
-  const submitExpenseForm = async () => {
-    if (!validateExpenseForm()) return;
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!validateExpenseForm()) {
+      return;
+    }
 
-    setLoading(true);
+    setIsSubmitting(true);
+
     try {
-      // Convert "none" to null for the API
-      const taskId = newExpense.taskId === "none" ? null : newExpense.taskId;
-      const milestoneId =
-        newExpense.milestoneId === "none" ? null : newExpense.milestoneId;
-
-      // Ensure amount is a valid number
-      const amount = parseFloat(newExpense.amount.toString());
-      if (isNaN(amount) || amount <= 0) {
-        setFormErrors({
-          ...formErrors,
-          amount: "Amount must be a positive number",
-        });
-        setLoading(false);
-        return;
+      const formData = new FormData();
+      formData.append("title", newExpense.title);
+      formData.append("description", newExpense.description);
+      formData.append("amount", newExpense.amount.toString());
+      formData.append("date", newExpense.date.toISOString());
+      formData.append("categoryId", newExpense.categoryId);
+      formData.append("milestoneId", newExpense.milestoneId);
+      
+      if (newExpense.receipt) {
+        formData.append("receipt", newExpense.receipt);
       }
 
-      try {
-        // Create FormData for multipart form data (file upload)
-        const formData = new FormData();
+      const response = await axios.post("/api/entrepreneur/expenses", formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      });
 
-        // Add form fields
-        formData.append("title", newExpense.title);
-        formData.append("description", newExpense.description || "");
-        formData.append("amount", amount.toString());
-        formData.append("categoryId", newExpense.categoryId);
-        formData.append("date", newExpense.date);
-        formData.append("taskId", taskId || "none");
-        formData.append("milestoneId", milestoneId || "none");
+      const newExpenseData = response.data;
 
-        // Add receipt file if present
-        if (receiptFile) {
-          formData.append("receipt", receiptFile);
-        }
-
-        // Send multipart form data
-        const response = await axios.post(
-          "/api/entrepreneur/expenses",
-          formData,
-          {
-            headers: {
-              "Content-Type": "multipart/form-data",
-            },
-          }
-        );
-
-        // If we get a successful response, update the UI with the new expense
-        const newExpenseData = response.data;
-
-        // Check if the response already includes categoryName; if not, get it from state
-        if (!newExpenseData.categoryName) {
-          newExpenseData.categoryName =
-            categories.find((cat) => cat.id === newExpense.categoryId)?.name ||
-            "Unknown";
-        }
-
-        // Check if the response already includes task title; if not, get it from state
-        if (taskId && !newExpenseData.taskTitle) {
-          newExpenseData.taskTitle = tasks.find((t) => t.id === taskId)?.title;
-        }
-
-        // Check if the response already includes milestone title; if not, get it from state
-        if (milestoneId && !newExpenseData.milestoneTitle) {
-          newExpenseData.milestoneTitle = milestones.find(
-            (m) => m.id === milestoneId
-          )?.title;
-        }
-
-        setExpenses([...(expenses || []), newExpenseData]);
-
-        // Update category spending
-        setCategories(
-          categories.map((category) =>
-            category.id === newExpense.categoryId
-              ? {
-                  ...category,
-                  spent: category.spent + amount,
-                  remaining: category.remaining - amount,
-                }
-              : category
-          )
-        );
-
-        toast({
-          title: "Expense Added",
-          description: "Your expense has been submitted for approval",
-        });
-
-        // Reset form with proper values
-        setNewExpense({
-          title: "",
-          description: "",
-          amount: 0,
-          categoryId: "",
-          date: new Date().toISOString().substring(0, 10),
-          taskId: "none",
-          milestoneId: "none",
-        });
-        setReceiptFile(null);
-        if (receiptPreview) {
-          URL.revokeObjectURL(receiptPreview);
-          setReceiptPreview(null);
-        }
-
-        // Close dialog
-        setCreateDialogOpen(false);
-      } catch (apiError: any) {
-        console.error("Error from expense API:", apiError);
-
-        // Get the specific error details from the API response
-        const errorData = apiError.response?.data;
-        const errorCode = errorData?.code;
-        const errorDetails = errorData?.details;
-
-        if (errorCode === "VALIDATION_ERROR" && errorDetails) {
-          // Handle field-specific validation errors
-          const newFormErrors: Record<string, string> = {};
-
-          if (errorDetails.title) newFormErrors.title = errorDetails.title;
-          if (errorDetails.amount) newFormErrors.amount = errorDetails.amount;
-          if (errorDetails.categoryId)
-            newFormErrors.categoryId = errorDetails.categoryId;
-          if (errorDetails.date) newFormErrors.date = errorDetails.date;
-          if (errorDetails.receipt)
-            newFormErrors.receipt = errorDetails.receipt;
-
-          setFormErrors(newFormErrors);
-
-          toast({
-            title: "Validation Error",
-            description: "Please check the form for errors",
-            variant: "destructive",
-          });
-        } else if (errorCode === "BUDGET_EXCEEDED") {
-          // Special handling for budget exceeded errors
-          setFormErrors({
-            ...formErrors,
-            amount: `Amount exceeds remaining budget for ${
-              errorDetails?.categoryName || "this category"
-            } (${formatCurrency(errorDetails?.remaining || 0)})`,
-          });
-
-          toast({
-            title: "Budget Exceeded",
-            description: `The expense amount exceeds the remaining budget for this category`,
-            variant: "destructive",
-          });
-        } else {
-          // Generic error handling
-          toast({
-            title: "Error",
-            description:
-              errorData?.message ||
-              "Failed to create expense. Please try again.",
-            variant: "destructive",
-          });
-        }
+      setExpenses((prev) => [...prev, newExpenseData]);
+      setNewExpense({
+        title: "",
+        description: "",
+        amount: 0,
+        date: new Date(),
+        categoryId: "",
+        milestoneId: "",
+        receipt: null,
+      });
+      setReceiptFile(null);
+      if (receiptPreview) {
+        URL.revokeObjectURL(receiptPreview);
+        setReceiptPreview(null);
       }
+      setCreateDialogOpen(false);
+
+      toast({
+        title: "Success",
+        description: "Expense created successfully",
+      });
     } catch (error: any) {
       console.error("Error creating expense:", error);
       toast({
         title: "Error",
-        description: "An unexpected error occurred. Please try again.",
+        description: error.response?.data?.message || "Failed to create expense",
         variant: "destructive",
       });
     } finally {
-      setLoading(false);
+      setIsSubmitting(false);
     }
-  };
-
-  // Get filtered tasks based on milestone selection
-  const getFilteredTasks = () => {
-    if (!newExpense.milestoneId || newExpense.milestoneId === "none")
-      return tasks || [];
-    return (tasks || []).filter(
-      (task) => task.milestoneId === newExpense.milestoneId
-    );
   };
 
   // Render the expense list with receipt links
@@ -783,17 +686,35 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
 
             <div>
               <Label htmlFor="date">Date</Label>
-              <Input
-                id="date"
-                type="date"
-                value={newExpense.date}
-                onChange={(e) => handleInputChange("date", e.target.value)}
-                max={new Date().toISOString().substring(0, 10)}
-                className={formErrors.date ? "border-red-500" : ""}
-              />
-              {formErrors.date && (
-                <p className="text-red-500 text-sm mt-1">{formErrors.date}</p>
-              )}
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      "w-full justify-start text-left font-normal",
+                      !newExpense.date && "text-muted-foreground"
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {newExpense.date ? format(newExpense.date, "PPP") : <span>Pick a date</span>}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={newExpense.date}
+                    onSelect={(date: Date | undefined) => {
+                      if (date) {
+                        handleInputChange("date", date);
+                      }
+                    }}
+                    disabled={(date: Date) => date > new Date()}
+                    initialFocus
+                    fromDate={new Date(2020, 0, 1)}
+                    toDate={new Date()}
+                  />
+                </PopoverContent>
+              </Popover>
             </div>
           </div>
 
@@ -824,6 +745,30 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
             )}
           </div>
 
+          <div>
+            <Label htmlFor="milestoneId">Related Milestone</Label>
+            <Select
+              value={newExpense.milestoneId}
+              onValueChange={(value) => handleInputChange("milestoneId", value)}
+            >
+              <SelectTrigger
+                className={formErrors.milestoneId ? "border-red-500" : ""}
+              >
+                <SelectValue placeholder="Select a milestone" />
+              </SelectTrigger>
+              <SelectContent>
+                {milestones.map((milestone) => (
+                  <SelectItem key={milestone.id} value={milestone.id}>
+                    {milestone.title}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {formErrors.milestoneId && (
+              <p className="text-red-500 text-sm mt-1">{formErrors.milestoneId}</p>
+            )}
+          </div>
+
           {/* Receipt Upload */}
           <div>
             <Label htmlFor="receipt">Receipt (Optional)</Label>
@@ -841,7 +786,7 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
                         id="receipt-upload"
                         name="receipt"
                         type="file"
-                        accept="image/jpeg,image/png,application/pdf"
+                        accept="image/*,.pdf"
                         className="sr-only"
                         onChange={handleReceiptChange}
                       />
@@ -887,50 +832,6 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
               <p className="text-red-500 text-sm mt-1">{formErrors.receipt}</p>
             )}
           </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="milestoneId">Related Milestone (Optional)</Label>
-              <Select
-                value={newExpense.milestoneId}
-                onValueChange={(value) =>
-                  handleInputChange("milestoneId", value)
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a milestone" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
-                  {milestones.map((milestone) => (
-                    <SelectItem key={milestone.id} value={milestone.id}>
-                      {milestone.title}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <Label htmlFor="taskId">Related Task (Optional)</Label>
-              <Select
-                value={newExpense.taskId}
-                onValueChange={(value) => handleInputChange("taskId", value)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a task" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">None</SelectItem>
-                  {getFilteredTasks().map((task) => (
-                    <SelectItem key={task.id} value={task.id}>
-                      {task.title}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
         </div>
 
         <DialogFooter>
@@ -941,25 +842,25 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
           >
             Cancel
           </Button>
-          <Button type="button" onClick={submitExpenseForm} disabled={loading}>
-            {loading ? (
-              <>
-                <LoadingSpinner size={16} className="mr-2" />
-                Creating...
-              </>
-            ) : (
-              "Create Expense"
-            )}
-          </Button>
+          {isSubmitting ? (
+            <Button disabled>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Creating...
+            </Button>
+          ) : (
+            <Button type="submit" form="expense-form">
+              Create Expense
+            </Button>
+          )}
         </DialogFooter>
       </div>
     );
   };
 
-  if (loading && (!expenses || expenses.length === 0)) {
+  if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
-        <LoadingSpinner />
+        <Loader2 className="h-16 w-16 animate-spin" />
       </div>
     );
   }
@@ -1049,7 +950,7 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
         <CardContent>
           {fetchingExpenses ? (
             <div className="flex justify-center py-8">
-              <LoadingSpinner />
+              <Loader2 className="h-16 w-16 animate-spin" />
             </div>
           ) : (
             renderExpenseList()
@@ -1063,10 +964,12 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
           <DialogHeader>
             <DialogTitle>Create New Expense</DialogTitle>
             <DialogDescription>
-              Add a new expense to track your project spending
+              Add a new expense to track your spending
             </DialogDescription>
           </DialogHeader>
-          {renderExpenseForm()}
+          <form id="expense-form" onSubmit={handleSubmit}>
+            {renderExpenseForm()}
+          </form>
         </DialogContent>
       </Dialog>
     </div>
