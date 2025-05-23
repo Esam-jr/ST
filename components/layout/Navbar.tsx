@@ -182,8 +182,10 @@ export default function Navbar() {
               className="sm:hidden"
               onClick={() => setIsMenuOpen(!isMenuOpen)}
             >
-              {isMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-              <span className="sr-only">Toggle menu</span>
+              <div className="flex items-center">
+                {isMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+                <span className="sr-only">Toggle menu</span>
+              </div>
             </Button>
           </div>
         </div>
