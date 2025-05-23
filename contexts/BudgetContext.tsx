@@ -24,11 +24,11 @@ export interface Budget {
 }
 
 export interface BudgetCategory {
-  id: string;
+  id?: string;
   name: string;
   description: string | null;
   allocatedAmount: number;
-  budgetId: string;
+  budgetId?: string;
 }
 
 export interface Expense {

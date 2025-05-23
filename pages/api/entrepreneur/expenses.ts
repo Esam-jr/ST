@@ -1,265 +1,202 @@
 import { NextApiRequest, NextApiResponse } from "next";
 import { getServerSession } from "next-auth/next";
-import { authOptions } from "@/lib/auth";
+import { authOptions } from "../auth/[...nextauth]";
 import prisma from "@/lib/prisma";
-import formidable from "formidable";
-import fs from "fs";
-import path from "path";
-import { v4 as uuidv4 } from "uuid";
+import { parseForm } from "@/lib/parse-form";
 
-// Disable the default body parser to handle file uploads
 export const config = {
   api: {
     bodyParser: false,
   },
 };
 
-// Parse form data with formidable
-const parseForm = (req: NextApiRequest) => {
-  return new Promise<{ fields: formidable.Fields; files: formidable.Files }>(
-    (resolve, reject) => {
-      const form = formidable({
-        multiples: false,
-        maxFileSize: 5 * 1024 * 1024, // 5MB limit
-        uploadDir: path.join(process.cwd(), "public/uploads/receipts"),
-        keepExtensions: true,
-        filename: (_name, _ext, part) => {
-          const uniqueFilename = `${uuidv4()}${path.extname(
-            part.originalFilename || ""
-          )}`;
-          return uniqueFilename;
-        },
-      });
-
-      // Ensure upload directory exists
-      const uploadDir = path.join(process.cwd(), "public/uploads/receipts");
-      if (!fs.existsSync(uploadDir)) {
-        fs.mkdirSync(uploadDir, { recursive: true });
-      }
-
-      form.parse(req, (err, fields, files) => {
-        if (err) reject(err);
-        else resolve({ fields, files });
-      });
-    }
-  );
-};
-
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
+  if (req.method !== "POST" && req.method !== "GET") {
+    return res.status(405).json({ message: "Method not allowed" });
+  }
+
   try {
-    // Get session
     const session = await getServerSession(req, res, authOptions);
 
-    if (!session || !session.user || session.user.role !== "ENTREPRENEUR") {
+    if (!session || !session.user) {
       return res.status(401).json({ message: "Unauthorized" });
     }
 
-    // Handle GET request - list expenses
+    // GET method to fetch expenses
     if (req.method === "GET") {
-      try {
-        // First, find the entrepreneur's startup
-        const startup = await prisma.startup.findFirst({
-          where: {
-            founderId: session.user.id,
-          },
-        });
-
-        if (!startup) {
-          return res
-            .status(404)
-            .json({ message: "No startup found for this user" });
-        }
-
-        // Find the approved application
-        const approvedApplication =
-          await prisma.startupCallApplication.findFirst({
-            where: {
-              startupId: startup.id,
-              status: "APPROVED",
-            },
+      const startup = await prisma.startup.findFirst({
+        where: {
+          founderId: session.user.id,
+        },
+        include: {
+          expenses: {
             include: {
-              call: {
-                include: {
-                  budgets: true,
-                },
-              },
+              category: true,
+              milestone: true,
             },
-          });
-
-        if (!approvedApplication || !approvedApplication.call.budgets?.[0]) {
-          return res
-            .status(404)
-            .json({ message: "No approved application or budget found" });
-        }
-
-        // Get budget ID from the approved application
-        const budgetId = approvedApplication.call.budgets[0].id;
-
-        // Get expenses for this budget
-        const expenses = await prisma.expense.findMany({
-          where: {
-            budgetId: budgetId,
-            user: {
-              id: session.user.id,
+            orderBy: {
+              date: "desc",
             },
           },
-          include: {
-            category: true,
+          budget: {
+            include: {
+              categories: true,
+            },
           },
-          orderBy: {
-            createdAt: "desc",
-          },
-        });
+        },
+      });
 
-        // Format the receipt URL for each expense
-        const formattedExpenses = expenses.map((expense) => ({
-          ...expense,
-          receipt: expense.receipt
-            ? expense.receipt.startsWith("http")
-              ? expense.receipt
-              : `${process.env.NEXTAUTH_URL || ""}${expense.receipt}`
-            : null,
-        }));
-
-        // Get expense categories
-        const categories = await prisma.budgetCategory.findMany({
-          where: {
-            budgetId: budgetId,
-          },
-          orderBy: {
-            name: "asc",
-          },
-        });
-
-        return res.status(200).json({
-          expenses: formattedExpenses,
-          categories,
-          budget: approvedApplication.call.budgets[0],
-        });
-      } catch (error) {
-        console.error("Error fetching expenses:", error);
-        return res.status(500).json({
-          message: "Failed to fetch expenses. Please try again later.",
-          error:
-            process.env.NODE_ENV === "development" ? String(error) : undefined,
-        });
+      if (!startup) {
+        return res.status(404).json({ message: "Startup not found" });
       }
+
+      // Transform the data for the frontend
+      const expenses = startup.expenses.map((expense) => ({
+        id: expense.id,
+        title: expense.title,
+        description: expense.description,
+        amount: expense.amount,
+        date: expense.date,
+        status: expense.status,
+        categoryId: expense.categoryId,
+        categoryName: expense.category.name,
+        milestoneId: expense.milestoneId,
+        milestoneTitle: expense.milestone?.title,
+        receipt: expense.receipt,
+      }));
+
+      const categories = startup.budget?.categories.map((category) => {
+        const categoryExpenses = startup.expenses.filter(
+          (e) => e.categoryId === category.id
+        );
+        const spent = categoryExpenses.reduce((sum, e) => sum + e.amount, 0);
+        return {
+          id: category.id,
+          name: category.name,
+          allocatedAmount: category.allocatedAmount,
+          spent,
+          remaining: category.allocatedAmount - spent,
+        };
+      }) || [];
+
+      return res.status(200).json({
+        expenses,
+        categories,
+        budget: startup.budget,
+      });
     }
 
-    // Handle POST request - create new expense
+    // POST method to create expense
     if (req.method === "POST") {
-      try {
-        const { fields, files } = await parseForm(req);
+      const { fields, files } = await parseForm(req);
 
-        // Validate the form data
-        const title = fields.title?.[0];
-        const description = fields.description?.[0] || null;
-        const amountStr = fields.amount?.[0];
-        const categoryId = fields.categoryId?.[0] || null;
-        const date = fields.date?.[0] ? new Date(fields.date[0]) : new Date();
-        const currency = fields.currency?.[0] || "USD";
-        const budgetId = fields.budgetId?.[0];
+      const {
+        title,
+        description,
+        amount,
+        date,
+        categoryId,
+        milestoneId,
+      } = fields;
 
-        if (!title || !amountStr || !budgetId) {
-          return res.status(400).json({
-            message: "Missing required fields",
-            code: "VALIDATION_ERROR",
-          });
-        }
+      if (!title || !amount || !date || !categoryId || !milestoneId) {
+        return res.status(400).json({ message: "Missing required fields" });
+      }
 
-        const amount = parseFloat(amountStr);
-        if (isNaN(amount)) {
-          return res.status(400).json({
-            message: "Invalid amount",
-            code: "VALIDATION_ERROR",
-          });
-        }
-
-        // Get file path of receipt
-        let receiptPath = null;
-        if (files.receipt) {
-          const file = Array.isArray(files.receipt)
-            ? files.receipt[0]
-            : files.receipt;
-          const relativePath = `/uploads/receipts/${path.basename(
-            file.filepath
-          )}`;
-          receiptPath = relativePath;
-        }
-
-        // Create the expense
-        try {
-          const expense = await prisma.expense.create({
-            data: {
-              title,
-              description,
-              amount,
-              date,
-              currency,
-              receipt: receiptPath,
-              status: "PENDING",
-              userId: session.user.id,
-              budgetId,
-              categoryId,
-            } as any, // Temporary type assertion until Prisma client is regenerated
-          });
-
-          return res.status(201).json({
-            message: "Expense created successfully",
-            expense: {
-              ...expense,
-              receipt: expense.receipt
-                ? expense.receipt.startsWith("http")
-                  ? expense.receipt
-                  : `${process.env.NEXTAUTH_URL || ""}${expense.receipt}`
-                : null,
+      // Find the startup and validate ownership
+      const startup = await prisma.startup.findFirst({
+        where: {
+          founderId: session.user.id,
+        },
+        include: {
+          budget: {
+            include: {
+              categories: true,
             },
-          });
-        } catch (error: any) {
-          console.error("Database error creating expense:", error);
-          if (error.code === "P2002") {
-            return res.status(409).json({
-              message: "Duplicate expense entry",
-              code: "DUPLICATE_ERROR",
-            });
-          }
+          },
+          milestones: {
+            where: {
+              id: milestoneId as string,
+            },
+          },
+        },
+      });
 
-          return res.status(500).json({
-            message: "Failed to create expense due to a database error",
-            code: "TRANSACTION_ERROR",
-            details:
-              process.env.NODE_ENV === "development"
-                ? error.message
-                : undefined,
-          });
-        }
-      } catch (error: any) {
-        console.error("Error creating expense:", error);
+      if (!startup) {
+        return res.status(404).json({ message: "Startup not found" });
+      }
 
-        return res.status(500).json({
-          message: "Failed to create expense. Please try again later.",
-          code: "SERVER_ERROR",
-          details:
-            process.env.NODE_ENV === "development" ? error.message : undefined,
+      // Validate milestone
+      if (!startup.milestones.length) {
+        return res.status(400).json({ message: "Invalid milestone" });
+      }
+
+      // Validate category and budget
+      const category = startup.budget?.categories.find(
+        (c) => c.id === categoryId
+      );
+      if (!category) {
+        return res.status(400).json({ message: "Invalid category" });
+      }
+
+      // Calculate remaining budget
+      const categoryExpenses = await prisma.expense.findMany({
+        where: {
+          categoryId: categoryId as string,
+          startupId: startup.id,
+        },
+      });
+      const spent = categoryExpenses.reduce((sum, e) => sum + e.amount, 0);
+      const remaining = category.allocatedAmount - spent;
+
+      if (Number(amount) > remaining) {
+        return res.status(400).json({
+          message: `Amount exceeds remaining budget for this category (${remaining})`,
         });
       }
-    }
 
-    // Handle unsupported methods
-    else {
-      res.setHeader("Allow", ["GET", "POST"]);
-      return res
-        .status(405)
-        .json({ message: `Method ${req.method} Not Allowed` });
+      // Create the expense
+      const expense = await prisma.expense.create({
+        data: {
+          title: title as string,
+          description: description as string || "",
+          amount: Number(amount),
+          date: new Date(date as string),
+          status: "PENDING",
+          receipt: files.receipt ? files.receipt.filepath : null,
+          startup: {
+            connect: {
+              id: startup.id,
+            },
+          },
+          category: {
+            connect: {
+              id: categoryId as string,
+            },
+          },
+          milestone: {
+            connect: {
+              id: milestoneId as string,
+            },
+          },
+        },
+        include: {
+          category: true,
+          milestone: true,
+        },
+      });
+
+      return res.status(201).json({
+        ...expense,
+        categoryName: expense.category.name,
+        milestoneTitle: expense.milestone.title,
+      });
     }
   } catch (error) {
-    console.error("Unhandled error in API route:", error);
-    return res.status(500).json({
-      message: "An unexpected error occurred. Please try again later.",
-      error: process.env.NODE_ENV === "development" ? String(error) : undefined,
-    });
+    console.error("Error handling expense:", error);
+    return res.status(500).json({ message: "Internal server error" });
   }
 }
