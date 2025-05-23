@@ -1,108 +1,82 @@
-import React from 'react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useRouter } from 'next/router';
 import StartupOverview from './tabs/StartupOverview';
-import StartupReviews from './tabs/StartupReviews';
 import StartupMilestones from './tabs/StartupMilestones';
-import StartupTasks from './tabs/StartupTasks';
 import StartupFinancials from './tabs/StartupFinancials';
-import StartupTeam from './tabs/StartupTeam';
 import StartupDocuments from './tabs/StartupDocuments';
-import StartupDiscussion from './tabs/StartupDiscussion';
+import StartupTeam from './tabs/StartupTeam';
+import StartupReviews from './tabs/StartupReviews';
 
 type StartupTabsProps = {
   startup: any;
-  activeTab: string;
-  onTabChange: (tab: string) => void;
-  userRole?: string;
-  userId?: string;
+  isFounder: boolean;
+  isAdmin: boolean;
+  isReviewer: boolean;
+  userId: string;
 };
 
-export default function StartupTabs({ 
-  startup, 
-  activeTab, 
-  onTabChange, 
-  userRole, 
-  userId 
-}: StartupTabsProps) {
-  // Check if user is the founder of the startup
-  const isFounder = userId === startup.founderId;
-  
-  // Check if user is an admin
-  const isAdmin = userRole === 'ADMIN';
-  
-  // Check if user is a reviewer
-  const isReviewer = userRole === 'REVIEWER';
-  
-  // Check if user is a sponsor
-  const isSponsor = userRole === 'SPONSOR';
+export default function StartupTabs({ startup, isFounder, isAdmin, isReviewer, userId }: StartupTabsProps) {
+  const router = useRouter();
+  const currentTab = typeof router.query.tab === 'string' ? router.query.tab : undefined;
 
-  // Determine which tabs to show based on permissions and startup status
-  const availableTabs = [
+  // Define available tabs and their visibility conditions
+  const tabs = [
     { id: 'overview', label: 'Overview', visible: true },
-    { id: 'reviews', label: 'Reviews', visible: startup.status !== 'DRAFT' || isFounder || isAdmin },
     { id: 'milestones', label: 'Milestones', visible: startup.status === 'ACCEPTED' || isFounder || isAdmin },
-    { id: 'tasks', label: 'Tasks', visible: startup.status === 'ACCEPTED' || isFounder || isAdmin },
-    { id: 'financials', label: 'Financials', visible: (startup.status === 'ACCEPTED' && (isFounder || isAdmin || isSponsor)) },
-    { id: 'team', label: 'Team', visible: startup.status !== 'DRAFT' || isFounder || isAdmin },
-    { id: 'documents', label: 'Documents', visible: startup.status !== 'DRAFT' || isFounder || isAdmin },
-    { id: 'discussion', label: 'Discussion', visible: startup.status !== 'DRAFT' }
+    { id: 'financials', label: 'Financials', visible: startup.status === 'ACCEPTED' || isFounder || isAdmin },
+    { id: 'documents', label: 'Documents', visible: true },
+    { id: 'team', label: 'Team', visible: startup.status === 'ACCEPTED' || isFounder || isAdmin },
+    { id: 'reviews', label: 'Reviews', visible: isAdmin || isReviewer },
   ];
 
-  // Filter tabs based on visibility
-  const visibleTabs = availableTabs.filter(tab => tab.visible);
+  // Filter visible tabs
+  const visibleTabs = tabs.filter(t => t.visible);
 
-  // Ensure activeTab is in visible tabs, otherwise default to overview
-  if (!visibleTabs.some(tab => tab.id === activeTab)) {
-    onTabChange('overview');
-  }
+  // Set default tab if none selected
+  const defaultTab = currentTab || visibleTabs[0]?.id || 'overview';
 
-  // Render the appropriate tab content
-  const renderTabContent = () => {
-    switch (activeTab) {
+  // Handle tab change
+  const handleTabChange = (value: string) => {
+    router.push({
+      pathname: router.pathname,
+      query: { ...router.query, tab: value },
+    });
+  };
+
+  // Render tab content based on selected tab
+  const renderTabContent = (tabId: string) => {
+    switch (tabId) {
       case 'overview':
         return <StartupOverview startup={startup} isFounder={isFounder} isAdmin={isAdmin} />;
-      case 'reviews':
-        return <StartupReviews startup={startup} isReviewer={isReviewer} isAdmin={isAdmin} userId={userId} />;
       case 'milestones':
         return <StartupMilestones startup={startup} isFounder={isFounder} isAdmin={isAdmin} />;
-      case 'tasks':
-        return <StartupTasks startup={startup} isFounder={isFounder} isAdmin={isAdmin} userId={userId} />;
       case 'financials':
-        return <StartupFinancials startup={startup} isFounder={isFounder} isAdmin={isAdmin} isSponsor={isSponsor} />;
-      case 'team':
-        return <StartupTeam startup={startup} isFounder={isFounder} isAdmin={isAdmin} />;
+        return <StartupFinancials startup={startup} isFounder={isFounder} isAdmin={isAdmin} isSponsor={false} />;
       case 'documents':
         return <StartupDocuments startup={startup} isFounder={isFounder} isAdmin={isAdmin} />;
-      case 'discussion':
-        return <StartupDiscussion startup={startup} userId={userId} />;
+      case 'team':
+        return <StartupTeam startup={startup} isFounder={isFounder} isAdmin={isAdmin} />;
+      case 'reviews':
+        return <StartupReviews startup={startup} isReviewer={isReviewer} isAdmin={isAdmin} />;
       default:
-        return <StartupOverview startup={startup} isFounder={isFounder} isAdmin={isAdmin} />;
+        return null;
     }
   };
 
   return (
-    <div>
-      {/* Tab navigation */}
-      <div className="border-b border-gray-200 dark:border-gray-700">
-        <nav className="-mb-px flex space-x-8" aria-label="Tabs">
+    <Tabs defaultValue={defaultTab} onValueChange={handleTabChange}>
+      <TabsList className="grid w-full grid-cols-2 lg:grid-cols-6">
           {visibleTabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => onTabChange(tab.id)}
-              className={`whitespace-nowrap border-b-2 py-4 px-1 text-sm font-medium ${
-                activeTab === tab.id
-                  ? 'border-primary-500 text-primary-600 dark:text-primary-400'
-                  : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300'
-              }`}
-              aria-current={activeTab === tab.id ? 'page' : undefined}
-            >
+          <TabsTrigger key={tab.id} value={tab.id} className="text-center">
               {tab.label}
-            </button>
+          </TabsTrigger>
           ))}
-        </nav>
-      </div>
-
-      {/* Tab content */}
-      <div className="mt-6">{renderTabContent()}</div>
-    </div>
+      </TabsList>
+      {visibleTabs.map((tab) => (
+        <TabsContent key={tab.id} value={tab.id}>
+          {renderTabContent(tab.id)}
+        </TabsContent>
+      ))}
+    </Tabs>
   );
 }
