@@ -29,11 +29,6 @@ interface ProjectResponse {
       status: string;
     }>;
   };
-  tasks: {
-    total: number;
-    completed: number;
-    pending: number;
-  };
   timeline: {
     milestones: Array<{
       id: string;
@@ -75,7 +70,6 @@ export default async function handler(
           },
         },
         milestones: true,
-        tasks: true,
       },
     });
 
@@ -155,13 +149,6 @@ export default async function handler(
           categoryId: expense.categoryId || "",
           status: expense.status,
         })),
-      },
-      tasks: {
-        total: startup.tasks.length,
-        completed: startup.tasks.filter((task) => task.status === "COMPLETED")
-          .length,
-        pending: startup.tasks.filter((task) => task.status !== "COMPLETED")
-          .length,
       },
       timeline: {
         milestones: startup.milestones.map((milestone) => ({
