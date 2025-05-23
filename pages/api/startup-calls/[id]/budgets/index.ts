@@ -83,30 +83,43 @@ async function createBudget(
   userId: string
 ) {
   const {
-    title,
-    description,
     totalAmount,
-    currency,
-    fiscalYear,
-    status,
+    startDate,
+    endDate,
     categories,
   } = req.body;
 
-  if (!title || !totalAmount || !currency) {
-    return res.status(400).json({ error: "Missing required fields" });
+  if (!totalAmount || !startDate || !endDate) {
+    return res.status(400).json({ error: "Missing required fields: totalAmount, startDate, and endDate are required" });
   }
 
   try {
     const result = await withPrisma(async () => {
       const prisma = new PrismaClient();
       try {
-        // Verify that the startup call exists
+        // First get the startup call
         const startupCall = await prisma.startupCall.findUnique({
-          where: { id: startupCallId },
+          where: { id: startupCallId }
         });
 
         if (!startupCall) {
           return null; // Will be checked outside
+        }
+
+        // Then get the approved application
+        const approvedApplication = await prisma.startupCallApplication.findFirst({
+          where: {
+            callId: startupCallId,
+            status: 'APPROVED',
+            startupId: { not: null }
+          },
+          select: {
+            startupId: true
+          }
+        });
+
+        if (!approvedApplication || !approvedApplication.startupId) {
+          return res.status(400).json({ error: "No approved application with a startup found for this startup call" });
         }
 
         // Use transaction to create budget and categories
@@ -114,30 +127,22 @@ async function createBudget(
           // Create the budget
           const budget = await tx.budget.create({
             data: {
-              title,
-              description,
               totalAmount: parseFloat(totalAmount.toString()),
-              currency,
-              fiscalYear: fiscalYear || new Date().getFullYear().toString(),
-              status: status || "draft",
+              startDate: new Date(startDate),
+              endDate: new Date(endDate),
               startupCall: { connect: { id: startupCallId } },
+              startup: { connect: { id: approvedApplication.startupId } }
             },
           });
 
           // Create categories if provided
-          if (
-            categories &&
-            Array.isArray(categories) &&
-            categories.length > 0
-          ) {
+          if (categories && Array.isArray(categories) && categories.length > 0) {
             for (const category of categories) {
-              await tx.budgetCategory.create({
+              await tx.category.create({
                 data: {
                   name: category.name,
                   description: category.description || null,
-                  allocatedAmount: parseFloat(
-                    category.allocatedAmount.toString()
-                  ),
+                  allocatedAmount: parseFloat(category.allocatedAmount.toString()),
                   budget: { connect: { id: budget.id } },
                 },
               });
