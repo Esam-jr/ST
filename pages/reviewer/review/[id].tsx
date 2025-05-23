@@ -26,6 +26,7 @@ import {
   Users,
   Calendar as CalendarIcon,
   Save,
+  Loader2,
 } from "lucide-react";
 import LoadingSpinner from "@/components/ui/LoadingSpinner";
 import ErrorAlert from "@/components/ui/ErrorAlert";
@@ -692,14 +693,19 @@ export default function ReviewerReview() {
             {/* Review Form */}
             <Card>
               <CardHeader>
-                <CardTitle>
+                <CardTitle className="flex items-center gap-2">
                   {isViewMode || review.status === "COMPLETED"
                     ? "Your Review"
                     : "Submit Your Review"}
+                  {!isViewMode && review.status !== "COMPLETED" && (
+                    <Badge variant="outline" className="ml-2">
+                      Draft
+                    </Badge>
+                  )}
                 </CardTitle>
                 {!isViewMode && review.status !== "COMPLETED" && (
                   <CardDescription>
-                    Please evaluate this application based on the criteria below
+                    Please evaluate this application based on the criteria below. Your review will be automatically saved as a draft.
                   </CardDescription>
                 )}
                 {!isViewMode && review.status !== "COMPLETED" && lastSaved && (
@@ -716,100 +722,148 @@ export default function ReviewerReview() {
               <CardContent>
                 {error && <ErrorAlert message={error} title={""} />}
 
-                <form onSubmit={handleSubmitRequest} className="space-y-6">
-                  <div className="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-2">
-                    {/* Overall Score */}
-                    <div>
-                      <Label htmlFor="score">Overall Score (0-100)</Label>
-                      <Input
-                        id="score"
-                        type="number"
-                        min="0"
-                        max="100"
-                        value={score}
-                        disabled
-                        className="bg-muted"
-                      />
-                      <p className="text-sm text-muted-foreground mt-1">
-                        Automatically calculated from other scores
-                      </p>
+                <form onSubmit={handleSubmitRequest} className="space-y-8">
+                  {/* Scoring Section */}
+                  <div className="space-y-6">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-lg font-semibold">Evaluation Scores</h3>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-muted-foreground">Overall Score:</span>
+                        <Badge 
+                          variant={score >= 70 ? "default" : score >= 40 ? "secondary" : "destructive"} 
+                          className={`text-lg ${score >= 70 ? "bg-green-100 text-green-800" : score >= 40 ? "bg-yellow-100 text-yellow-800" : ""}`}
+                        >
+                          {score}/100
+                        </Badge>
+                      </div>
                     </div>
 
-                    {/* Innovation Score */}
-                    <div>
-                      <Label htmlFor="innovationScore">
-                        Innovation Score (0-100)
-                      </Label>
-                      <Input
-                        id="innovationScore"
-                        type="number"
-                        min="0"
-                        max="100"
-                        value={innovationScore}
-                        onChange={(e) =>
-                          setInnovationScore(Number(e.target.value))
-                        }
-                      />
-                    </div>
+                    <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+                      {/* Innovation Score */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <Label htmlFor="innovationScore" className="text-base">
+                            Innovation
+                          </Label>
+                          <Badge variant="outline" className="ml-2">
+                            {innovationScore}/100
+                          </Badge>
+                        </div>
+                        <Input
+                          id="innovationScore"
+                          type="range"
+                          min="0"
+                          max="100"
+                          value={innovationScore}
+                          onChange={(e) => setInnovationScore(Number(e.target.value))}
+                          className="w-full"
+                        />
+                        <p className="text-sm text-muted-foreground">
+                          How innovative and unique is the solution?
+                        </p>
+                      </div>
 
-                    {/* Market Score */}
-                    <div>
-                      <Label htmlFor="marketScore">Market Score (0-100)</Label>
-                      <Input
-                        id="marketScore"
-                        type="number"
-                        min="0"
-                        max="100"
-                        value={marketScore}
-                        onChange={(e) => setMarketScore(Number(e.target.value))}
-                      />
-                    </div>
+                      {/* Market Score */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <Label htmlFor="marketScore" className="text-base">
+                            Market Potential
+                          </Label>
+                          <Badge variant="outline" className="ml-2">
+                            {marketScore}/100
+                          </Badge>
+                        </div>
+                        <Input
+                          id="marketScore"
+                          type="range"
+                          min="0"
+                          max="100"
+                          value={marketScore}
+                          onChange={(e) => setMarketScore(Number(e.target.value))}
+                          className="w-full"
+                        />
+                        <p className="text-sm text-muted-foreground">
+                          How large and accessible is the target market?
+                        </p>
+                      </div>
 
-                    {/* Team Score */}
-                    <div>
-                      <Label htmlFor="teamScore">Team Score (0-100)</Label>
-                      <Input
-                        id="teamScore"
-                        type="number"
-                        min="0"
-                        max="100"
-                        value={teamScore}
-                        onChange={(e) => setTeamScore(Number(e.target.value))}
-                      />
-                    </div>
+                      {/* Team Score */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <Label htmlFor="teamScore" className="text-base">
+                            Team
+                          </Label>
+                          <Badge variant="outline" className="ml-2">
+                            {teamScore}/100
+                          </Badge>
+                        </div>
+                        <Input
+                          id="teamScore"
+                          type="range"
+                          min="0"
+                          max="100"
+                          value={teamScore}
+                          onChange={(e) => setTeamScore(Number(e.target.value))}
+                          className="w-full"
+                        />
+                        <p className="text-sm text-muted-foreground">
+                          How strong and experienced is the team?
+                        </p>
+                      </div>
 
-                    {/* Execution Score */}
-                    <div>
-                      <Label htmlFor="executionScore">
-                        Execution Score (0-100)
-                      </Label>
-                      <Input
-                        id="executionScore"
-                        type="number"
-                        min="0"
-                        max="100"
-                        value={executionScore}
-                        onChange={(e) =>
-                          setExecutionScore(Number(e.target.value))
-                        }
-                      />
+                      {/* Execution Score */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <Label htmlFor="executionScore" className="text-base">
+                            Execution
+                          </Label>
+                          <Badge variant="outline" className="ml-2">
+                            {executionScore}/100
+                          </Badge>
+                        </div>
+                        <Input
+                          id="executionScore"
+                          type="range"
+                          min="0"
+                          max="100"
+                          value={executionScore}
+                          onChange={(e) => setExecutionScore(Number(e.target.value))}
+                          className="w-full"
+                        />
+                        <p className="text-sm text-muted-foreground">
+                          How feasible and well-planned is the execution?
+                        </p>
+                      </div>
                     </div>
                   </div>
 
-                  {/* Feedback */}
-                  <div>
-                    <Label htmlFor="feedback">Feedback</Label>
+                  {/* Feedback Section */}
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="feedback" className="text-lg font-semibold">
+                        Detailed Feedback
+                      </Label>
+                      <span className="text-sm text-muted-foreground">
+                        {feedback.length}/1000 characters
+                      </span>
+                    </div>
                     <Textarea
                       id="feedback"
                       value={feedback}
                       onChange={(e) => setFeedback(e.target.value)}
                       rows={6}
+                      placeholder="Provide detailed feedback about the application..."
+                      maxLength={1000}
+                      className="resize-none"
                     />
+                    <p className="text-sm text-muted-foreground">
+                      Please provide constructive feedback that will help the startup improve their application.
+                    </p>
                   </div>
 
                   {/* Submit button */}
                   {!isViewMode && review.status !== "COMPLETED" && (
-                    <div className="flex justify-end space-x-3">
+                    <div className="flex justify-end space-x-3 pt-4 border-t">
                       <Button
                         type="button"
                         variant="outline"
@@ -819,16 +873,22 @@ export default function ReviewerReview() {
                       </Button>
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
-                          <Button disabled={submitting}>
-                            {submitting ? "Submitting..." : "Submit Review"}
+                          <Button disabled={submitting} className="min-w-[120px]">
+                            {submitting ? (
+                              <>
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                Submitting...
+                              </>
+                            ) : (
+                              "Submit Review"
+                            )}
                           </Button>
                         </AlertDialogTrigger>
                         <AlertDialogContent>
                           <AlertDialogHeader>
                             <AlertDialogTitle>Submit Review</AlertDialogTitle>
                             <AlertDialogDescription>
-                              Are you sure you want to submit this review? This
-                              action cannot be undone.
+                              Are you sure you want to submit this review? This action cannot be undone.
                             </AlertDialogDescription>
                           </AlertDialogHeader>
                           <AlertDialogFooter>
@@ -843,7 +903,7 @@ export default function ReviewerReview() {
                   )}
 
                   {(isViewMode || review.status === "COMPLETED") && (
-                    <div className="flex justify-end">
+                    <div className="flex justify-end pt-4 border-t">
                       <Button
                         type="button"
                         onClick={() => router.push("/reviewer-dashboard")}
