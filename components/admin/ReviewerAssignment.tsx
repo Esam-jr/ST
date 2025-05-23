@@ -206,7 +206,7 @@ const ReviewerAssignment: React.FC<ReviewerAssignmentProps> = ({
                       <PopoverTrigger asChild>
                         <FormControl>
                           <Button
-                            variant="outline"
+                            variant={"outline"}
                             className={cn(
                               "w-full pl-3 text-left font-normal",
                               !field.value && "text-muted-foreground"
@@ -232,7 +232,7 @@ const ReviewerAssignment: React.FC<ReviewerAssignmentProps> = ({
                       </PopoverContent>
                     </Popover>
                     <FormDescription>
-                      Set a deadline for the review to be completed
+                      Select when the review should be completed by
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
