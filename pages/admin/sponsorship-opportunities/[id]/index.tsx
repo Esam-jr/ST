@@ -70,6 +70,11 @@ interface SponsorshipOpportunity {
   _count?: {
     applications: number;
   };
+  coverImage?: string;
+  deadline?: string;
+  industryFocus?: string;
+  tags?: string[];
+  eligibility?: string;
 }
 
 interface SponsorshipApplication {
@@ -315,457 +320,304 @@ export default function SponsorshipOpportunityDetail() {
     }
 
     return (
-      <div>
-        <div className="flex items-center mb-6">
-          <Link href="/admin/sponsorship-opportunities" className="mr-4">
-            <Button variant="ghost" size="sm">
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Back
-            </Button>
-          </Link>
-          <div>
-            <h1 className="text-3xl font-bold">{opportunity.title}</h1>
-            <div className="flex items-center mt-2">
-              <span className="mr-2 text-gray-500">Status:</span>
-              {getStatusBadge(opportunity.status)}
-            </div>
-          </div>
-          <div className="ml-auto space-x-2">
-            <Link
-              href={`/admin/sponsorship-opportunities/${opportunity.id}/edit`}
-            >
-              <Button variant="outline" className="flex items-center">
-                <Edit className="mr-2 h-4 w-4" />
-                Edit Details
-              </Button>
-            </Link>
-
-            {opportunity.status === "draft" && (
-              <Button
-                onClick={() => handleStatusChange("active")}
-                disabled={processingAction === "status"}
-                className="bg-green-600 hover:bg-green-700"
-              >
-                {processingAction === "status" ? (
-                  <span className="flex items-center">
-                    <div className="animate-spin mr-2 h-4 w-4 border-2 border-b-transparent border-white rounded-full"></div>
-                    Processing...
-                  </span>
-                ) : (
-                  <span className="flex items-center">
-                    <CheckCircle className="mr-2 h-4 w-4" />
-                    Publish
-                  </span>
-                )}
-              </Button>
-            )}
-
-            {opportunity.status === "active" && (
-              <Button
-                variant="destructive"
-                onClick={() => handleStatusChange("closed")}
-                disabled={processingAction === "status"}
-              >
-                {processingAction === "status" ? (
-                  <span className="flex items-center">
-                    <div className="animate-spin mr-2 h-4 w-4 border-2 border-b-transparent border-primary rounded-full"></div>
-                    Processing...
-                  </span>
-                ) : (
-                  <span className="flex items-center">
-                    <XCircle className="mr-2 h-4 w-4" />
-                    Close
-                  </span>
-                )}
-              </Button>
-            )}
-          </div>
-        </div>
-
-        <Tabs
-          defaultValue={activeTab}
-          onValueChange={setActiveTab}
-          className="space-y-6"
-        >
-          <TabsList className="bg-gray-100 p-1">
-            <TabsTrigger
-              value="details"
-              className="data-[state=active]:bg-white"
-            >
-              Details
-            </TabsTrigger>
-            <TabsTrigger
-              value="applications"
-              className="relative data-[state=active]:bg-white"
-            >
-              Applications
-              {applications.length > 0 && (
-                <span className="ml-2 bg-primary text-primary-foreground rounded-full w-5 h-5 text-xs flex items-center justify-center">
-                  {applications.length}
-                </span>
-              )}
-            </TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="details" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <span>Opportunity Details</span>
-                  <div className="ml-auto">
-                    <Badge
-                      variant={
-                        opportunity.status === "active"
-                          ? "default"
-                          : opportunity.status === "closed"
-                          ? "destructive"
-                          : "secondary"
-                      }
-                      className="text-xs uppercase"
-                    >
-                      {opportunity.status}
-                    </Badge>
-                  </div>
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <h3 className="text-lg font-medium mb-2">Description</h3>
-                  <div className="bg-gray-50 p-4 rounded-md">
-                    <p className="text-gray-700 whitespace-pre-line">
-                      {opportunity.description}
-                    </p>
-                  </div>
-                </div>
-
-                <Separator />
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="bg-gray-50 p-4 rounded-md">
-                    <h3 className="text-lg font-medium mb-2">Funding Range</h3>
-                    <div className="flex items-center text-gray-700">
-                      <DollarSign className="h-5 w-5 mr-2 text-primary" />
-                      <span className="text-xl font-medium">
-                        {formatCurrency(
-                          opportunity.minAmount,
-                          opportunity.currency
-                        )}{" "}
-                        —
-                        {formatCurrency(
-                          opportunity.maxAmount,
-                          opportunity.currency
-                        )}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="bg-gray-50 p-4 rounded-md">
-                    <h3 className="text-lg font-medium mb-2">Dates</h3>
-                    <div className="grid grid-cols-1 gap-2">
-                      <div className="flex items-center text-gray-700">
-                        <Calendar className="h-5 w-5 mr-2 text-primary" />
-                        <div>
-                          <span className="text-sm text-gray-500">
-                            Created:{" "}
-                          </span>
-                          <span>{formatDate(opportunity.createdAt)}</span>
-                        </div>
-                      </div>
-                      {opportunity.updatedAt && (
-                        <div className="flex items-center text-gray-700">
-                          <Clock className="h-5 w-5 mr-2 text-primary" />
-                          <div>
-                            <span className="text-sm text-gray-500">
-                              Last Updated:{" "}
-                            </span>
-                            <span>{formatDate(opportunity.updatedAt)}</span>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {opportunity.startupCall && (
-                  <>
-                    <Separator />
-                    <div className="bg-blue-50 p-4 rounded-md">
-                      <h3 className="text-lg font-medium mb-2">
-                        Associated Startup Call
-                      </h3>
-                      <Link
-                        href={`/admin/startup-calls/${opportunity.startupCallId}`}
-                        className="text-primary hover:underline flex items-center"
-                      >
-                        {opportunity.startupCall.title}
-                        <ExternalLink className="ml-1 h-4 w-4" />
-                      </Link>
-                    </div>
-                  </>
-                )}
-
-                <Separator />
-
-                <div>
-                  <h3 className="text-lg font-medium mb-2">Sponsor Benefits</h3>
-                  {opportunity.benefits.length > 0 ? (
-                    <div className="bg-gray-50 p-4 rounded-md">
-                      <ul className="grid grid-cols-1 md:grid-cols-2 gap-2 pl-5">
-                        {opportunity.benefits.map((benefit, index) => (
-                          <li key={index} className="text-gray-700">
-                            {benefit}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ) : (
-                    <div className="bg-gray-50 p-4 rounded-md text-center text-gray-500 italic">
-                      No benefits specified
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="applications" className="space-y-6">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <div>
-                  <CardTitle>Sponsorship Applications</CardTitle>
-                  <CardDescription>
-                    Review and manage applications from sponsors interested in
-                    this opportunity.
-                  </CardDescription>
-                </div>
-                <Link
-                  href={`/admin/sponsorship-opportunities/${opportunity.id}/applications`}
-                  className="flex items-center text-sm text-blue-600 hover:underline"
+      <TabsContent value="details" className="space-y-6">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center">
+              <span>Opportunity Details</span>
+              <div className="ml-auto">
+                <Badge
+                  variant={
+                    opportunity.status === "active"
+                      ? "default"
+                      : opportunity.status === "closed"
+                      ? "destructive"
+                      : "secondary"
+                  }
+                  className="text-xs uppercase"
                 >
-                  View All Applications
-                  <ArrowRight className="ml-1 h-4 w-4" />
-                </Link>
-              </CardHeader>
-              <CardContent>
-                {applications.length === 0 ? (
-                  <div className="text-center py-10 bg-gray-50 rounded-md">
-                    <p className="text-gray-500 mb-4">
-                      No applications have been submitted yet.
-                    </p>
-                    <p className="text-sm text-gray-400">
-                      When sponsors apply, their applications will appear here.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="rounded-md border">
-                    <Table>
-                      <TableHeader className="bg-gray-50">
-                        <TableRow>
-                          <TableHead>Sponsor</TableHead>
-                          <TableHead>Amount</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead>Applied On</TableHead>
-                          <TableHead className="text-right">Actions</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {applications.slice(0, 5).map((application) => (
-                          <TableRow
-                            key={application.id}
-                            className="hover:bg-gray-50 transition-colors"
-                          >
-                            <TableCell className="font-medium">
-                              <div>
-                                <div>
-                                  {application.sponsor?.name ||
-                                    application.sponsorName ||
-                                    "Unknown"}
-                                </div>
-                                <div className="text-sm text-gray-500">
-                                  {application.sponsor?.email ||
-                                    application.email ||
-                                    "No email provided"}
-                                </div>
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              {formatCurrency(
-                                application.amount,
-                                application.currency
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              {getStatusBadge(application.status)}
-                            </TableCell>
-                            <TableCell>
-                              {formatDate(application.createdAt)}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <div className="flex justify-end space-x-2">
-                                <Link
-                                  href={`/admin/sponsorship-applications/${application.id}`}
-                                >
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="h-8"
-                                  >
-                                    <MessageCircle className="h-4 w-4 mr-1" />
-                                    Details
-                                  </Button>
-                                </Link>
+                  {opportunity.status}
+                </Badge>
+              </div>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {opportunity.coverImage && (
+              <div className="mb-6">
+                <img
+                  src={opportunity.coverImage}
+                  alt={opportunity.title}
+                  className="w-full h-48 object-cover rounded-lg"
+                />
+              </div>
+            )}
 
-                                {application.status === "pending" && (
-                                  <>
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      className="bg-green-50 text-green-700 border-green-200 hover:bg-green-100 h-8"
-                                      onClick={() =>
-                                        handleApplicationStatusChange(
-                                          application.id,
-                                          "approved"
-                                        )
-                                      }
-                                      disabled={
-                                        processingAction === application.id
-                                      }
-                                    >
-                                      {processingAction === application.id ? (
-                                        <div className="animate-spin h-4 w-4 border-2 border-b-transparent border-green-700 rounded-full"></div>
-                                      ) : (
-                                        <>
-                                          <Check className="h-4 w-4 mr-1" />
-                                          Approve
-                                        </>
-                                      )}
-                                    </Button>
+            <div>
+              <h3 className="text-lg font-medium mb-2">Description</h3>
+              <div className="bg-gray-50 p-4 rounded-md">
+                <p className="text-gray-700 whitespace-pre-line">
+                  {opportunity.description}
+                </p>
+              </div>
+            </div>
 
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      className="bg-red-50 text-red-700 border-red-200 hover:bg-red-100 h-8"
-                                      onClick={() =>
-                                        handleApplicationStatusChange(
-                                          application.id,
-                                          "rejected"
-                                        )
-                                      }
-                                      disabled={
-                                        processingAction === application.id
-                                      }
-                                    >
-                                      {processingAction === application.id ? (
-                                        <div className="animate-spin h-4 w-4 border-2 border-b-transparent border-red-700 rounded-full"></div>
-                                      ) : (
-                                        <>
-                                          <X className="h-4 w-4 mr-1" />
-                                          Reject
-                                        </>
-                                      )}
-                                    </Button>
-                                  </>
-                                )}
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                    {applications.length > 5 && (
-                      <div className="p-4 text-center border-t">
-                        <Link
-                          href={`/admin/sponsorship-opportunities/${opportunity.id}/applications`}
-                        >
-                          <Button variant="ghost" size="sm">
-                            View all {applications.length} applications
-                          </Button>
-                        </Link>
-                      </div>
+            <Separator />
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="bg-gray-50 p-4 rounded-md">
+                <h3 className="text-lg font-medium mb-2">Funding Range</h3>
+                <div className="flex items-center text-gray-700">
+                  <DollarSign className="h-5 w-5 mr-2 text-primary" />
+                  <span className="text-xl font-medium">
+                    {formatCurrency(
+                      opportunity.minAmount,
+                      opportunity.currency
+                    )}{" "}
+                    —
+                    {formatCurrency(
+                      opportunity.maxAmount,
+                      opportunity.currency
                     )}
+                  </span>
+                </div>
+              </div>
+
+              <div className="bg-gray-50 p-4 rounded-md">
+                <h3 className="text-lg font-medium mb-2">Application Deadline</h3>
+                <div className="flex items-center text-gray-700">
+                  <Calendar className="h-5 w-5 mr-2 text-primary" />
+                  <span>
+                    {opportunity.deadline
+                      ? new Date(opportunity.deadline).toLocaleDateString()
+                      : "No deadline set"}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {opportunity.industryFocus && (
+              <>
+                <Separator />
+                <div className="bg-gray-50 p-4 rounded-md">
+                  <h3 className="text-lg font-medium mb-2">Industry Focus</h3>
+                  <p className="text-gray-700">{opportunity.industryFocus}</p>
+                </div>
+              </>
+            )}
+
+            {opportunity.tags && opportunity.tags.length > 0 && (
+              <>
+                <Separator />
+                <div className="bg-gray-50 p-4 rounded-md">
+                  <h3 className="text-lg font-medium mb-2">Tags</h3>
+                  <div className="flex flex-wrap gap-2">
+                    {opportunity.tags.map((tag, index) => (
+                      <Badge key={index} variant="secondary">
+                        {tag}
+                      </Badge>
+                    ))}
                   </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
-      </div>
+                </div>
+              </>
+            )}
+
+            {opportunity.eligibility && (
+              <>
+                <Separator />
+                <div className="bg-gray-50 p-4 rounded-md">
+                  <h3 className="text-lg font-medium mb-2">Eligibility</h3>
+                  <p className="text-gray-700 whitespace-pre-line">
+                    {opportunity.eligibility}
+                  </p>
+                </div>
+              </>
+            )}
+
+            {opportunity.startupCall && (
+              <>
+                <Separator />
+                <div className="bg-blue-50 p-4 rounded-md">
+                  <h3 className="text-lg font-medium mb-2">
+                    Associated Startup Call
+                  </h3>
+                  <Link
+                    href={`/admin/startup-calls/${opportunity.startupCallId}`}
+                    className="text-primary hover:underline flex items-center"
+                  >
+                    {opportunity.startupCall.title}
+                    <ExternalLink className="ml-1 h-4 w-4" />
+                  </Link>
+                </div>
+              </>
+            )}
+
+            <Separator />
+
+            <div>
+              <h3 className="text-lg font-medium mb-2">Sponsor Benefits</h3>
+              {opportunity.benefits.length > 0 ? (
+                <div className="bg-gray-50 p-4 rounded-md">
+                  <ul className="grid grid-cols-1 md:grid-cols-2 gap-2 pl-5">
+                    {opportunity.benefits.map((benefit, index) => (
+                      <li key={index} className="text-gray-700">
+                        {benefit}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : (
+                <div className="bg-gray-50 p-4 rounded-md text-center text-gray-500 italic">
+                  No benefits specified
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </TabsContent>
     );
   };
 
   const renderApplicationsTab = () => {
     if (applications.length === 0) {
       return (
-        <div className="text-center py-8">
-          <p className="text-gray-500">No applications received yet</p>
+        <div className="text-center py-10 bg-gray-50 rounded-md">
+          <p className="text-gray-500 mb-4">
+            No applications have been submitted yet.
+          </p>
+          <p className="text-sm text-gray-400">
+            When sponsors apply, their applications will appear here.
+          </p>
         </div>
       );
     }
 
     return (
-      <div className="space-y-4">
+      <div className="rounded-md border">
         <Table>
-          <TableHeader>
+          <TableHeader className="bg-gray-50">
             <TableRow>
               <TableHead>Sponsor</TableHead>
-              <TableHead>Contact</TableHead>
               <TableHead>Amount</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead>Date</TableHead>
-              <TableHead>Actions</TableHead>
+              <TableHead>Applied On</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {applications.map((application) => (
-              <TableRow key={application.id}>
+            {applications.slice(0, 5).map((application) => (
+              <TableRow
+                key={application.id}
+                className="hover:bg-gray-50 transition-colors"
+              >
                 <TableCell className="font-medium">
-                  {application.sponsor?.name ||
-                    application.sponsorName ||
-                    "Unknown"}
+                  <div>
+                    <div>
+                      {application.sponsor?.name ||
+                        application.sponsorName ||
+                        "Unknown"}
+                    </div>
+                    <div className="text-sm text-gray-500">
+                      {application.sponsor?.email ||
+                        application.email ||
+                        "No email provided"}
+                    </div>
+                  </div>
                 </TableCell>
                 <TableCell>
-                  {application.sponsor?.email ||
-                    application.email ||
-                    "No email provided"}
+                  {formatCurrency(
+                    application.amount,
+                    application.currency
+                  )}
                 </TableCell>
                 <TableCell>
-                  {application.amount
-                    ? formatCurrency(
-                        application.amount,
-                        application.currency || "USD"
-                      )
-                    : "Not specified"}
+                  {getStatusBadge(application.status)}
                 </TableCell>
                 <TableCell>
-                  <Badge
-                    variant={
-                      application.status === "APPROVED"
-                        ? "default"
-                        : application.status === "REJECTED"
-                        ? "destructive"
-                        : "secondary"
-                    }
-                  >
-                    {application.status.charAt(0) +
-                      application.status.slice(1).toLowerCase()}
-                  </Badge>
+                  {formatDate(application.createdAt)}
                 </TableCell>
-                <TableCell>
-                  {new Date(application.createdAt).toLocaleDateString()}
-                </TableCell>
-                <TableCell>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleViewApplication(application)}
-                  >
-                    View Details
-                  </Button>
+                <TableCell className="text-right">
+                  <div className="flex justify-end space-x-2">
+                    <Link
+                      href={`/admin/sponsorship-applications/${application.id}`}
+                    >
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8"
+                      >
+                        <MessageCircle className="h-4 w-4 mr-1" />
+                        Details
+                      </Button>
+                    </Link>
+
+                    {application.status === "pending" && (
+                      <>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="bg-green-50 text-green-700 border-green-200 hover:bg-green-100 h-8"
+                          onClick={() =>
+                            handleApplicationStatusChange(
+                              application.id,
+                              "approved"
+                            )
+                          }
+                          disabled={
+                            processingAction === application.id
+                          }
+                        >
+                          {processingAction === application.id ? (
+                            <div className="animate-spin h-4 w-4 border-2 border-b-transparent border-green-700 rounded-full"></div>
+                          ) : (
+                            <>
+                              <Check className="h-4 w-4 mr-1" />
+                              Approve
+                            </>
+                          )}
+                        </Button>
+
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="bg-red-50 text-red-700 border-red-200 hover:bg-red-100 h-8"
+                          onClick={() =>
+                            handleApplicationStatusChange(
+                              application.id,
+                              "rejected"
+                            )
+                          }
+                          disabled={
+                            processingAction === application.id
+                          }
+                        >
+                          {processingAction === application.id ? (
+                            <div className="animate-spin h-4 w-4 border-2 border-b-transparent border-red-700 rounded-full"></div>
+                          ) : (
+                            <>
+                              <X className="h-4 w-4 mr-1" />
+                              Reject
+                            </>
+                          )}
+                        </Button>
+                      </>
+                    )}
+                  </div>
                 </TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
+        {applications.length > 5 && opportunity && (
+          <div className="p-4 text-center border-t">
+            <Link
+              href={`/admin/sponsorship-opportunities/${opportunity.id}/applications`}
+            >
+              <Button variant="ghost" size="sm">
+                View all {applications.length} applications
+              </Button>
+            </Link>
+          </div>
+        )}
       </div>
     );
   };
