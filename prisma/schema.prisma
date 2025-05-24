@@ -363,18 +363,19 @@ model SponsorshipOpportunity {
   tags            String[]
   minAmount       Float
   maxAmount       Float
-  status          String                   // "open", "closed", etc.
+  currency        String                   @default("USD")
+  status          String                   // "DRAFT", "OPEN", "CLOSED", "ARCHIVED"
   eligibility     String?
   deadline        DateTime?
   coverImage      String?
   viewsCount      Int                      @default(0)
   shareCount      Int                      @default(0)
- 
-
+  tiers           Json?                    // Store sponsorship tiers as JSON
+  visibility      String                   @default("PUBLIC") // "PUBLIC", "PRIVATE", "RESTRICTED"
+  analytics       Json?                    // Store analytics data
   createdById     String
   createdAt       DateTime                 @default(now())
   updatedAt       DateTime                 @updatedAt
-
   applications    SponsorshipApplication[]
   startupCall     StartupCall              @relation(fields: [startupCallId], references: [id])
   createdBy       User                     @relation(fields: [createdById], references: [id])
@@ -384,6 +385,7 @@ model SponsorshipOpportunity {
   @@index([createdAt])
   @@index([viewsCount])
   @@index([shareCount])
+  @@index([visibility])
 }
 
 model SponsorshipApplication {
