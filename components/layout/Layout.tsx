@@ -25,10 +25,12 @@ export default function Layout({
   // Hide navbar and footer on admin pages
   const shouldHideNav = hideNav || isAdminPage;
 
+  const pageTitle = title ? `${title} | Startup Tools` : 'Startup Tools';
+
   return (
     <>
       <Head>
-        <title>{title}</title>
+        <title>{pageTitle}</title>
         <meta name="description" content={description} />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </Head>
