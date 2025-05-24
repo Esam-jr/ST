@@ -38,11 +38,17 @@ import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
 import axios from 'axios';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+import { X } from 'lucide-react';
 
 // Define schema for the form with stronger validation
 const formSchema = z.object({
   title: z.string().min(3, { message: 'Title must be at least 3 characters' })
     .max(100, { message: 'Title must not exceed 100 characters' }),
+  slug: z.string()
+    .min(3, { message: 'Slug must be at least 3 characters' })
+    .max(100, { message: 'Slug must not exceed 100 characters' })
+    .regex(/^[a-z0-9-]+$/, { message: 'Slug can only contain lowercase letters, numbers, and hyphens' }),
   description: z.string().min(10, { message: 'Description must be at least 10 characters' })
     .max(2000, { message: 'Description must not exceed 2000 characters' }),
   benefits: z.array(
@@ -58,7 +64,17 @@ const formSchema = z.object({
     if (!date) return true;
     // Check if the date is in the future
     return new Date(date) > new Date();
-  }, { message: "Deadline must be in the future" })
+  }, { message: "Deadline must be in the future" }),
+  industryFocus: z.string().optional(),
+  tags: z.array(z.string()).min(1, { message: 'At least one tag is required' }),
+  eligibility: z.string().optional(),
+  coverImage: z.string().optional(),
+  visibility: z.enum(['PUBLIC', 'PRIVATE', 'RESTRICTED']),
+  tiers: z.array(z.object({
+    name: z.string(),
+    amount: z.number(),
+    benefits: z.array(z.string())
+  })).optional()
 }).refine(data => data.maxAmount >= data.minAmount, {
   message: "Maximum amount must be greater than or equal to minimum amount",
   path: ["maxAmount"]
@@ -81,19 +97,23 @@ export default function CreateSponsorshipOpportunity() {
   const [startupCalls, setStartupCalls] = useState<StartupCall[]>([]);
   const [isLoadingCalls, setIsLoadingCalls] = useState(true);
   const [formError, setFormError] = useState<string | null>(null);
+  const [newTag, setNewTag] = useState('');
 
   // Initialize form with zod resolver
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       title: '',
+      slug: '',
       description: '',
       benefits: [''],
       minAmount: 1000,
       maxAmount: 10000,
       currency: 'USD',
       status: 'draft',
-      deadline: ''
+      deadline: '',
+      tags: [],
+      visibility: 'PUBLIC'
     },
   });
 
@@ -154,7 +174,7 @@ export default function CreateSponsorshipOpportunity() {
         benefits: filteredBenefits
       };
       
-      const response = await axios.post('/api/sponsorship-opportunities', formData);
+      const response = await axios.post('/api/admin/sponsorship-opportunities', formData);
       
       toast({
         title: 'Success',
@@ -210,6 +230,21 @@ export default function CreateSponsorshipOpportunity() {
     form.setValue('benefits', newBenefits);
   };
 
+  // Handle adding a new tag
+  const handleAddTag = () => {
+    if (newTag.trim() !== '') {
+      form.setValue('tags', [...form.getValues('tags'), newTag]);
+      setNewTag('');
+    }
+  };
+
+  // Handle removing a tag
+  const handleRemoveTag = (index: number) => {
+    const currentTags = form.getValues('tags') || [];
+    const newTags = currentTags.filter((_, i) => i !== index);
+    form.setValue('tags', newTags);
+  };
+
   return (
     <Layout title="Create Sponsorship Opportunity">
       <div className="container mx-auto py-8">
@@ -252,6 +287,30 @@ export default function CreateSponsorshipOpportunity() {
                       </FormControl>
                       <FormDescription>
                         A clear, concise title for the sponsorship opportunity.
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="slug"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Slug *</FormLabel>
+                      <FormControl>
+                        <Input 
+                          placeholder="e.g. tech-innovation-sponsorship" 
+                          {...field}
+                          onChange={(e) => {
+                            const value = e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+                            field.onChange(value);
+                          }}
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        This will be used in the URL. Use only lowercase letters, numbers, and hyphens.
                       </FormDescription>
                       <FormMessage />
                     </FormItem>
@@ -373,6 +432,7 @@ export default function CreateSponsorshipOpportunity() {
                             <SelectItem value="CAD">CAD ($)</SelectItem>
                             <SelectItem value="AUD">AUD ($)</SelectItem>
                             <SelectItem value="JPY">JPY (¥)</SelectItem>
+                            <SelectItem value="ETB">ETB (ETB)</SelectItem>
                           </SelectContent>
                         </Select>
                         <FormDescription>
@@ -425,6 +485,136 @@ export default function CreateSponsorshipOpportunity() {
                       </FormControl>
                       <FormDescription>
                         The deadline for sponsors to apply for this opportunity.
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="industryFocus"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Industry Focus</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g., Technology, Healthcare, Finance" {...field} />
+                      </FormControl>
+                      <FormDescription>
+                        The primary industry this opportunity targets
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="eligibility"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Eligibility Criteria</FormLabel>
+                      <FormControl>
+                        <Textarea
+                          placeholder="Describe who is eligible to apply for this sponsorship..."
+                          rows={3}
+                          {...field}
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        Specify any requirements or criteria for potential sponsors
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="tags"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Tags *</FormLabel>
+                      <FormControl>
+                        <div className="space-y-2">
+                          <div className="flex gap-2">
+                            <Input
+                              placeholder="Add a tag"
+                              value={newTag}
+                              onChange={(e) => setNewTag(e.target.value)}
+                            />
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={handleAddTag}
+                            >
+                              <Plus className="h-4 w-4" />
+                            </Button>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {form.getValues("tags").map((tag, index) => (
+                              <Badge key={index} variant="secondary">
+                                {tag}
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveTag(index)}
+                                  className="ml-1 hover:bg-destructive hover:text-destructive-foreground rounded-full"
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      </FormControl>
+                      <FormDescription>
+                        Add relevant tags to help categorize this opportunity
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="visibility"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Visibility</FormLabel>
+                      <Select
+                        onValueChange={field.onChange}
+                        defaultValue={field.value}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select visibility" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="PUBLIC">Public</SelectItem>
+                          <SelectItem value="PRIVATE">Private</SelectItem>
+                          <SelectItem value="RESTRICTED">Restricted</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormDescription>
+                        Control who can see this opportunity
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="coverImage"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Cover Image URL</FormLabel>
+                      <FormControl>
+                        <Input placeholder="https://example.com/image.jpg" {...field} />
+                      </FormControl>
+                      <FormDescription>
+                        URL of the cover image for this opportunity
                       </FormDescription>
                       <FormMessage />
                     </FormItem>
