@@ -2,6 +2,8 @@ import { NextApiRequest, NextApiResponse } from 'next';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '../../auth/[...nextauth]';
 import prisma from '@/lib/prisma';
+import { Prisma } from '@prisma/client';
+import slugify from 'slugify';
 
 export default async function handler(
   req: NextApiRequest,
@@ -50,6 +52,19 @@ async function getOpportunity(req: NextApiRequest, res: NextApiResponse, id: str
             applications: true,
           },
         },
+        startupCall: {
+          select: {
+            id: true,
+            title: true,
+          },
+        },
+        createdBy: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
       },
     });
 
@@ -85,25 +100,80 @@ async function updateOpportunity(req: NextApiRequest, res: NextApiResponse, id: 
       maxAmount, 
       currency, 
       status, 
-      deadline, 
-      startupCallId 
+      deadline,
+      startupCallId,
+      industryFocus,
+      tags,
+      eligibility,
+      coverImage,
+      visibility,
+      tiers
     } = req.body;
+
+    // Prepare update data
+    const updateData: Prisma.SponsorshipOpportunityUpdateInput = {
+      ...(title && { title }),
+      ...(description && { description }),
+      ...(benefits && { benefits }),
+      ...(minAmount !== undefined && { minAmount: parseFloat(minAmount) }),
+      ...(maxAmount !== undefined && { maxAmount: parseFloat(maxAmount) }),
+      ...(currency && { currency }),
+      ...(status && { status }),
+      ...(deadline !== undefined && { 
+        deadline: deadline ? new Date(deadline) : null 
+      }),
+      ...(startupCallId && { 
+        startupCall: { connect: { id: startupCallId } }
+      }),
+      ...(industryFocus !== undefined && { industryFocus }),
+      ...(tags && { tags }),
+      ...(eligibility !== undefined && { eligibility }),
+      ...(coverImage !== undefined && { coverImage }),
+      ...(visibility && { visibility }),
+      ...(tiers !== undefined && { 
+        tiers: tiers ? tiers as Prisma.JsonValue : Prisma.JsonNull 
+      }),
+    };
+
+    // If title is being updated, generate a new slug
+    if (title && title !== existingOpportunity.title) {
+      const baseSlug = slugify(title, { lower: true, strict: true });
+      let slug = baseSlug;
+      let counter = 1;
+
+      // Check if slug exists and append number if it does
+      while (true) {
+        const existing = await prisma.sponsorshipOpportunity.findUnique({
+          where: { slug }
+        });
+        
+        if (!existing || existing.id === id) break;
+        
+        slug = `${baseSlug}-${counter}`;
+        counter++;
+      }
+
+      updateData.slug = slug;
+    }
 
     // Update the opportunity
     const updatedOpportunity = await prisma.sponsorshipOpportunity.update({
       where: { id },
-      data: {
-        ...(title && { title }),
-        ...(description && { description }),
-        ...(benefits && { benefits }),
-        ...(minAmount !== undefined && { minAmount: parseFloat(minAmount) }),
-        ...(maxAmount !== undefined && { maxAmount: parseFloat(maxAmount) }),
-        ...(currency && { currency }),
-        ...(status && { status }),
-        ...(deadline !== undefined && { 
-          deadline: deadline ? new Date(deadline) : null 
-        }),
-        ...(startupCallId && { startupCallId }),
+      data: updateData,
+      include: {
+        startupCall: {
+          select: {
+            id: true,
+            title: true,
+          },
+        },
+        createdBy: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
       },
     });
 
