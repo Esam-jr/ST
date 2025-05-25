@@ -39,6 +39,7 @@ interface SponsorshipOpportunity {
   tags: string[];
   minAmount: number;
   maxAmount: number;
+  currency: string;
   status: string;
   eligibility?: string;
   createdAt: string;
@@ -46,7 +47,8 @@ interface SponsorshipOpportunity {
   coverImage?: string;
   viewsCount: number;
   shareCount: number;
-  source?: string;
+  tiers?: Record<string, Record<string, string | number>>;
+  visibility: string;
   startupCallId: string | null;
   startupCall?: {
     title: string;
@@ -185,29 +187,42 @@ export default function PublicSponsorshipOpportunityDetailPage() {
   return (
     <Layout title={`${opportunity.title} | Sponsorship Opportunity`}>
       <div className="container mx-auto py-8 px-4">
-        <div className="flex flex-col md:flex-row items-start justify-between mb-6 gap-4">
+        {/* Header Section */}
+        <div className="flex flex-col md:flex-row items-start justify-between mb-8 gap-4">
           <div className="flex items-center">
             <Link href="/sponsorship-opportunities" className="mr-4">
-              <Button variant="ghost" size="sm">
+              <Button variant="ghost" size="sm" className="hover:bg-primary/5">
                 <ArrowLeft className="mr-2 h-4 w-4" />
                 Back
               </Button>
             </Link>
             <div>
-              <h1 className="text-3xl font-bold">{opportunity.title}</h1>
-              <div className="flex items-center mt-1">
+              <h1 className="text-4xl font-bold bg-gradient-to-r from-primary to-primary/60 bg-clip-text text-transparent">
+                {opportunity.title}
+              </h1>
+              <div className="flex items-center gap-3 mt-2">
                 {opportunity.deadline && (
                   <Badge
                     className={
                       isDeadlinePassed(opportunity.deadline)
-                        ? "bg-red-100 text-red-800 border-red-200 mr-2"
-                        : "bg-green-100 text-green-800 border-green-200 mr-2"
+                        ? "bg-red-100 text-red-800 border-red-200"
+                        : "bg-green-100 text-green-800 border-green-200"
                     }
                   >
                     {isDeadlinePassed(opportunity.deadline)
                       ? "Deadline Passed"
                       : "Open for Applications"}
                   </Badge>
+                )}
+                {opportunity.visibility === "PRIVATE" && (
+                  <Badge variant="outline">Private</Badge>
+                )}
+                {opportunity.tags && opportunity.tags.length > 0 && (
+                  opportunity.tags.slice(0, 2).map((tag, index) => (
+                    <Badge key={index} variant="secondary">
+                      {tag}
+                    </Badge>
+                  ))
                 )}
               </div>
             </div>
@@ -217,29 +232,42 @@ export default function PublicSponsorshipOpportunityDetailPage() {
               <Link
                 href={`/auth/signin?callbackUrl=/sponsor/opportunities/${opportunity.id}/apply`}
               >
-                <Button className="flex items-center">
+                <Button size="lg" className="flex items-center gap-2 shadow-md hover:shadow-lg transition-shadow">
                   Sign in to Apply
-                  <LogIn className="ml-2 h-4 w-4" />
+                  <LogIn className="h-4 w-4" />
                 </Button>
               </Link>
             )}
           </div>
         </div>
 
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Main Content */}
+          <div className="lg:col-span-2 space-y-6">
+            {opportunity.coverImage && (
+              <Card className="overflow-hidden">
+                <img
+                  src={opportunity.coverImage}
+                  alt={opportunity.title}
+                  className="w-full h-[300px] object-cover"
+                />
+              </Card>
+            )}
+
         <Card>
           <CardHeader>
-            <CardTitle>Opportunity Details</CardTitle>
+                <CardTitle className="text-2xl">About the Opportunity</CardTitle>
             {opportunity.startupCall && (
-              <CardDescription className="flex items-center">
-                <Building className="h-4 w-4 mr-1" />
+                  <CardDescription className="flex items-center text-base">
+                    <Building className="h-5 w-5 mr-2" />
                 Associated with {opportunity.startupCall.title}
               </CardDescription>
             )}
           </CardHeader>
-          <CardContent className="space-y-4">
+              <CardContent className="space-y-6">
             <div>
-              <h3 className="text-lg font-medium mb-2">Description</h3>
-              <p className="text-gray-700 whitespace-pre-line">
+                  <h3 className="text-lg font-medium mb-3">Description</h3>
+                  <p className="text-gray-700 whitespace-pre-line leading-relaxed">
                 {opportunity.description}
               </p>
             </div>
@@ -247,79 +275,134 @@ export default function PublicSponsorshipOpportunityDetailPage() {
             <Separator />
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <h3 className="text-lg font-medium mb-2">Funding Range</h3>
-                <div className="flex items-center text-gray-700">
+                  <div className="space-y-2">
+                    <h3 className="text-lg font-medium">Funding Range</h3>
+                    <div className="flex items-center text-gray-700 bg-primary/5 p-3 rounded-lg">
                   <DollarSign className="h-5 w-5 mr-2 text-primary" />
-                  <span>
-                    {formatCurrency(
-                      opportunity.minAmount,
-                      opportunity.currency
-                    )}{" "}
-                    -
-                    {formatCurrency(
-                      opportunity.maxAmount,
-                      opportunity.currency
-                    )}
+                      <span className="font-medium">
+                        {formatCurrency(opportunity.minAmount, opportunity.currency)} -
+                        {formatCurrency(opportunity.maxAmount, opportunity.currency)}
                   </span>
                 </div>
               </div>
 
-              <div>
-                <h3 className="text-lg font-medium mb-2">
-                  Application Deadline
-                </h3>
-                <div className="flex items-center text-gray-700">
+                  <div className="space-y-2">
+                    <h3 className="text-lg font-medium">Application Deadline</h3>
+                    <div className="flex items-center text-gray-700 bg-primary/5 p-3 rounded-lg">
                   <Calendar className="h-5 w-5 mr-2 text-primary" />
-                  <span>{formatDate(opportunity.deadline)}</span>
+                      <span className="font-medium">
+                        {formatDate(opportunity.deadline)}
+                      </span>
                 </div>
               </div>
             </div>
 
+                {opportunity.benefits && opportunity.benefits.length > 0 && (
+                  <>
             <Separator />
-
             <div>
-              <h3 className="text-lg font-medium mb-2">Sponsor Benefits</h3>
-              {opportunity.benefits.length > 0 ? (
-                <ul className="list-disc pl-5 space-y-1">
+                      <h3 className="text-lg font-medium mb-3">Sponsor Benefits</h3>
+                      <ul className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   {opportunity.benefits.map((benefit, index) => (
-                    <li key={index} className="text-gray-700">
-                      {benefit}
+                          <li key={index} className="flex items-start">
+                            <Star className="h-5 w-5 mr-2 text-primary shrink-0 mt-0.5" />
+                            <span className="text-gray-700">{benefit}</span>
                     </li>
                   ))}
                 </ul>
-              ) : (
-                <p className="text-gray-500 italic">
-                  No specific benefits listed
-                </p>
-              )}
+                    </div>
+                  </>
+                )}
+
+                {opportunity.eligibility && (
+                  <>
+                    <Separator />
+                    <div>
+                      <h3 className="text-lg font-medium mb-3">Eligibility Criteria</h3>
+                      <div className="bg-primary/5 p-4 rounded-lg">
+                        <p className="text-gray-700 whitespace-pre-line">
+                          {opportunity.eligibility}
+                        </p>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+
+            {opportunity.tiers && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Sponsorship Tiers</CardTitle>
+                  <CardDescription>Available sponsorship packages</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {Object.entries(opportunity.tiers).map(([tier, details]: [string, Record<string, string | number>]) => (
+                      <div key={tier} className="bg-primary/5 p-4 rounded-lg">
+                        <h4 className="font-medium text-lg mb-2">{tier}</h4>
+                        <ul className="space-y-2">
+                          {Object.entries(details).map(([key, value]) => (
+                            <li key={key} className="text-sm text-gray-700">
+                              <span className="font-medium">{key}:</span> {value}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ))}
             </div>
           </CardContent>
-          <CardFooter className="flex flex-col items-start">
-            <div className="text-sm text-gray-500 mb-4">
-              Created on {new Date(opportunity.createdAt).toLocaleDateString()}
+              </Card>
+            )}
             </div>
-          </CardFooter>
-        </Card>
 
-        {sessionStatus === "authenticated" &&
-          !isDeadlinePassed(opportunity.deadline) && (
-            <div className="mt-6 bg-blue-50 border border-blue-100 rounded-lg p-6">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                <div className="flex items-start">
-                  <Info className="h-6 w-6 text-blue-600 mr-3 mt-0.5" />
-                  <div>
-                    <h3 className="font-medium text-blue-800 text-lg mb-1">
-                      Interested in this opportunity?
-                    </h3>
-                    <p className="text-blue-700">
-                      {session.user?.role === "SPONSOR"
-                        ? "Submit your application to sponsor this opportunity."
-                        : "Sign in or create a sponsor account to apply for this sponsorship opportunity."}
-                    </p>
+          {/* Sidebar */}
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>Opportunity Stats</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-600">Views</span>
+                    <span className="font-medium">{opportunity.viewsCount}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-600">Shares</span>
+                    <span className="font-medium">{opportunity.shareCount}</span>
+                  </div>
+                  {opportunity.industryFocus && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-600">Industry</span>
+                      <Badge variant="outline">{opportunity.industryFocus}</Badge>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-600">Created</span>
+                    <span className="text-sm text-gray-500">
+                      {new Date(opportunity.createdAt).toLocaleDateString()}
+                    </span>
                   </div>
                 </div>
-                <div className="flex flex-col sm:flex-row gap-2">
+              </CardContent>
+            </Card>
+
+            {sessionStatus === "authenticated" && !isDeadlinePassed(opportunity.deadline) && (
+              <Card className="bg-primary/5 border-primary/10">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Info className="h-5 w-5" />
+                    Ready to Apply?
+                  </CardTitle>
+                  <CardDescription>
+                    {session.user?.role === "SPONSOR"
+                      ? "Submit your application to sponsor this opportunity."
+                      : "Only sponsors can apply for this opportunity."}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
                   {session.user?.role === "SPONSOR" ? (
                     <ApplySponsorshipForm
                       opportunityId={opportunity.id}
@@ -329,17 +412,16 @@ export default function PublicSponsorshipOpportunityDetailPage() {
                       onSuccess={() => {
                         toast({
                           title: "Application Submitted",
-                          description:
-                            "Your application has been submitted successfully.",
+                            description: "Your application has been submitted successfully.",
                           variant: "default",
                         });
-                        fetchOpportunityData(); // Refresh opportunity data
+                          fetchOpportunityData();
                       }}
                     />
                   ) : (
                     <Button
                       variant="outline"
-                      className="min-w-[120px] flex items-center gap-2"
+                        className="w-full flex items-center justify-center gap-2"
                       disabled
                     >
                       <Info className="h-4 w-4" />
@@ -349,16 +431,18 @@ export default function PublicSponsorshipOpportunityDetailPage() {
                   <Link href="/sponsorship-opportunities">
                     <Button
                       variant="outline"
-                      className="min-w-[120px] flex items-center gap-2"
+                        className="w-full flex items-center justify-center gap-2"
                     >
                       <ArrowLeft className="h-4 w-4" />
                       Back to List
                     </Button>
                   </Link>
                 </div>
+                </CardContent>
+              </Card>
+            )}
               </div>
             </div>
-          )}
       </div>
     </Layout>
   );
