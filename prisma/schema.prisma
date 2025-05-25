@@ -1,5 +1,6 @@
 generator client {
   provider = "prisma-client-js"
+  previewFeatures = ["metrics"]
 }
 
 datasource db {
@@ -389,24 +390,54 @@ model SponsorshipOpportunity {
 }
 
 model SponsorshipApplication {
-  id            String                 @id @default(cuid())
-  opportunityId String
-  sponsorId     String
-  amount        Float
-  currency      String
-  message       String?
-  status        String
-  createdAt     DateTime               @default(now())
-  updatedAt     DateTime               @updatedAt
-  sponsorName   String
-  contactPerson String
-  email         String
-  phone         String?
-  website       String?
-  sponsorshipType String
-  otherType     String?
-  opportunity   SponsorshipOpportunity @relation(fields: [opportunityId], references: [id])
-  sponsor       User                   @relation(fields: [sponsorId], references: [id])
+  id                String                 @id @default(cuid())
+  opportunityId     String
+  sponsorId         String
+  
+  // Sponsor Information
+  sponsorType       SponsorType            @default(COMPANY)
+  organizationName  String?
+  legalName         String
+  website           String?
+  description       String
+  annualBudget      String?
+  size              String?
+  foundedYear       Int?
+  headquarters      String?
+  taxStatus         String?
+  
+  // Contact Information
+  primaryContact    Json
+  alternateContact  Json?
+  
+  // Sponsorship Details
+  proposedAmount    Float
+  currency         String                  @default("USD")
+  sponsorshipGoals String
+  hasPreviousSponsorships Boolean          @default(false)
+  previousSponsorshipsDetails String?
+  preferredPaymentSchedule String?
+  additionalRequests String?
+  proposedStartDate DateTime?
+  proposedEndDate DateTime?
+  
+  // Internal Status
+  status           SponsorshipApplicationStatus @default(PENDING)
+  internalNotes    String?
+  reviewedAt       DateTime?
+  reviewedById     String?
+  
+  // Timestamps
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+  
+  // Relations
+  opportunity      SponsorshipOpportunity @relation(fields: [opportunityId], references: [id])
+  sponsor          User                   @relation(fields: [sponsorId], references: [id])
+  
+  @@index([status])
+  @@index([opportunityId])
+  @@index([sponsorId])
 }
 
 model ReviewCriteria {
@@ -526,5 +557,22 @@ enum EventType {
   DEADLINE
   ANNOUNCEMENT
   NETWORKING
+  OTHER
+}
+
+enum SponsorshipApplicationStatus {
+  PENDING
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  WITHDRAWN
+  COMPLETED
+}
+
+enum SponsorType {
+  COMPANY
+  INDIVIDUAL
+  NGO
+  FOUNDATION
   OTHER
 }
