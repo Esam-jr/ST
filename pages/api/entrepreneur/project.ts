@@ -55,9 +55,16 @@ export default async function handler(
       return res.status(401).json({ message: "Unauthorized" });
     }
 
-    // First, find the entrepreneur's startup
+    const { startupId } = req.query;
+
+    if (!startupId) {
+      return res.status(400).json({ message: "startupId is required" });
+    }
+
+    // Find the startup and validate ownership
     const startup = await prisma.startup.findFirst({
       where: {
+        id: startupId as string,
         founderId: session.user.id,
       },
       include: {
@@ -76,14 +83,20 @@ export default async function handler(
     if (!startup) {
       return res
         .status(404)
-        .json({ message: "No startup found for this user" });
+        .json({ 
+          message: "No startup found for this user",
+          code: "STARTUP_NOT_FOUND"
+        });
     }
 
     // Check if the startup has any approved applications
     if (!startup.callApplications || startup.callApplications.length === 0) {
       return res
         .status(404)
-        .json({ message: "No approved applications found" });
+        .json({ 
+          message: "No approved applications found",
+          code: "NO_APPROVED_APPLICATIONS"
+        });
     }
 
     // Get the approved application & call
@@ -103,7 +116,10 @@ export default async function handler(
     if (!budget) {
       return res
         .status(404)
-        .json({ message: "No budget found for this project" });
+        .json({ 
+          message: "No budget found for this project",
+          code: "BUDGET_NOT_FOUND"
+        });
     }
 
     // Calculate spent amount from expenses

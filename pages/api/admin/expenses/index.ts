@@ -85,7 +85,7 @@ export default async function handler(
               name: true,
             },
           },
-          createdBy: {
+          user: {
             select: {
               id: true,
               name: true,
@@ -118,24 +118,22 @@ export default async function handler(
         new Set(expenses.map((e) => e.budget.startupCallId))
       );
 
-      // Now get all startups that have approved applications for these startup calls
+      // Get all startups that have approved applications for these startup calls
       const startups = await prisma.startup.findMany({
         where: {
           callApplications: {
             some: {
               callId: {
-                in: startupCallIds,
+                in: startupCallIds.filter(Boolean),
               },
               status: "APPROVED",
             },
           },
         },
-        select: {
-          id: true,
-          name: true,
-          founderId: true,
+        include: {
           founder: {
             select: {
+              id: true,
               name: true,
             },
           },
@@ -143,7 +141,7 @@ export default async function handler(
             where: {
               status: "APPROVED",
               callId: {
-                in: startupCallIds,
+                in: startupCallIds.filter(Boolean),
               },
             },
             select: {
@@ -157,7 +155,7 @@ export default async function handler(
       const startupInfo = startups.map((startup) => ({
         id: startup.id,
         name: startup.name,
-        founderId: startup.founderId,
+        founderId: startup.founder.id,
         founderName: startup.founder.name,
         callIds: startup.callApplications.map((app) => app.callId),
       }));
@@ -186,37 +184,54 @@ export default async function handler(
         req.body;
 
       // Validate required fields
-      if (!budgetId || !title || !amount || !date) {
+      if (!budgetId || !title || !amount || !date || !categoryId) {
         return res.status(400).json({
           error:
-            "Missing required fields: budgetId, title, amount, and date are required",
+            "Missing required fields: budgetId, categoryId, title, amount, and date are required",
         });
       }
 
-      // Validate budget exists
+      // Validate budget exists and get its startup
       const budget = await prisma.budget.findUnique({
         where: { id: budgetId },
+        include: {
+          startup: true,
+        }
       });
 
       if (!budget) {
         return res.status(404).json({ error: "Budget not found" });
       }
 
+      // Get any milestone (using the first one if exists)
+      const milestone = await prisma.milestone.findFirst({
+        where: { startupId: budget.startupId }
+      });
+
+      if (!milestone) {
+        return res.status(400).json({ error: "No milestone found for this startup. Please create a milestone first." });
+      }
+
       // Create the new expense
       const newExpense = await prisma.expense.create({
         data: {
-          budgetId,
-          categoryId,
           title,
           description,
           amount: Number(amount),
           date: new Date(date),
-          status: status || "APPROVED", // Admin-created expenses are approved by default
-          currency: "USD", // Changed from INR to USD as default
+          status: status || "PENDING",
+          budget: { connect: { id: budgetId } },
+          category: { connect: { id: categoryId } },
+          startup: { connect: { id: budget.startupId } },
+          milestone: { connect: { id: milestone.id } },
+          user: { connect: { id: session.user.id } }
         },
         include: {
           budget: true,
           category: true,
+          startup: true,
+          milestone: true,
+          user: true
         },
       });
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import axios from "axios";
 import {
   Card,
@@ -62,6 +62,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 
+// Types
 interface Expense {
   id: string;
   title: string;
@@ -101,10 +102,10 @@ interface Milestone {
 }
 
 interface ExpenseTrackerProps {
-  projectId?: string;
+  startupId: string;
 }
 
-interface NewExpense {
+interface NewExpenseFormData {
   title: string;
   description: string;
   amount: number;
@@ -114,7 +115,15 @@ interface NewExpense {
   receipt?: File | null;
 }
 
-const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
+interface ApiError {
+  message: string;
+  code?: string;
+}
+
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+const VALID_FILE_TYPES = ["image/jpeg", "image/png", "application/pdf"];
+
+const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ startupId }) => {
   const { toast } = useToast();
 
   // State
@@ -132,7 +141,7 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
   // Expense form state
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
-  const [newExpense, setNewExpense] = useState<NewExpense>({
+  const [newExpense, setNewExpense] = useState<NewExpenseFormData>({
     title: "",
     description: "",
     amount: 0,
@@ -145,231 +154,26 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
   const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Fetch all data when component mounts
+  // Cleanup function for object URLs
   useEffect(() => {
-    fetchData();
+    return () => {
+      if (receiptPreview) {
+        URL.revokeObjectURL(receiptPreview);
+      }
+    };
+  }, [receiptPreview]);
 
-    // Cleanup function to clear any pending timeouts
+  // Cleanup function for timeouts
+  useEffect(() => {
     return () => {
       if (retryTimeout) {
         clearTimeout(retryTimeout);
       }
     };
-  }, []);
+  }, [retryTimeout]);
 
-  // Fetch data function to enable easier refreshing
-  const fetchData = async (isRetry = false) => {
-    if (!isRetry) {
-      setLoading(true);
-    }
-    setError(null);
-
-    try {
-      // Create an array of promises to fetch data in parallel
-      const [
-        projectResponse,
-        expenseResponse,
-        taskResponse,
-        milestoneResponse,
-      ] = await Promise.allSettled([
-        axios.get("/api/entrepreneur/project"),
-        axios.get("/api/entrepreneur/expenses").catch((err) => {
-          console.error("Error fetching expenses:", err);
-          return { status: "rejected", reason: err };
-        }),
-        axios.get("/api/entrepreneur/tasks").catch((err) => {
-          console.error("Error fetching tasks:", err);
-          return { status: "rejected", reason: err };
-        }),
-        axios.get("/api/entrepreneur/milestones").catch((err) => {
-          console.error("Error fetching milestones:", err);
-          return { status: "rejected", reason: err };
-        }),
-      ]);
-
-      // Clear any existing retry timeouts if we get here
-      if (retryTimeout) {
-        clearTimeout(retryTimeout);
-        setRetryTimeout(null);
-      }
-
-      // Track if we need to retry due to connection issues
-      let shouldRetry = false;
-
-      // Handle each response individually
-      if (projectResponse.status === "fulfilled") {
-        // Set categories from project data with budget information
-        setCategories(projectResponse.value.data.budget.categories);
-      } else {
-        const error =
-          projectResponse.status === "rejected"
-            ? (projectResponse as PromiseRejectedResult).reason
-            : new Error("Unknown error");
-        if (
-          error?.response?.data?.code === "CONNECTION_ERROR" ||
-          error?.response?.data?.code === "DB_CONNECTION_ERROR" ||
-          error?.message?.includes("network")
-        ) {
-          shouldRetry = true;
-        }
-        if (!isRetry) {
-          throw new Error("Failed to load project data");
-        }
-      }
-
-      // Handle expenses response
-      if (expenseResponse.status === "fulfilled") {
-        const response = expenseResponse.value as { data: any };
-        // Check if the response has the new structure (with expenses property)
-        if (response?.data?.expenses) {
-          const responseData = response.data;
-          setExpenses(responseData.expenses);
-          setCategories(responseData.categories || []);
-          setBudget(responseData.budget || null);
-        } else if (Array.isArray(response?.data)) {
-          // Fallback for old response structure
-          setExpenses(response.data);
-        } else {
-          console.error("Unexpected expense data format:", response?.data);
-          setError(
-            "Received invalid expense data format. Please try again later."
-          );
-          shouldRetry = true;
-        }
-      } else {
-        console.error("Failed to load expenses:", expenseResponse.reason);
-        setError("Failed to load expense data. Please try again later.");
-        shouldRetry = true;
-      }
-
-      if (taskResponse.status === "fulfilled" && "data" in taskResponse.value) {
-        setTasks(taskResponse.value.data || []);
-      } else {
-        const taskError =
-          taskResponse.status === "rejected"
-            ? (taskResponse as PromiseRejectedResult).reason
-            : new Error("Unknown task error");
-
-        console.warn("Could not load tasks:", taskError);
-        setTasks([]);
-      }
-
-      if (
-        milestoneResponse.status === "fulfilled" &&
-        "data" in milestoneResponse.value
-      ) {
-        setMilestones(milestoneResponse.value.data || []);
-      } else {
-        const milestoneError =
-          milestoneResponse.status === "rejected"
-            ? (milestoneResponse as PromiseRejectedResult).reason
-            : new Error("Unknown milestone error");
-
-        console.warn("Could not load milestones:", milestoneError);
-        setMilestones([]);
-      }
-
-      // Set up retry if needed
-      if (shouldRetry && retryCount < 3) {
-        const delay = 2000 * Math.pow(2, retryCount); // Exponential backoff: 2s, 4s, 8s
-        console.log(
-          `Scheduling retry in ${delay / 1000}s (attempt ${retryCount + 1}/3)`
-        );
-
-        const timeout = setTimeout(() => {
-          setRetryCount((prev) => prev + 1);
-          fetchData(true);
-        }, delay);
-
-        setRetryTimeout(timeout);
-      } else if (retryCount > 0 && !shouldRetry) {
-        // If this was a successful retry
-        toast({
-          title: "Connection Restored",
-          description: "Successfully connected to the database.",
-          variant: "default",
-        });
-        setRetryCount(0);
-      }
-    } catch (err: any) {
-      console.error("Error fetching expense data:", err);
-
-      // Check if error is from axios
-      const errorMessage =
-        err.response?.data?.message ||
-        "Failed to load expense data. Please try again later.";
-      const errorCode = err.response?.data?.code;
-
-      // Set appropriate user-friendly error message
-      let userMessage = errorMessage;
-      let shouldRetry = false;
-
-      if (
-        errorCode === "CONNECTION_ERROR" ||
-        errorCode === "DB_CONNECTION_ERROR"
-      ) {
-        userMessage = isRetry
-          ? `Database connection issue. Retry attempt ${retryCount}/3...`
-          : "Database connection issue. Will retry automatically...";
-        shouldRetry = true;
-      } else if (errorCode === "SCHEMA_ERROR") {
-        userMessage = "System error. Our technical team has been notified.";
-      } else if (err.message?.includes("Network Error")) {
-        userMessage = "Network connection issue. Will retry automatically...";
-        shouldRetry = true;
-      }
-
-      setError(userMessage);
-
-      if (!isRetry) {
-        toast({
-          title: "Error",
-          description: userMessage,
-          variant: "destructive",
-        });
-      }
-
-      // Initialize arrays to prevent errors
-      setExpenses([]);
-      setCategories([]);
-      setTasks([]);
-      setMilestones([]);
-
-      // Set up retry if needed
-      if (shouldRetry && retryCount < 3) {
-        const delay = 2000 * Math.pow(2, retryCount); // Exponential backoff: 2s, 4s, 8s
-        console.log(
-          `Scheduling retry in ${delay / 1000}s (attempt ${retryCount + 1}/3)`
-        );
-
-        const timeout = setTimeout(() => {
-          setRetryCount((prev) => prev + 1);
-          fetchData(true);
-        }, delay);
-
-        setRetryTimeout(timeout);
-      }
-    } finally {
-      if (!isRetry) {
-        setLoading(false);
-      } else if (retryCount >= 3) {
-        // If we've exhausted our retries, make sure loading is false
-        setLoading(false);
-        setError(
-          "Database connection failed after multiple attempts. Please try again later."
-        );
-        toast({
-          title: "Connection Failed",
-          description:
-            "Could not connect to database after several attempts. Please try again later.",
-          variant: "destructive",
-        });
-      }
-    }
-  };
-
-  // Format currency
-  const formatCurrency = (amount: number, currency: string = "USD") => {
+  // Format currency with memoization
+  const formatCurrency = useCallback((amount: number, currency: string = "USD") => {
     try {
       return new Intl.NumberFormat("en-US", {
         style: "currency",
@@ -380,10 +184,10 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
       console.error("Error formatting currency:", error);
       return `$${amount.toFixed(2)}`;
     }
-  };
+  }, []);
 
-  // Format date
-  const formatDate = (dateString: string) => {
+  // Format date with memoization
+  const formatDate = useCallback((dateString: string) => {
     try {
       return new Date(dateString).toLocaleDateString("en-US", {
         year: "numeric",
@@ -394,34 +198,213 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
       console.error("Error formatting date:", error);
       return "Invalid Date";
     }
-  };
+  }, []);
 
-  // Handle form input changes
-  const handleInputChange = (field: string, value: any) => {
-    setNewExpense({
-      ...newExpense,
+  // Handle form input changes with proper typing
+  const handleInputChange = <K extends keyof NewExpenseFormData>(
+    field: K,
+    value: NewExpenseFormData[K]
+  ) => {
+    setNewExpense(prev => ({
+      ...prev,
       [field]: value,
-    });
+    }));
 
-    // Clear error for the field
+    // Clear error for the field if it exists
     if (formErrors[field]) {
-      setFormErrors({
-        ...formErrors,
+      setFormErrors(prev => ({
+        ...prev,
         [field]: "",
-      });
+      }));
     }
   };
 
+  // Fetch all data when component mounts
+  const fetchData = useCallback(async (isRetry = false) => {
+    if (!isRetry) {
+      setLoading(true);
+    }
+    setError(null);
+
+    try {
+      const [
+        projectResponse,
+        expenseResponse,
+        taskResponse,
+        milestoneResponse,
+      ] = await Promise.allSettled([
+        axios.get(`/api/entrepreneur/project?startupId=${startupId}`),
+        axios.get(`/api/entrepreneur/expenses?startupId=${startupId}`),
+        axios.get(`/api/entrepreneur/tasks?startupId=${startupId}`),
+        axios.get(`/api/entrepreneur/milestones?startupId=${startupId}`),
+      ]);
+
+      // Clear any existing retry timeouts
+      if (retryTimeout) {
+        clearTimeout(retryTimeout);
+        setRetryTimeout(null);
+      }
+
+      let shouldRetry = false;
+
+      // Process project response
+      if (projectResponse.status === "fulfilled") {
+        setCategories(projectResponse.value.data.budget.categories);
+      } else {
+        const error = projectResponse.status === "rejected" 
+          ? (projectResponse as PromiseRejectedResult).reason 
+          : new Error("Unknown error");
+        if (error?.response?.data?.code === "CONNECTION_ERROR" || 
+            error?.response?.data?.code === "DB_CONNECTION_ERROR" || 
+            error?.message?.includes("network")) {
+          shouldRetry = true;
+        }
+        if (!isRetry) {
+          throw new Error("Failed to load project data");
+        }
+      }
+
+      // Process expense response
+      if (expenseResponse.status === "fulfilled") {
+        const response = expenseResponse.value as { data: any };
+        if (response?.data?.expenses) {
+          const responseData = response.data;
+          setExpenses(responseData.expenses);
+          setCategories(prev => responseData.categories || prev);
+          setBudget(responseData.budget || null);
+        } else if (Array.isArray(response?.data)) {
+          setExpenses(response.data);
+        } else {
+          console.error("Unexpected expense data format:", response?.data);
+          setError("Received invalid expense data format. Please try again later.");
+          shouldRetry = true;
+        }
+      } else {
+        console.error("Failed to load expenses:", expenseResponse.reason);
+        setError("Failed to load expense data. Please try again later.");
+        shouldRetry = true;
+      }
+
+      // Process task response
+      if (taskResponse.status === "fulfilled" && "data" in taskResponse.value) {
+        setTasks(taskResponse.value.data || []);
+      } else {
+        const taskError = taskResponse.status === "rejected"
+          ? (taskResponse as PromiseRejectedResult).reason
+          : new Error("Unknown task error");
+        console.warn("Could not load tasks:", taskError);
+        setTasks([]);
+      }
+
+      // Process milestone response
+      if (milestoneResponse.status === "fulfilled" && "data" in milestoneResponse.value) {
+        setMilestones(milestoneResponse.value.data || []);
+      } else {
+        const milestoneError = milestoneResponse.status === "rejected"
+          ? (milestoneResponse as PromiseRejectedResult).reason
+          : new Error("Unknown milestone error");
+        console.warn("Could not load milestones:", milestoneError);
+        setMilestones([]);
+      }
+
+      // Set up retry if needed
+      if (shouldRetry && retryCount < 3) {
+        const delay = 2000 * Math.pow(2, retryCount); // Exponential backoff
+        console.log(`Scheduling retry in ${delay / 1000}s (attempt ${retryCount + 1}/3)`);
+
+        const timeout = setTimeout(() => {
+          setRetryCount(prev => prev + 1);
+          fetchData(true);
+        }, delay);
+
+        setRetryTimeout(timeout);
+      } else if (retryCount > 0 && !shouldRetry) {
+        toast({
+          title: "Connection Restored",
+          description: "Successfully connected to the database.",
+          variant: "default",
+        });
+        setRetryCount(0);
+      }
+    } catch (err: unknown) {
+      console.error("Error fetching expense data:", err);
+      let errorMessage = "Failed to load expense data. Please try again later.";
+      let shouldRetry = false;
+
+      if (axios.isAxiosError(err)) {
+        errorMessage = err.response?.data?.message || errorMessage;
+        const errorCode = err.response?.data?.code;
+
+        if (errorCode === "CONNECTION_ERROR" || errorCode === "DB_CONNECTION_ERROR") {
+          errorMessage = isRetry
+            ? `Database connection issue. Retry attempt ${retryCount}/3...`
+            : "Database connection issue. Will retry automatically...";
+          shouldRetry = true;
+        } else if (errorCode === "SCHEMA_ERROR") {
+          errorMessage = "System error. Our technical team has been notified.";
+        } else if (err.message?.includes("Network Error")) {
+          errorMessage = "Network connection issue. Will retry automatically...";
+          shouldRetry = true;
+        }
+      }
+
+      setError(errorMessage);
+      setExpenses([]);
+      setCategories([]);
+      setTasks([]);
+      setMilestones([]);
+
+      if (!isRetry) {
+        toast({
+          title: "Error",
+          description: errorMessage,
+          variant: "destructive",
+        });
+      }
+
+      if (shouldRetry && retryCount < 3) {
+        const delay = 2000 * Math.pow(2, retryCount);
+        const timeout = setTimeout(() => {
+          setRetryCount(prev => prev + 1);
+          fetchData(true);
+        }, delay);
+
+        setRetryTimeout(timeout);
+      }
+    } finally {
+      if (!isRetry || retryCount >= 3) {
+        setLoading(false);
+        if (retryCount >= 3) {
+          setError("Database connection failed after multiple attempts. Please try again later.");
+          toast({
+            title: "Connection Failed",
+            description: "Could not connect to database after several attempts. Please try again later.",
+            variant: "destructive",
+          });
+        }
+      }
+    }
+  }, [retryCount, retryTimeout, toast, startupId]);
+
+  // Initial data fetch
+  useEffect(() => {
+    fetchData();
+  }, [fetchData, startupId]);
+
   // Validate expense form
-  const validateExpenseForm = () => {
+  const validateExpenseForm = useCallback(() => {
     const errors: Record<string, string> = {};
 
     if (!newExpense.title.trim()) {
       errors.title = "Title is required";
+    } else if (newExpense.title.length > 100) {
+      errors.title = "Title must be less than 100 characters";
     }
 
     if (newExpense.amount <= 0) {
       errors.amount = "Amount must be greater than zero";
+    } else if (newExpense.amount > 1000000) {
+      errors.amount = "Amount must be less than $1,000,000";
     }
 
     if (!newExpense.categoryId) {
@@ -430,6 +413,8 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
 
     if (!newExpense.date) {
       errors.date = "Date is required";
+    } else if (newExpense.date > new Date()) {
+      errors.date = "Date cannot be in the future";
     }
 
     if (!newExpense.milestoneId) {
@@ -439,7 +424,7 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
     // Check if the expense exceeds the category budget
     if (newExpense.categoryId) {
       const selectedCategory = categories.find(
-        (category) => category.id === newExpense.categoryId
+        category => category.id === newExpense.categoryId
       );
       if (selectedCategory && newExpense.amount > selectedCategory.remaining) {
         errors.amount = `Amount exceeds remaining budget for this category (${formatCurrency(
@@ -450,58 +435,61 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
 
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
-  };
+  }, [newExpense, categories, formatCurrency]);
 
   // Handle receipt file selection
-  const handleReceiptChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleReceiptChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
-    if (files && files.length > 0) {
-      const file = files[0];
-      // Validate file type and size
-      const validTypes = ["image/jpeg", "image/png", "application/pdf"];
-      const maxSize = 5 * 1024 * 1024; // 5MB
+    if (!files || files.length === 0) return;
 
-      if (!validTypes.includes(file.type)) {
-        setFormErrors({
-          ...formErrors,
-          receipt: "Only JPEG, PNG, and PDF files are allowed",
-        });
-        return;
-      }
+    const file = files[0];
 
-      if (file.size > maxSize) {
-        setFormErrors({
-          ...formErrors,
-          receipt: "File size must be less than 5MB",
-        });
-        return;
-      }
-
-      setReceiptFile(file);
-
-      // Create preview URL for images
-      if (file.type.startsWith("image/")) {
-        const previewUrl = URL.createObjectURL(file);
-        setReceiptPreview(previewUrl);
-      } else {
-        setReceiptPreview(null);
-      }
-
-      // Clear any previous errors
-      const updatedErrors = { ...formErrors };
-      delete updatedErrors.receipt;
-      setFormErrors(updatedErrors);
+    // Validate file type
+    if (!VALID_FILE_TYPES.includes(file.type)) {
+      setFormErrors(prev => ({
+        ...prev,
+        receipt: "Only JPEG, PNG, and PDF files are allowed",
+      }));
+      return;
     }
-  };
+
+    // Validate file size
+    if (file.size > MAX_FILE_SIZE) {
+      setFormErrors(prev => ({
+        ...prev,
+        receipt: "File size must be less than 5MB",
+      }));
+      return;
+    }
+
+    setReceiptFile(file);
+    handleInputChange("receipt", file);
+
+    // Create preview URL for images
+    if (file.type.startsWith("image/")) {
+      const previewUrl = URL.createObjectURL(file);
+      setReceiptPreview(previewUrl);
+    } else {
+      setReceiptPreview(null);
+    }
+
+    // Clear any previous errors
+    setFormErrors(prev => {
+      const updatedErrors = { ...prev };
+      delete updatedErrors.receipt;
+      return updatedErrors;
+    });
+  }, []);
 
   // Remove receipt file
-  const handleRemoveReceipt = () => {
+  const handleRemoveReceipt = useCallback(() => {
     setReceiptFile(null);
+    handleInputChange("receipt", null);
     if (receiptPreview) {
       URL.revokeObjectURL(receiptPreview);
       setReceiptPreview(null);
     }
-  };
+  }, [receiptPreview]);
 
   // Submit expense form
   const handleSubmit = async (e: React.FormEvent) => {
@@ -522,8 +510,8 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
       formData.append("categoryId", newExpense.categoryId);
       formData.append("milestoneId", newExpense.milestoneId);
       
-      if (newExpense.receipt) {
-        formData.append("receipt", newExpense.receipt);
+      if (receiptFile) {
+        formData.append("receipt", receiptFile);
       }
 
       const response = await axios.post("/api/entrepreneur/expenses", formData, {
@@ -534,7 +522,7 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
 
       const newExpenseData = response.data;
 
-      setExpenses((prev) => [...prev, newExpenseData]);
+      setExpenses(prev => [...prev, newExpenseData]);
       setNewExpense({
         title: "",
         description: "",
@@ -555,11 +543,17 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
         title: "Success",
         description: "Expense created successfully",
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error creating expense:", error);
+      let errorMessage = "Failed to create expense";
+      
+      if (axios.isAxiosError(error)) {
+        errorMessage = error.response?.data?.message || errorMessage;
+      }
+
       toast({
         title: "Error",
-        description: error.response?.data?.message || "Failed to create expense",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {
@@ -567,8 +561,8 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
     }
   };
 
-  // Render the expense list with receipt links
-  const renderExpenseList = () => {
+  // Memoized expense list
+  const expenseList = useMemo(() => {
     if (expenses.length === 0) {
       return (
         <div className="text-center py-8">
@@ -590,7 +584,7 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {expenses.map((expense) => (
+          {expenses.map(expense => (
             <TableRow key={expense.id}>
               <TableCell className="font-medium">{expense.title}</TableCell>
               <TableCell>{expense.categoryName}</TableCell>
@@ -619,6 +613,7 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-blue-600 hover:text-blue-800 flex items-center"
+                    aria-label={`View receipt for ${expense.title}`}
                   >
                     <Receipt className="h-4 w-4 mr-1" />
                     View
@@ -632,235 +627,319 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
         </TableBody>
       </Table>
     );
-  };
+  }, [expenses, formatCurrency, formatDate]);
 
-  // Render the expense creation form
-  const renderExpenseForm = () => {
-    return (
-      <div className="space-y-4">
-        <div className="grid grid-cols-1 gap-4">
-          <div>
-            <Label htmlFor="title">Title</Label>
-            <Input
-              id="title"
-              placeholder="Expense title"
-              value={newExpense.title}
-              onChange={(e) => handleInputChange("title", e.target.value)}
-              className={formErrors.title ? "border-red-500" : ""}
-            />
-            {formErrors.title && (
-              <p className="text-red-500 text-sm mt-1">{formErrors.title}</p>
-            )}
-          </div>
-
-          <div>
-            <Label htmlFor="description">Description (Optional)</Label>
-            <Textarea
-              id="description"
-              placeholder="Add details about this expense"
-              value={newExpense.description}
-              onChange={(e) => handleInputChange("description", e.target.value)}
-              rows={3}
-            />
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="amount">Amount</Label>
-              <Input
-                id="amount"
-                type="number"
-                min="0"
-                step="0.01"
-                placeholder="0.00"
-                value={newExpense.amount || ""}
-                onChange={(e) =>
-                  handleInputChange("amount", parseFloat(e.target.value) || 0)
-                }
-                className={formErrors.amount ? "border-red-500" : ""}
+  // Memoized budget category cards
+  const budgetCards = useMemo(() => (
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      {categories.map(category => (
+        <Card key={category.id}>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg flex items-center">
+              <Tag className="h-4 w-4 mr-2" />
+              {category.name}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span>Spent:</span>
+                <span className="font-medium">
+                  {formatCurrency(category.spent)} of{" "}
+                  {formatCurrency(category.allocatedAmount)}
+                </span>
+              </div>
+              <Progress
+                value={(category.spent / category.allocatedAmount) * 100}
+                className="h-2"
+                aria-label={`${Math.round(
+                  (category.spent / category.allocatedAmount) * 100
+                )}% of budget spent`}
               />
-              {formErrors.amount && (
-                <p className="text-red-500 text-sm mt-1">{formErrors.amount}</p>
-              )}
+              <div className="flex justify-between text-sm">
+                <span>Remaining:</span>
+                <span
+                  className={`font-medium ${
+                    category.remaining < 0 ? "text-red-500" : ""
+                  }`}
+                >
+                  {formatCurrency(category.remaining)} remaining
+                </span>
+              </div>
             </div>
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  ), [categories, formatCurrency]);
 
-            <div>
-              <Label htmlFor="date">Date</Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className={cn(
-                      "w-full justify-start text-left font-normal",
-                      !newExpense.date && "text-muted-foreground"
-                    )}
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {newExpense.date ? format(newExpense.date, "PPP") : <span>Pick a date</span>}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={newExpense.date}
-                    onSelect={(date: Date | undefined) => {
-                      if (date) {
-                        handleInputChange("date", date);
-                      }
-                    }}
-                    disabled={(date: Date) => date > new Date()}
-                    initialFocus
-                    fromDate={new Date(2020, 0, 1)}
-                    toDate={new Date()}
-                  />
-                </PopoverContent>
-              </Popover>
-            </div>
-          </div>
+  // Expense form component
+  const ExpenseForm = useMemo(() => (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 gap-4">
+        <div>
+          <Label htmlFor="title">Title</Label>
+          <Input
+            id="title"
+            placeholder="Expense title"
+            value={newExpense.title}
+            onChange={e => handleInputChange("title", e.target.value)}
+            className={formErrors.title ? "border-red-500" : ""}
+            maxLength={100}
+            aria-invalid={!!formErrors.title}
+            aria-describedby={formErrors.title ? "title-error" : undefined}
+          />
+          {formErrors.title && (
+            <p id="title-error" className="text-red-500 text-sm mt-1">
+              {formErrors.title}
+            </p>
+          )}
+        </div>
 
+        <div>
+          <Label htmlFor="description">Description (Optional)</Label>
+          <Textarea
+            id="description"
+            placeholder="Add details about this expense"
+            value={newExpense.description}
+            onChange={e => handleInputChange("description", e.target.value)}
+            rows={3}
+            maxLength={500}
+          />
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <Label htmlFor="categoryId">Budget Category</Label>
-            <Select
-              value={newExpense.categoryId}
-              onValueChange={(value) => handleInputChange("categoryId", value)}
-            >
-              <SelectTrigger
-                className={formErrors.categoryId ? "border-red-500" : ""}
-              >
-                <SelectValue placeholder="Select a category" />
-              </SelectTrigger>
-              <SelectContent>
-                {categories.map((category) => (
-                  <SelectItem key={category.id} value={category.id}>
-                    {category.name} ({formatCurrency(category.remaining)}{" "}
-                    remaining)
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {formErrors.categoryId && (
-              <p className="text-red-500 text-sm mt-1">
-                {formErrors.categoryId}
+            <Label htmlFor="amount">Amount</Label>
+            <Input
+              id="amount"
+              type="number"
+              min="0.01"
+              step="0.01"
+              placeholder="0.00"
+              value={newExpense.amount || ""}
+              onChange={e =>
+                handleInputChange("amount", parseFloat(e.target.value) || 0)
+              }
+              className={formErrors.amount ? "border-red-500" : ""}
+              aria-invalid={!!formErrors.amount}
+              aria-describedby={formErrors.amount ? "amount-error" : undefined}
+            />
+            {formErrors.amount && (
+              <p id="amount-error" className="text-red-500 text-sm mt-1">
+                {formErrors.amount}
               </p>
             )}
           </div>
 
           <div>
-            <Label htmlFor="milestoneId">Related Milestone</Label>
-            <Select
-              value={newExpense.milestoneId}
-              onValueChange={(value) => handleInputChange("milestoneId", value)}
-            >
-              <SelectTrigger
-                className={formErrors.milestoneId ? "border-red-500" : ""}
-              >
-                <SelectValue placeholder="Select a milestone" />
-              </SelectTrigger>
-              <SelectContent>
-                {milestones.map((milestone) => (
-                  <SelectItem key={milestone.id} value={milestone.id}>
-                    {milestone.title}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {formErrors.milestoneId && (
-              <p className="text-red-500 text-sm mt-1">{formErrors.milestoneId}</p>
-            )}
-          </div>
-
-          {/* Receipt Upload */}
-          <div>
-            <Label htmlFor="receipt">Receipt (Optional)</Label>
-            {!receiptFile ? (
-              <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-dashed border-gray-300 rounded-md">
-                <div className="space-y-1 text-center">
-                  <Receipt className="mx-auto h-12 w-12 text-gray-400" />
-                  <div className="flex text-sm text-gray-600">
-                    <label
-                      htmlFor="receipt-upload"
-                      className="relative cursor-pointer rounded-md font-medium text-primary hover:text-primary-dark focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-primary"
-                    >
-                      <span>Upload a receipt</span>
-                      <input
-                        id="receipt-upload"
-                        name="receipt"
-                        type="file"
-                        accept="image/*,.pdf"
-                        className="sr-only"
-                        onChange={handleReceiptChange}
-                      />
-                    </label>
-                    <p className="pl-1">or drag and drop</p>
-                  </div>
-                  <p className="text-xs text-gray-500">
-                    PNG, JPG, PDF up to 5MB
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <div className="mt-1 flex items-center justify-between p-2 border border-gray-300 rounded-md">
-                <div className="flex items-center">
-                  <Receipt className="h-6 w-6 text-gray-400 mr-2" />
-                  <span className="text-sm truncate max-w-[200px]">
-                    {receiptFile.name}
-                  </span>
-                </div>
-                <div className="flex space-x-2">
-                  {receiptPreview && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => window.open(receiptPreview, "_blank")}
-                    >
-                      Preview
-                    </Button>
+            <Label htmlFor="date">Date</Label>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  className={cn(
+                    "w-full justify-start text-left font-normal",
+                    !newExpense.date && "text-muted-foreground"
                   )}
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={handleRemoveReceipt}
-                  >
-                    Remove
-                  </Button>
-                </div>
-              </div>
-            )}
-            {formErrors.receipt && (
-              <p className="text-red-500 text-sm mt-1">{formErrors.receipt}</p>
+                  id="date"
+                  aria-invalid={!!formErrors.date}
+                  aria-describedby={formErrors.date ? "date-error" : undefined}
+                >
+                  <CalendarIcon className="mr-2 h-4 w-4" />
+                  {newExpense.date ? format(newExpense.date, "PPP") : <span>Pick a date</span>}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  mode="single"
+                  selected={newExpense.date}
+                  onSelect={(date: Date | undefined) => {
+                    if (date) {
+                      handleInputChange("date", date);
+                    }
+                  }}
+                  disabled={date => date > new Date()}
+                  initialFocus
+                  fromDate={new Date(2020, 0, 1)}
+                  toDate={new Date()}
+                />
+              </PopoverContent>
+            </Popover>
+            {formErrors.date && (
+              <p id="date-error" className="text-red-500 text-sm mt-1">
+                {formErrors.date}
+              </p>
             )}
           </div>
         </div>
 
-        <DialogFooter>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => setCreateDialogOpen(false)}
+        <div>
+          <Label htmlFor="categoryId">Budget Category</Label>
+          <Select
+            value={newExpense.categoryId}
+            onValueChange={value => handleInputChange("categoryId", value)}
           >
-            Cancel
-          </Button>
-          {isSubmitting ? (
-            <Button disabled>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Creating...
-            </Button>
-          ) : (
-            <Button type="submit" form="expense-form">
-              Create Expense
-            </Button>
+            <SelectTrigger
+              className={formErrors.categoryId ? "border-red-500" : ""}
+              id="categoryId"
+              aria-invalid={!!formErrors.categoryId}
+              aria-describedby={formErrors.categoryId ? "category-error" : undefined}
+            >
+              <SelectValue placeholder="Select a category" />
+            </SelectTrigger>
+            <SelectContent>
+              {categories.map(category => (
+                <SelectItem key={category.id} value={category.id}>
+                  {category.name} ({formatCurrency(category.remaining)}{" "}
+                  remaining)
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {formErrors.categoryId && (
+            <p id="category-error" className="text-red-500 text-sm mt-1">
+              {formErrors.categoryId}
+            </p>
           )}
-        </DialogFooter>
+        </div>
+
+        <div>
+          <Label htmlFor="milestoneId">Related Milestone</Label>
+          <Select
+            value={newExpense.milestoneId}
+            onValueChange={value => handleInputChange("milestoneId", value)}
+          >
+            <SelectTrigger
+              className={formErrors.milestoneId ? "border-red-500" : ""}
+              id="milestoneId"
+              aria-invalid={!!formErrors.milestoneId}
+              aria-describedby={formErrors.milestoneId ? "milestone-error" : undefined}
+            >
+              <SelectValue placeholder="Select a milestone" />
+            </SelectTrigger>
+            <SelectContent>
+              {milestones.map(milestone => (
+                <SelectItem key={milestone.id} value={milestone.id}>
+                  {milestone.title}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {formErrors.milestoneId && (
+            <p id="milestone-error" className="text-red-500 text-sm mt-1">
+              {formErrors.milestoneId}
+            </p>
+          )}
+        </div>
+
+        {/* Receipt Upload */}
+        <div>
+          <Label htmlFor="receipt-upload">Receipt (Optional)</Label>
+          {!receiptFile ? (
+            <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-dashed border-gray-300 rounded-md">
+              <div className="space-y-1 text-center">
+                <Receipt className="mx-auto h-12 w-12 text-gray-400" />
+                <div className="flex text-sm text-gray-600">
+                  <label
+                    htmlFor="receipt-upload"
+                    className="relative cursor-pointer rounded-md font-medium text-primary hover:text-primary-dark focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-primary"
+                  >
+                    <span>Upload a receipt</span>
+                    <input
+                      id="receipt-upload"
+                      name="receipt"
+                      type="file"
+                      accept="image/*,.pdf"
+                      className="sr-only"
+                      onChange={handleReceiptChange}
+                      aria-describedby={formErrors.receipt ? "receipt-error" : undefined}
+                    />
+                  </label>
+                  <p className="pl-1">or drag and drop</p>
+                </div>
+                <p className="text-xs text-gray-500">
+                  PNG, JPG, PDF up to 5MB
+                </p>
+                {formErrors.receipt && (
+                  <p id="receipt-error" className="text-red-500 text-sm mt-1">
+                    {formErrors.receipt}
+                  </p>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="mt-1 flex items-center justify-between p-2 border border-gray-300 rounded-md">
+              <div className="flex items-center">
+                <Receipt className="h-6 w-6 text-gray-400 mr-2" />
+                <span className="text-sm truncate max-w-[200px]">
+                  {receiptFile.name}
+                </span>
+              </div>
+              <div className="flex space-x-2">
+                {receiptPreview && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => window.open(receiptPreview, "_blank")}
+                  >
+                    Preview
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleRemoveReceipt}
+                >
+                  Remove
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
-    );
-  };
+
+      <DialogFooter>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => setCreateDialogOpen(false)}
+          disabled={isSubmitting}
+        >
+          Cancel
+        </Button>
+        {isSubmitting ? (
+          <Button disabled>
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            Creating...
+          </Button>
+        ) : (
+          <Button type="submit" form="expense-form">
+            Create Expense
+          </Button>
+        )}
+      </DialogFooter>
+    </div>
+  ), [
+    newExpense,
+    formErrors,
+    categories,
+    milestones,
+    receiptFile,
+    receiptPreview,
+    isSubmitting,
+    handleInputChange,
+    handleReceiptChange,
+    handleRemoveReceipt,
+    formatCurrency,
+  ]);
 
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
-        <Loader2 className="h-16 w-16 animate-spin" />
+        <Loader2 className="h-16 w-16 animate-spin" aria-label="Loading..." />
       </div>
     );
   }
@@ -901,43 +980,7 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
       </div>
 
       {/* Budget Category Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {categories.map((category) => (
-          <Card key={category.id}>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-lg flex items-center">
-                <Tag className="h-4 w-4 mr-2" />
-                {category.name}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span>Spent:</span>
-                  <span className="font-medium">
-                    {formatCurrency(category.spent)} of{" "}
-                    {formatCurrency(category.allocatedAmount)}
-                  </span>
-                </div>
-                <Progress
-                  value={(category.spent / category.allocatedAmount) * 100}
-                  className="h-2"
-                />
-                <div className="flex justify-between text-sm">
-                  <span>Remaining:</span>
-                  <span
-                    className={`font-medium ${
-                      category.remaining < 0 ? "text-red-500" : ""
-                    }`}
-                  >
-                    {formatCurrency(category.remaining)} remaining
-                  </span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      {budgetCards}
 
       {/* Expenses List */}
       <Card>
@@ -950,10 +993,10 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
         <CardContent>
           {fetchingExpenses ? (
             <div className="flex justify-center py-8">
-              <Loader2 className="h-16 w-16 animate-spin" />
+              <Loader2 className="h-16 w-16 animate-spin" aria-label="Loading expenses..." />
             </div>
           ) : (
-            renderExpenseList()
+            expenseList
           )}
         </CardContent>
       </Card>
@@ -968,7 +1011,7 @@ const ExpenseTracker: React.FC<ExpenseTrackerProps> = ({ projectId }) => {
             </DialogDescription>
           </DialogHeader>
           <form id="expense-form" onSubmit={handleSubmit}>
-            {renderExpenseForm()}
+            {ExpenseForm}
           </form>
         </DialogContent>
       </Dialog>

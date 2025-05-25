@@ -158,7 +158,79 @@ export default function EntrepreneurDashboard() {
 
         setApplications(applicationsResponse.data);
 
-        // Fetch open startup calls - only non-expired and published
+        // Check for approved applications
+        const approvedApplication = applicationsResponse.data.find(
+          (app: any) => app.status === "APPROVED"
+        );
+
+        if (approvedApplication) {
+          try {
+            // Get project data for the approved application
+            const projectResponse = await axios.get(`/api/entrepreneur/project?startupId=${approvedApplication.startupId}`);
+            const projectData = projectResponse.data;
+            setStartup({
+              id: projectData.id,
+              ...projectData
+            });
+            setHasActiveProject(true);
+
+            // Only show notification if this is a new approval
+            if (!hasActiveProject) {
+              toast({
+                title: "Project Management Available",
+                description:
+                  "Your startup was approved! Project management tools are now available.",
+                variant: "default",
+              });
+            }
+          } catch (error) {
+            console.error("Error fetching project data:", error);
+            setHasActiveProject(false);
+            setStartup(null);
+            
+            if (axios.isAxiosError(error)) {
+              const errorCode = error.response?.data?.code;
+              const errorMessage = error.response?.data?.message;
+              
+              if (error.response?.status === 404) {
+                if (errorCode === "NO_APPROVED_APPLICATIONS") {
+                  console.log("No approved applications found");
+                } else if (errorCode === "STARTUP_NOT_FOUND") {
+                  console.error("Startup not found");
+                  toast({
+                    title: "Error",
+                    description: "Could not find your startup. Please try again later.",
+                    variant: "destructive",
+                  });
+                } else if (errorCode === "BUDGET_NOT_FOUND") {
+                  console.error("Budget not found");
+                  toast({
+                    title: "Error",
+                    description: "Project budget not set up. Please contact support.",
+                    variant: "destructive",
+                  });
+                }
+              } else {
+                toast({
+                  title: "Error",
+                  description: errorMessage || "Failed to load project data. Please try again later.",
+                  variant: "destructive",
+                });
+              }
+            } else {
+              toast({
+                title: "Error",
+                description: "Failed to load project data. Please try again later.",
+                variant: "destructive",
+              });
+            }
+          }
+        } else {
+          setHasActiveProject(false);
+          setStartup(null);
+        }
+
+        // Fetch open startup calls
         const callsResponse = await axios
           .get("/api/startup-calls?status=PUBLISHED&expired=false")
           .catch((error) => {
@@ -174,37 +246,6 @@ export default function EntrepreneurDashboard() {
 
         setOpenCalls(callsResponse.data);
 
-        // Check for active project - looking for approved applications
-        try {
-          // First check if the entrepreneur has any approved applications
-          const hasApprovedApp = applicationsResponse.data.some(
-            (app: any) => app.status === "APPROVED"
-          );
-
-          if (hasApprovedApp) {
-            // If there's an approved application, try to get the project data
-            await axios.get("/api/entrepreneur/project");
-
-            // Check if the hasActiveProject was previously false and is now true
-            if (!hasActiveProject) {
-              // Only show notification if this is a change in status
-              toast({
-                title: "Project Management Available",
-                description:
-                  "Your startup was approved! Project management tools are now available.",
-                variant: "default",
-              });
-            }
-
-            setHasActiveProject(true);
-          } else {
-            // No approved applications found
-            setHasActiveProject(false);
-          }
-        } catch (error) {
-          console.error("No active project found:", error);
-          setHasActiveProject(false);
-        }
       } catch (error) {
         console.error("Error fetching dashboard data:", error);
         toast({
@@ -227,7 +268,7 @@ export default function EntrepreneurDashboard() {
     };
 
     fetchData();
-  }, [sessionStatus, session, toast]);
+  }, [sessionStatus, session, toast, hasActiveProject]);
 
   // Helper functions
   const formatDate = (date: string) => {
@@ -289,9 +330,11 @@ export default function EntrepreneurDashboard() {
         return (
           <>
             <DashboardStats userRole="ENTREPRENEUR" />
-            <div className="mt-8">
-              <ProjectManagement />
-            </div>
+            {hasActiveProject && startup && (
+              <div className="mt-8">
+                <ProjectManagement startupId={startup.id} />
+              </div>
+            )}
           </>
         );
       case "applications":
@@ -451,9 +494,35 @@ export default function EntrepreneurDashboard() {
           </Card>
         );
       case "expenses":
-        return <ExpenseTracker />;
+        if (!hasActiveProject || !startup) {
+          return (
+            <Card className="shadow-md">
+              <CardHeader>
+                <CardTitle>Expense Management</CardTitle>
+                <CardDescription>
+                  You need an approved application to access expense management.
+                </CardDescription>
+              </CardHeader>
+            </Card>
+          );
+        }
+        return <ExpenseTracker startupId={startup.id} />;
       case "ideas":
         return <IdeasManagement />;
+      case "project":
+        if (!hasActiveProject || !startup) {
+          return (
+            <Card className="shadow-md">
+              <CardHeader>
+                <CardTitle>Project Management</CardTitle>
+                <CardDescription>
+                  You need an approved application to access project management.
+                </CardDescription>
+              </CardHeader>
+            </Card>
+          );
+        }
+        return <ProjectManagement startupId={startup.id} />;
       default:
         return null;
     }
@@ -551,6 +620,17 @@ export default function EntrepreneurDashboard() {
                       <Target className="mr-2 h-4 w-4" />
                       Opportunities
                     </Button>
+                    <Button
+                      variant={activeTab === "ideas" ? "default" : "ghost"}
+                      className="w-full justify-start"
+                      onClick={() => {
+                        setActiveTab("ideas");
+                        setMobileMenuOpen(false);
+                      }}
+                    >
+                      <PlusCircle className="mr-2 h-4 w-4" />
+                      My Ideas
+                    </Button>
 
                     {hasActiveProject && (
                       <>
@@ -569,22 +649,37 @@ export default function EntrepreneurDashboard() {
 
                         <Button
                           variant={
-                            activeTab === "project-management"
-                              ? "default"
-                              : "ghost"
+                            activeTab === "project" ? "default" : "ghost"
                           }
                           className={`w-full justify-start ${
-                            activeTab === "project-management"
+                            activeTab === "project"
                               ? "bg-primary text-primary-foreground"
                               : "border border-green-200 bg-green-50 text-green-700"
                           }`}
                           onClick={() => {
-                            setActiveTab("project-management");
+                            setActiveTab("project");
                             setMobileMenuOpen(false);
                           }}
                         >
                           <Briefcase className="mr-2 h-4 w-4" />
                           Project Management
+                        </Button>
+                        <Button
+                          variant={
+                            activeTab === "expenses" ? "default" : "ghost"
+                          }
+                          className={`w-full justify-start ${
+                            activeTab === "expenses"
+                              ? "bg-primary text-primary-foreground"
+                              : "border border-green-200 bg-green-50 text-green-700"
+                          }`}
+                          onClick={() => {
+                            setActiveTab("expenses");
+                            setMobileMenuOpen(false);
+                          }}
+                        >
+                          <Activity className="mr-2 h-4 w-4" />
+                          Expense Tracker
                         </Button>
                       </>
                     )}
@@ -615,11 +710,12 @@ export default function EntrepreneurDashboard() {
                 }}
               >
                 {hasActiveProject ? (
-                  <TabsList className="grid w-full grid-cols-4">
+                  <TabsList className="grid w-full grid-cols-5">
                     <TabsTrigger value="overview">Overview</TabsTrigger>
-                    <TabsTrigger value="project">Project Management</TabsTrigger>
+                    <TabsTrigger value="applications">Applications</TabsTrigger>
+                    <TabsTrigger value="opportunities">Opportunities</TabsTrigger>
+                    <TabsTrigger value="project">Project</TabsTrigger>
                     <TabsTrigger value="expenses">Expenses</TabsTrigger>
-                    <TabsTrigger value="ideas">My Ideas</TabsTrigger>
                   </TabsList>
                 ) : (
                   <TabsList className="grid w-full grid-cols-4">
@@ -984,11 +1080,11 @@ export default function EntrepreneurDashboard() {
                 {hasActiveProject && (
                   <>
                     <TabsContent value="project" className="mt-6">
-                      <ProjectManagement />
+                      <ProjectManagement startupId={startup.id} />
                     </TabsContent>
 
                     <TabsContent value="expenses" className="mt-6">
-                      <ExpenseTracker />
+                      <ExpenseTracker startupId={startup.id} />
                     </TabsContent>
                   </>
                 )}

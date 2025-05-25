@@ -106,20 +106,27 @@ async function createBudget(
           return null; // Will be checked outside
         }
 
-        // Then get the approved application
-        const approvedApplication = await prisma.startupCallApplication.findFirst({
+        // Find or create system startup for budget allocation
+        let systemStartup = await prisma.startup.findFirst({
           where: {
-            callId: startupCallId,
-            status: 'APPROVED',
-            startupId: { not: null }
-          },
-          select: {
-            startupId: true
+            name: "System Budget Allocation",
+            founderId: userId
           }
         });
 
-        if (!approvedApplication || !approvedApplication.startupId) {
-          return res.status(400).json({ error: "No approved application with a startup found for this startup call" });
+        if (!systemStartup) {
+          // Create a system startup for budget allocation
+          systemStartup = await prisma.startup.create({
+            data: {
+              name: "System Budget Allocation",
+              description: "System startup for budget allocation purposes",
+              pitch: "Internal system startup for budget management",
+              industry: ["System"],
+              stage: "SYSTEM",
+              founderId: userId,
+              status: "SUBMITTED"
+            }
+          });
         }
 
         // Use transaction to create budget and categories
@@ -131,7 +138,7 @@ async function createBudget(
               startDate: new Date(startDate),
               endDate: new Date(endDate),
               startupCall: { connect: { id: startupCallId } },
-              startup: { connect: { id: approvedApplication.startupId } }
+              startup: { connect: { id: systemStartup.id } }
             },
           });
 

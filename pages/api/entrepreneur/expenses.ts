@@ -27,8 +27,17 @@ export default async function handler(
 
     // GET method to fetch expenses
     if (req.method === "GET") {
+      const startupId = Array.isArray(req.query.startupId) 
+        ? req.query.startupId[0] 
+        : req.query.startupId;
+
+      if (!startupId) {
+        return res.status(400).json({ message: "startupId is required" });
+      }
+
       const startup = await prisma.startup.findFirst({
         where: {
+          id: startupId,
           founderId: session.user.id,
         },
         include: {
@@ -92,23 +101,25 @@ export default async function handler(
     // POST method to create expense
     if (req.method === "POST") {
       const { fields, files } = await parseForm(req);
+      const startupId = Array.isArray(fields.startupId) 
+        ? fields.startupId[0] 
+        : fields.startupId;
 
-      const {
-        title,
-        description,
-        amount,
-        date,
-        categoryId,
-        milestoneId,
-      } = fields;
+      const title = Array.isArray(fields.title) ? fields.title[0] : fields.title;
+      const description = Array.isArray(fields.description) ? fields.description[0] : fields.description;
+      const amount = Array.isArray(fields.amount) ? fields.amount[0] : fields.amount;
+      const date = Array.isArray(fields.date) ? fields.date[0] : fields.date;
+      const categoryId = Array.isArray(fields.categoryId) ? fields.categoryId[0] : fields.categoryId;
+      const milestoneId = Array.isArray(fields.milestoneId) ? fields.milestoneId[0] : fields.milestoneId;
 
-      if (!title || !amount || !date || !categoryId || !milestoneId) {
+      if (!title || !amount || !date || !categoryId || !milestoneId || !startupId) {
         return res.status(400).json({ message: "Missing required fields" });
       }
 
       // Find the startup and validate ownership
       const startup = await prisma.startup.findFirst({
         where: {
+          id: startupId,
           founderId: session.user.id,
         },
         include: {
@@ -119,7 +130,7 @@ export default async function handler(
           },
           milestones: {
             where: {
-              id: milestoneId as string,
+              id: milestoneId,
             },
           },
         },
@@ -145,7 +156,7 @@ export default async function handler(
       // Calculate remaining budget
       const categoryExpenses = await prisma.expense.findMany({
         where: {
-          categoryId: categoryId as string,
+          categoryId: categoryId,
           startupId: startup.id,
         },
       });
@@ -161,31 +172,49 @@ export default async function handler(
       // Create the expense
       const expense = await prisma.expense.create({
         data: {
-          title: title as string,
-          description: description as string || "",
+          title,
+          description: description || "",
           amount: Number(amount),
-          date: new Date(date as string),
+          date: new Date(date),
           status: "PENDING",
-          receipt: files.receipt ? files.receipt.filepath : null,
+          receipt: files.receipt ? files.receipt[0].filepath : null,
+          user: {
+            connect: {
+              id: session.user.id,
+            },
+          },
           startup: {
             connect: {
-              id: startup.id,
+              id: startupId,
             },
           },
           category: {
             connect: {
-              id: categoryId as string,
+              id: categoryId,
             },
           },
           milestone: {
             connect: {
-              id: milestoneId as string,
+              id: milestoneId,
+            },
+          },
+          budget: {
+            connect: {
+              id: startup.budget!.id,
             },
           },
         },
         include: {
-          category: true,
-          milestone: true,
+          category: {
+            select: {
+              name: true,
+            },
+          },
+          milestone: {
+            select: {
+              title: true,
+            },
+          },
         },
       });
 
