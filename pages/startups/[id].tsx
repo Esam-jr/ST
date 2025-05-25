@@ -7,11 +7,23 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Heart, MessageCircle, Share2, ExternalLink, Globe, Linkedin, Twitter } from 'lucide-react';
+import { Heart, MessageCircle, Share2, ExternalLink, Globe, Linkedin, Twitter, Send } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import { Separator } from '@/components/ui/separator';
+import { Textarea } from '@/components/ui/textarea';
 import Link from 'next/link';
+
+interface Comment {
+  id: string;
+  content: string;
+  createdAt: string;
+  user: {
+    id: string;
+    name: string;
+    image: string;
+  };
+}
 
 interface StartupIdea {
   id: string;
@@ -39,16 +51,6 @@ interface StartupIdea {
   isLiked?: boolean;
 }
 
-interface Comment {
-  id: string;
-  content: string;
-  createdAt: string;
-  user: {
-    name: string;
-    image: string;
-  };
-}
-
 export default function StartupIdeaDetail() {
   const router = useRouter();
   const { id } = router.query;
@@ -60,6 +62,7 @@ export default function StartupIdeaDetail() {
   const [liked, setLiked] = useState(false);
   const [newComment, setNewComment] = useState('');
   const [submittingComment, setSubmittingComment] = useState(false);
+  const [showAllComments, setShowAllComments] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -72,6 +75,7 @@ export default function StartupIdeaDetail() {
     try {
       const response = await axios.get(`/api/startup-ideas/${id}`);
       setIdea(response.data);
+      setLiked(response.data.isLiked || false);
       setLoading(false);
     } catch (error) {
       console.error('Error fetching idea details:', error);
@@ -90,6 +94,11 @@ export default function StartupIdeaDetail() {
       setComments(response.data);
     } catch (error) {
       console.error('Error fetching comments:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to load comments',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -104,8 +113,16 @@ export default function StartupIdeaDetail() {
     }
 
     try {
-      await axios.post(`/api/startup-ideas/${id}/like`);
-      fetchIdeaDetails();
+      const response = await axios.post(`/api/startup-ideas/${id}/like`);
+      const { liked: newLikedState } = response.data;
+      setLiked(newLikedState);
+      setIdea(prev => prev ? {
+        ...prev,
+        _count: {
+          ...prev._count,
+          likes: prev._count.likes + (newLikedState ? 1 : -1),
+        },
+      } : null);
     } catch (error) {
       console.error('Error liking idea:', error);
       toast({
@@ -131,12 +148,22 @@ export default function StartupIdeaDetail() {
 
     setSubmittingComment(true);
     try {
-      await axios.post(`/api/startup-ideas/${id}/comments`, {
-        content: newComment,
+      const response = await axios.post(`/api/startup-ideas/${id}/comments`, {
+        content: newComment.trim(),
       });
+      setComments(prev => [response.data, ...prev]);
       setNewComment('');
-      fetchComments();
-      fetchIdeaDetails();
+      setIdea(prev => prev ? {
+        ...prev,
+        _count: {
+          ...prev._count,
+          comments: prev._count.comments + 1,
+        },
+      } : null);
+      toast({
+        title: 'Success',
+        description: 'Comment posted successfully',
+      });
     } catch (error) {
       console.error('Error posting comment:', error);
       toast({
@@ -161,6 +188,35 @@ export default function StartupIdeaDetail() {
       toast({
         title: 'Error',
         description: 'Failed to copy link',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleDeleteComment = async (commentId: string) => {
+    if (!confirm('Are you sure you want to delete this comment?')) {
+      return;
+    }
+
+    try {
+      await axios.delete(`/api/startup-ideas/${id}/comments?commentId=${commentId}`);
+      setComments(prev => prev.filter(comment => comment.id !== commentId));
+      setIdea(prev => prev ? {
+        ...prev,
+        _count: {
+          ...prev._count,
+          comments: prev._count.comments - 1,
+        },
+      } : null);
+      toast({
+        title: 'Success',
+        description: 'Comment deleted successfully',
+      });
+    } catch (error) {
+      console.error('Error deleting comment:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to delete comment',
         variant: 'destructive',
       });
     }
@@ -203,8 +259,12 @@ export default function StartupIdeaDetail() {
       year: 'numeric',
       month: 'long',
       day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
     });
   };
+
+  const displayedComments = showAllComments ? comments : comments.slice(0, 3);
 
   return (
     <Layout>
@@ -306,9 +366,9 @@ export default function StartupIdeaDetail() {
                   variant="ghost"
                   size="sm"
                   onClick={handleLike}
-                  className={idea.isLiked ? 'text-red-500' : ''}
+                  className={liked ? 'text-red-500' : ''}
                 >
-                  <Heart className="h-5 w-5" />
+                  <Heart className={`h-5 w-5 ${liked ? 'fill-current' : ''}`} />
                   <span className="ml-2">{idea._count.likes}</span>
                 </Button>
                 <Button variant="ghost" size="sm" asChild>
@@ -321,6 +381,105 @@ export default function StartupIdeaDetail() {
                   <Share2 className="h-5 w-5" />
                   <span className="ml-2">Share</span>
                 </Button>
+              </div>
+
+              <Separator className="my-6" />
+
+              {/* Comments Section */}
+              <div className="space-y-6">
+                <h3 className="text-lg font-semibold">Comments</h3>
+                
+                {session ? (
+                  <form onSubmit={handleSubmitComment} className="space-y-4">
+                    <div className="flex gap-4">
+                      <Avatar className="h-10 w-10">
+                        <AvatarImage src={session.user.image || ''} />
+                        <AvatarFallback>
+                          {session.user.name?.charAt(0) || 'U'}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1">
+                        <Textarea
+                          placeholder="Write a comment..."
+                          value={newComment}
+                          onChange={(e) => setNewComment(e.target.value)}
+                          className="min-h-[80px]"
+                        />
+                        <Button
+                          type="submit"
+                          className="mt-2"
+                          disabled={submittingComment || !newComment.trim()}
+                        >
+                          {submittingComment ? (
+                            <LoadingSpinner className="mr-2" />
+                          ) : (
+                            <Send className="h-4 w-4 mr-2" />
+                          )}
+                          Post Comment
+                        </Button>
+                      </div>
+                    </div>
+                  </form>
+                ) : (
+                  <div className="bg-muted/50 rounded-lg p-4 text-center">
+                    <p className="text-muted-foreground">
+                      Please{' '}
+                      <Link href="/auth/signin" className="text-primary hover:underline">
+                        sign in
+                      </Link>{' '}
+                      to post comments
+                    </p>
+                  </div>
+                )}
+
+                <div className="space-y-4">
+                  {displayedComments.map((comment) => (
+                    <div
+                      key={comment.id}
+                      className="flex gap-4 pb-4 border-b border-muted last:border-0"
+                    >
+                      <Avatar className="h-10 w-10">
+                        <AvatarImage src={comment.user.image} />
+                        <AvatarFallback>
+                          {comment.user.name?.charAt(0) || 'U'}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1">
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <div className="font-medium">{comment.user.name}</div>
+                            <div className="text-sm text-muted-foreground">
+                              {formatDate(comment.createdAt)}
+                            </div>
+                          </div>
+                          {(session?.user?.id === comment.user.id ||
+                            session?.user?.id === idea.user.id ||
+                            session?.user?.role === 'ADMIN') && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDeleteComment(comment.id)}
+                              className="text-red-500 hover:text-red-700"
+                            >
+                              Delete
+                            </Button>
+                          )}
+                        </div>
+                        <p className="mt-2 whitespace-pre-wrap">{comment.content}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {comments.length > 3 && (
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => setShowAllComments(!showAllComments)}
+                  >
+                    {showAllComments ? 'Show Less' : `Show All (${comments.length}) Comments`}
+                  </Button>
+                )}
               </div>
             </CardContent>
           </Card>
