@@ -162,7 +162,7 @@ export default function OpportunityDetails({ opportunity, applications: initialA
 
       if (!response.ok) {
         throw new Error('Failed to update application status');
-      }
+    }
 
       const updatedApplication = await response.json();
 
@@ -209,7 +209,7 @@ export default function OpportunityDetails({ opportunity, applications: initialA
     }).format(amount);
   };
 
-  return (
+        return (
     <div className="container mx-auto py-6">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">{opportunity.title}</h1>
@@ -217,8 +217,8 @@ export default function OpportunityDetails({ opportunity, applications: initialA
           <Badge variant="outline" className="text-sm">
             {opportunity.status}
           </Badge>
-        </div>
-      </div>
+              </div>
+            </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2">
@@ -230,18 +230,18 @@ export default function OpportunityDetails({ opportunity, applications: initialA
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="rounded-md border">
-                <Table>
+      <div className="rounded-md border">
+        <Table>
                   <TableHeader>
-                    <TableRow>
-                      <TableHead>Sponsor</TableHead>
-                      <TableHead>Amount</TableHead>
-                      <TableHead>Status</TableHead>
+            <TableRow>
+              <TableHead>Sponsor</TableHead>
+              <TableHead>Amount</TableHead>
+              <TableHead>Status</TableHead>
                       <TableHead>Date</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
+              <TableHead className="text-right">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
                     {applications.map((application) => (
                       <TableRow key={application.id}>
                         <TableCell>
@@ -249,20 +249,20 @@ export default function OpportunityDetails({ opportunity, applications: initialA
                             <div className="ml-4">
                               <div className="text-sm font-medium text-gray-900">
                                 {application.organizationName || application.legalName}
-                              </div>
-                              <div className="text-sm text-gray-500">
+                    </div>
+                    <div className="text-sm text-gray-500">
                                 {application.primaryContact.email}
                               </div>
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          {formatCurrency(
+                    </div>
+                  </div>
+                </TableCell>
+                <TableCell>
+                  {formatCurrency(
                             application.proposedAmount,
-                            application.currency
-                          )}
-                        </TableCell>
-                        <TableCell>
+                    application.currency
+                  )}
+                </TableCell>
+                <TableCell>
                           <Badge
                             variant={
                               application.status === "APPROVED"
@@ -274,28 +274,28 @@ export default function OpportunityDetails({ opportunity, applications: initialA
                           >
                             {application.status}
                           </Badge>
-                        </TableCell>
-                        <TableCell>
+                </TableCell>
+                <TableCell>
                           {format(new Date(application.createdAt), "MMM d, yyyy")}
-                        </TableCell>
-                        <TableCell className="text-right">
+                </TableCell>
+                <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="bg-green-50 text-green-700 border-green-200 hover:bg-green-100 h-8"
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="bg-green-50 text-green-700 border-green-200 hover:bg-green-100 h-8"
                               onClick={() => handleStatusChange(application.id, "APPROVED")}
                               disabled={processingAction === application.id}
-                            >
+                        >
                               Approve
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="bg-red-50 text-red-700 border-red-200 hover:bg-red-100 h-8"
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="bg-red-50 text-red-700 border-red-200 hover:bg-red-100 h-8"
                               onClick={() => handleStatusChange(application.id, "REJECTED")}
                               disabled={processingAction === application.id}
-                            >
+                        >
                               Reject
                             </Button>
                             <Button
@@ -304,14 +304,14 @@ export default function OpportunityDetails({ opportunity, applications: initialA
                               onClick={() => setSelectedApplication(application)}
                             >
                               View
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+                        </Button>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+          </div>
             </CardContent>
           </Card>
         </div>
@@ -325,7 +325,7 @@ export default function OpportunityDetails({ opportunity, applications: initialA
               {selectedApplication ? (
                 <div className="space-y-4">
                   <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <div>
+                <div>
                       <h4 className="text-sm font-medium">Organization</h4>
                       <p>
                         {selectedApplication.organizationName || selectedApplication.legalName}
@@ -340,21 +340,21 @@ export default function OpportunityDetails({ opportunity, applications: initialA
                             {selectedApplication.website}
                           </a>
                         )}
-                      </p>
-                    </div>
-                    <div>
+                  </p>
+                </div>
+                <div>
                       <h4 className="text-sm font-medium">Contact Information</h4>
-                      <p>
+                    <p>
                         {selectedApplication.primaryContact.name}
                         <br />
                         {selectedApplication.primaryContact.email}
                         <br />
                         {selectedApplication.primaryContact.phone}
                       </p>
-                    </div>
-                  </div>
+                </div>
+              </div>
 
-                  <div>
+              <div>
                     <h4 className="text-sm font-medium">Description</h4>
                     <p className="mt-1 whitespace-pre-line">
                       {selectedApplication.description}
@@ -366,17 +366,17 @@ export default function OpportunityDetails({ opportunity, applications: initialA
                     <p className="mt-1 whitespace-pre-line">
                       {selectedApplication.sponsorshipGoals}
                     </p>
-                  </div>
+              </div>
 
                   {selectedApplication.hasPreviousSponsorships && selectedApplication.previousSponsorshipsDetails && (
-                    <div>
+                <div>
                       <h4 className="text-sm font-medium">Previous Sponsorships</h4>
-                      <p className="mt-1 whitespace-pre-line">
+                  <p className="mt-1 whitespace-pre-line">
                         {selectedApplication.previousSponsorshipsDetails}
-                      </p>
-                    </div>
-                  )}
+                  </p>
                 </div>
+              )}
+            </div>
               ) : (
                 <div className="text-center text-gray-500">
                   Select an application to view details
