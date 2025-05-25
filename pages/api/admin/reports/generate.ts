@@ -1,27 +1,37 @@
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/lib/auth';
-import prisma from '@/lib/prisma';
+import { PrismaClient } from '@prisma/client';
 import ExcelJS from 'exceljs';
 import { parse as json2csv } from 'json2csv';
-import { Prisma } from '@prisma/client';
 
 interface PrismaError extends Error {
   code?: string;
+  clientVersion?: string;
 }
 
-// Helper function to handle Prisma connection errors
-async function withPrisma<T>(fn: () => Promise<T>): Promise<T> {
+// Create a new Prisma client instance for each request
+const getPrismaClient = () => {
+  const prisma = new PrismaClient({
+    log: ['error'],
+    errorFormat: 'minimal',
+  });
+  return prisma;
+};
+
+// Helper function to handle Prisma operations with proper connection management
+async function withPrismaClient<T>(operation: (client: PrismaClient) => Promise<T>): Promise<T> {
+  const prisma = getPrismaClient();
   try {
-    return await fn();
+    await prisma.$connect();
+    const result = await operation(prisma);
+    return result;
   } catch (e: unknown) {
     const error = e as PrismaError;
-    // If there's a connection error, try to reconnect
-    if (error.code === 'P2021' || error.code === '26000') {
-      await prisma.$connect();
-      return await fn();
-    }
+    console.error('Prisma operation error:', error);
     throw error;
+  } finally {
+    await prisma.$disconnect();
   }
 }
 
@@ -50,10 +60,10 @@ export default async function handler(
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - daysAgo);
 
-    // Fetch all relevant data with connection handling
+    // Fetch all relevant data with proper connection handling
     const [users, startups, reviews, sponsorships] = await Promise.all([
       // User activity
-      withPrisma(() => prisma.user.findMany({
+      withPrismaClient((prisma) => prisma.user.findMany({
         where: { createdAt: { gte: startDate } },
         select: {
           id: true,
@@ -66,7 +76,7 @@ export default async function handler(
       })),
 
       // Startup activity
-      withPrisma(() => prisma.startup.findMany({
+      withPrismaClient((prisma) => prisma.startup.findMany({
         where: { createdAt: { gte: startDate } },
         select: {
           id: true,
@@ -79,7 +89,7 @@ export default async function handler(
       })),
 
       // Review activity
-      withPrisma(() => prisma.review.findMany({
+      withPrismaClient((prisma) => prisma.review.findMany({
         where: { createdAt: { gte: startDate } },
         select: {
           id: true,
@@ -93,7 +103,7 @@ export default async function handler(
       })),
 
       // Sponsorship activity
-      withPrisma(() => prisma.sponsorshipApplication.findMany({
+      withPrismaClient((prisma) => prisma.sponsorshipApplication.findMany({
         where: { createdAt: { gte: startDate } },
         select: {
           id: true,
@@ -178,81 +188,98 @@ export default async function handler(
     const { format = 'json' } = req.body;
     const fileName = `platform-activity-report-${new Date().toISOString().split('T')[0]}`;
 
-    switch (format) {
-      case 'json':
-        return res.status(200).json(reportData);
+    try {
+      switch (format) {
+        case 'json':
+          return res.status(200).json(reportData);
 
-      case 'excel': {
-        const workbook = new ExcelJS.Workbook();
-        
-        // Summary Sheet
-        const summarySheet = workbook.addWorksheet('Summary');
-        summarySheet.addRow(['Platform Activity Summary']);
-        summarySheet.addRow(['Period', `Last ${timeframe} days`]);
-        summarySheet.addRow([]);
-        Object.entries(summary).forEach(([key, value]) => {
-          summarySheet.addRow([key, typeof value === 'number' ? value.toFixed(2) : value]);
-        });
-
-        // Activity Sheets
-        const sheets = {
-          'Users': reportData.users,
-          'Startups': reportData.startups,
-          'Reviews': reportData.reviews,
-          'Sponsorships': reportData.sponsorships
-        };
-
-        Object.entries(sheets).forEach(([name, data]) => {
-          if (!Array.isArray(data) || data.length === 0) return;
+        case 'excel': {
+          const workbook = new ExcelJS.Workbook();
           
-          const sheet = workbook.addWorksheet(name);
-          const headers = Object.keys(data[0]);
-          sheet.addRow(headers.map(h => h.charAt(0).toUpperCase() + h.slice(1)));
-          
-          data.forEach((item: ReportDataItem) => {
-            sheet.addRow(headers.map(header => {
-              const value = item[header];
-              return value === null || value === undefined ? 'N/A' : value;
-            }));
+          // Summary Sheet
+          const summarySheet = workbook.addWorksheet('Summary');
+          summarySheet.addRow(['Platform Activity Summary']);
+          summarySheet.addRow(['Period', `Last ${timeframe} days`]);
+          summarySheet.addRow([]);
+          Object.entries(summary).forEach(([key, value]) => {
+            summarySheet.addRow([key, typeof value === 'number' ? value.toFixed(2) : value]);
           });
-        });
 
-        const buffer = await workbook.xlsx.writeBuffer();
-        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-        res.setHeader('Content-Disposition', `attachment; filename=${fileName}.xlsx`);
-        return res.send(buffer);
+          // Activity Sheets
+          const sheets = {
+            'Users': reportData.users,
+            'Startups': reportData.startups,
+            'Reviews': reportData.reviews,
+            'Sponsorships': reportData.sponsorships
+          };
+
+          Object.entries(sheets).forEach(([name, data]) => {
+            if (!Array.isArray(data) || data.length === 0) return;
+            
+            const sheet = workbook.addWorksheet(name);
+            const headers = Object.keys(data[0]);
+            sheet.addRow(headers.map(h => h.charAt(0).toUpperCase() + h.slice(1)));
+            
+            data.forEach((item: ReportDataItem) => {
+              sheet.addRow(headers.map(header => {
+                const value = item[header];
+                return value === null || value === undefined ? 'N/A' : value;
+              }));
+            });
+          });
+
+          const buffer = await workbook.xlsx.writeBuffer();
+          res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+          res.setHeader('Content-Disposition', `attachment; filename=${fileName}.xlsx`);
+          return res.send(buffer);
+        }
+
+        case 'csv': {
+          try {
+            const csvData = [
+              ...Object.entries(summary).map(([key, value]) => ({ 
+                type: 'Summary', 
+                metric: key, 
+                value: typeof value === 'number' ? value.toFixed(2) : value 
+              })),
+              ...reportData.users.map(u => ({ type: 'User', ...u })),
+              ...reportData.startups.map(s => ({ type: 'Startup', ...s })),
+              ...reportData.reviews.map(r => ({ type: 'Review', ...r })),
+              ...reportData.sponsorships.map(s => ({ type: 'Sponsorship', ...s })),
+            ];
+            
+            const csv = json2csv({ 
+              data: csvData,
+              fields: ['type', 'metric', 'value', 'id', 'name', 'email', 'role', 'status', 'stage', 'score', 'amount', 'sponsor', 'organization', 'opportunity', 'program', 'createdAt']
+            });
+            
+            res.setHeader('Content-Type', 'text/csv');
+            res.setHeader('Content-Disposition', `attachment; filename=${fileName}.csv`);
+            return res.send(csv);
+          } catch (csvError) {
+            console.error('CSV generation error:', csvError);
+            return res.status(500).json({ 
+              error: 'Failed to generate CSV',
+              details: csvError instanceof Error ? csvError.message : 'Unknown error during CSV generation'
+            });
+          }
+        }
+
+        default:
+          return res.status(400).json({ error: 'Invalid format' });
       }
-
-      case 'csv': {
-        const csvData = [
-          ...Object.entries(summary).map(([key, value]) => ({ 
-            type: 'Summary', 
-            metric: key, 
-            value: typeof value === 'number' ? value.toFixed(2) : value 
-          })),
-          ...reportData.users.map(u => ({ type: 'User', ...u })),
-          ...reportData.startups.map(s => ({ type: 'Startup', ...s })),
-          ...reportData.reviews.map(r => ({ type: 'Review', ...r })),
-          ...reportData.sponsorships.map(s => ({ type: 'Sponsorship', ...s })),
-        ];
-        
-        const csv = json2csv({ data: csvData });
-        res.setHeader('Content-Type', 'text/csv');
-        res.setHeader('Content-Disposition', `attachment; filename=${fileName}.csv`);
-        return res.send(csv);
-      }
-
-      default:
-        return res.status(400).json({ error: 'Invalid format' });
+    } catch (formatError) {
+      console.error('Format generation error:', formatError);
+      return res.status(500).json({ 
+        error: 'Failed to generate report in requested format',
+        details: formatError instanceof Error ? formatError.message : 'Unknown error during format generation'
+      });
     }
   } catch (error: unknown) {
     console.error('Error generating report:', error);
-    await prisma.$disconnect();
     return res.status(500).json({ 
       error: 'Failed to generate report',
       details: error instanceof Error ? error.message : 'Unknown error'
     });
-  } finally {
-    await prisma.$disconnect();
   }
 } 
