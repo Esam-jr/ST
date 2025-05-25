@@ -16,11 +16,11 @@ declare global {
 
 const prismaClientOptions: Prisma.PrismaClientOptions = {
   log: [{ level: 'error', emit: 'event' }],
-  datasources: {
-    db: {
-      url: process.env.DATABASE_URL,
-    },
-  },
+      datasources: {
+        db: {
+          url: process.env.DATABASE_URL,
+        },
+      },
 };
 
 export class PrismaClientSingleton extends PrismaClient {
@@ -55,7 +55,7 @@ export class PrismaClientSingleton extends PrismaClient {
       this.reconnectAttempts++;
       
       if (this.isConnected) {
-        await this.$disconnect();
+      await this.$disconnect();
       }
 
       // Add delay before reconnecting (exponential backoff)

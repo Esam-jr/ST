@@ -27,7 +27,7 @@ async function resetPrismaConnection() {
 
     // Wait before reconnecting
     await new Promise((resolve) => setTimeout(resolve, 2000));
-    
+
     await prisma.$connect();
 
     console.log("Prisma connection reset successfully");
@@ -72,7 +72,7 @@ export async function withPrisma<T>(operation: () => Promise<T>): Promise<T> {
           console.log(`Connection error detected. Retry ${retries + 1}/${MAX_RETRIES}...`);
 
           try {
-            await resetPrismaConnection();
+        await resetPrismaConnection();
           } catch (resetError) {
             console.error("Failed to reset connection during retry:", resetError);
             // If we can't reset the connection, wait longer before the next retry
@@ -80,7 +80,7 @@ export async function withPrisma<T>(operation: () => Promise<T>): Promise<T> {
           }
 
           retries++;
-          continue;
+        continue;
         }
       }
 
