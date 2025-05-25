@@ -38,6 +38,7 @@ import DashboardStats from "@/components/dashboard/DashboardStats";
 import ProjectManagement from "@/components/entrepreneur/ProjectManagement";
 import DashboardSidebar from "@/components/entrepreneur/DashboardSidebar";
 import ExpenseTracker from "@/components/entrepreneur/ExpenseTracker";
+import IdeasManagement from "@/components/entrepreneur/IdeasManagement";
 
 // Define types
 type CallStatus = "DRAFT" | "PUBLISHED" | "CLOSED" | "ARCHIVED";
@@ -282,6 +283,182 @@ export default function EntrepreneurDashboard() {
     }
   };
 
+  const renderContent = () => {
+    switch (activeTab) {
+      case "overview":
+        return (
+          <>
+            <DashboardStats userRole="ENTREPRENEUR" />
+            <div className="mt-8">
+              <ProjectManagement />
+            </div>
+          </>
+        );
+      case "applications":
+        return (
+          <Card className="shadow-md">
+            <CardHeader>
+              <CardTitle>My Applications</CardTitle>
+              <CardDescription>
+                Track the status of your startup call applications
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {applications.length === 0 ? (
+                <div className="text-center py-8">
+                  <FileText className="h-12 w-12 mx-auto text-muted-foreground opacity-50" />
+                  <p className="mt-2 text-muted-foreground">
+                    No applications yet
+                  </p>
+                  <Button
+                    variant="outline"
+                    className="mt-4"
+                    onClick={() => router.push("/startup-calls")}
+                  >
+                    Browse Open Calls
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {applications.map((app) => (
+                    <div
+                      key={app.id}
+                      className="flex flex-col md:flex-row items-start justify-between gap-4 p-4 border border-muted rounded-lg"
+                    >
+                      <div>
+                        <div className="font-medium text-lg">
+                          {app.startupName}
+                        </div>
+                        <div className="text-sm text-muted-foreground">
+                          {app.call.title} • {app.industry} •{" "}
+                          {app.stage}
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-1">
+                          Submitted on {formatDate(app.submittedAt)}
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-start md:items-end gap-2 w-full md:w-auto">
+                        <div className="flex items-center gap-2">
+                          {getStatusBadge(app.status)}
+                          <div className="text-xs text-muted-foreground">
+                            Reviews: {app.reviewsCompleted}/
+                            {app.reviewsTotal}
+                          </div>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="w-full md:w-auto"
+                          onClick={() =>
+                            router.push(`/applications/${app.id}`)
+                          }
+                        >
+                          View Details
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        );
+      case "opportunities":
+        return (
+          <Card className="shadow-md">
+            <CardHeader>
+              <CardTitle>Startup Opportunities</CardTitle>
+              <CardDescription>
+                Discover open startup calls and submit your applications
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {openCalls.length === 0 ? (
+                <div className="text-center py-8">
+                  <Building className="h-12 w-12 mx-auto text-muted-foreground opacity-50" />
+                  <p className="mt-2 text-muted-foreground">
+                    No open calls at the moment
+                  </p>
+                  <Button
+                    variant="outline"
+                    className="mt-4"
+                    onClick={() => router.push("/startup-calls")}
+                  >
+                    Check All Calls
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {openCalls.map((call) => (
+                    <div
+                      key={call.id}
+                      className="flex flex-col md:flex-row items-start justify-between gap-4 p-4 border border-muted rounded-lg"
+                    >
+                      <div>
+                        <div className="font-medium text-lg">
+                          {call.title}
+                        </div>
+                        <div className="text-sm text-muted-foreground">
+                          {call.industry} • {call.location} •{" "}
+                          {call.fundingAmount &&
+                            `Funding: ${call.fundingAmount}`}
+                        </div>
+                        {call.applicationDeadline && (
+                          <div className="text-xs text-amber-500 mt-1 flex items-center">
+                            <Clock className="h-3 w-3 mr-1" />
+                            Deadline:{" "}
+                            {formatDate(call.applicationDeadline)} (
+                            {getDaysLeft(call.applicationDeadline)} days
+                            left)
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex flex-col items-start md:items-end gap-2 w-full md:w-auto">
+                        <Button
+                          size="sm"
+                          className="w-full md:w-auto"
+                          onClick={() =>
+                            router.push(`/startup-calls/${call.id}`)
+                          }
+                        >
+                          Apply Now
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="w-full md:w-auto"
+                          onClick={() =>
+                            router.push(`/startup-calls/${call.id}`)
+                          }
+                        >
+                          View Details
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+            <CardFooter className="justify-center">
+              <Button
+                onClick={() => router.push("/startup-calls")}
+                className="gap-2"
+              >
+                View All Startup Calls
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+            </CardFooter>
+          </Card>
+        );
+      case "expenses":
+        return <ExpenseTracker />;
+      case "ideas":
+        return <IdeasManagement />;
+      default:
+        return null;
+    }
+  };
+
   if (loading) {
     return (
       <Layout title="Entrepreneur Dashboard | Loading">
@@ -438,20 +615,18 @@ export default function EntrepreneurDashboard() {
                 }}
               >
                 {hasActiveProject ? (
-                  <TabsList className="grid w-full grid-cols-3">
+                  <TabsList className="grid w-full grid-cols-4">
                     <TabsTrigger value="overview">Overview</TabsTrigger>
-                    <TabsTrigger value="project">
-                      Project Management
-                    </TabsTrigger>
+                    <TabsTrigger value="project">Project Management</TabsTrigger>
                     <TabsTrigger value="expenses">Expenses</TabsTrigger>
+                    <TabsTrigger value="ideas">My Ideas</TabsTrigger>
                   </TabsList>
                 ) : (
-                  <TabsList className="grid w-full grid-cols-3">
+                  <TabsList className="grid w-full grid-cols-4">
                     <TabsTrigger value="overview">Overview</TabsTrigger>
                     <TabsTrigger value="applications">Applications</TabsTrigger>
-                    <TabsTrigger value="opportunities">
-                      Opportunities
-                    </TabsTrigger>
+                    <TabsTrigger value="opportunities">Opportunities</TabsTrigger>
+                    <TabsTrigger value="ideas">My Ideas</TabsTrigger>
                   </TabsList>
                 )}
 
@@ -800,6 +975,10 @@ export default function EntrepreneurDashboard() {
                       </Button>
                     </CardFooter>
                   </Card>
+                </TabsContent>
+
+                <TabsContent value="ideas" className="mt-6">
+                  <IdeasManagement />
                 </TabsContent>
 
                 {hasActiveProject && (
