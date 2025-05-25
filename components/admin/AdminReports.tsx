@@ -70,46 +70,46 @@ const AdminReports = () => {
   };
 
   return (
-    <Card>
-      <CardHeader>
+      <Card>
+        <CardHeader>
         <CardTitle>Generate Activity Report</CardTitle>
-        <CardDescription>
+          <CardDescription>
           Generate a comprehensive report of platform activities including users, startups, reviews, and sponsorships.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        <div className="space-y-2">
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+                <div className="space-y-2">
           <h3 className="text-sm font-medium">Time Period</h3>
           <Select value={timeframe} onValueChange={setTimeframe}>
             <SelectTrigger className="w-[200px]">
               <SelectValue placeholder="Select time period" />
-            </SelectTrigger>
-            <SelectContent>
+                    </SelectTrigger>
+                    <SelectContent>
               {timeframeOptions.map(option => (
                 <SelectItem key={option.value} value={option.value}>
                   {option.label}
                 </SelectItem>
               ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="space-y-2">
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div className="space-y-2">
           <h3 className="text-sm font-medium">Report Format</h3>
-          <Select value={format} onValueChange={setFormat}>
+                  <Select value={format} onValueChange={setFormat}>
             <SelectTrigger className="w-[200px]">
-              <SelectValue placeholder="Select format" />
-            </SelectTrigger>
-            <SelectContent>
+                      <SelectValue placeholder="Select format" />
+                    </SelectTrigger>
+                    <SelectContent>
               {formatOptions.map(option => (
                 <SelectItem key={option.value} value={option.value}>
                   {option.label}
                 </SelectItem>
               ))}
-            </SelectContent>
-          </Select>
-        </div>
-
+                    </SelectContent>
+                  </Select>
+              </div>
+              
         <Button 
           onClick={handleGenerateReport} 
           disabled={isLoading}
@@ -126,7 +126,7 @@ const AdminReports = () => {
               Generate Report
             </>
           )}
-        </Button>
+                </Button>
 
         <div className="text-sm text-muted-foreground">
           <p>The report will include:</p>
@@ -137,9 +137,9 @@ const AdminReports = () => {
             <li>Review activities and scores</li>
             <li>Sponsorship applications and amounts</li>
           </ul>
-        </div>
-      </CardContent>
-    </Card>
+            </div>
+          </CardContent>
+        </Card>
   );
 };
 
