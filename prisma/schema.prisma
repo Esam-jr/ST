@@ -34,6 +34,9 @@ model User {
   createdSponsorshipOpportunities SponsorshipOpportunity[]
   reviewerAssignments     ReviewAssignment[]      @relation("ReviewerAssignments")
   expenses                Expense[]               @relation("UserExpenses")
+  startupIdeas            StartupIdea[]
+  ideaLikes               Like[]
+  ideaComments            IdeaComment[]
 }
 
 model Account {
@@ -509,6 +512,50 @@ model ReviewAssignment {
   updatedAt     DateTime    @updatedAt
 
   @@unique([reviewerId, applicationId])
+}
+
+model StartupIdea {
+  id          String    @id @default(cuid())
+  title       String
+  description String    @db.Text
+  industry    String[]
+  coverImage  String?
+  socialLinks Json?     // Store social links as JSON {twitter, linkedin, website, etc}
+  likes       Like[]
+  comments    IdeaComment[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  userId      String
+  user        User      @relation(fields: [userId], references: [id])
+  status      String    @default("PUBLISHED") // PUBLISHED, DRAFT, ARCHIVED
+
+  @@index([userId])
+  @@index([status])
+}
+
+model Like {
+  id          String     @id @default(cuid())
+  ideaId      String
+  userId      String
+  createdAt   DateTime   @default(now())
+  idea        StartupIdea @relation(fields: [ideaId], references: [id], onDelete: Cascade)
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([ideaId, userId])
+}
+
+model IdeaComment {
+  id          String     @id @default(cuid())
+  content     String
+  ideaId      String
+  userId      String
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  idea        StartupIdea @relation(fields: [ideaId], references: [id], onDelete: Cascade)
+  user        User       @relation(fields: [userId], references: [id])
+
+  @@index([ideaId])
+  @@index([userId])
 }
 
 enum Role {
