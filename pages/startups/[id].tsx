@@ -141,9 +141,9 @@ export default function StartupIdeaDetail() {
         description: 'Please sign in to comment',
         variant: 'default',
       });
-      return;
-    }
-
+          return;
+        }
+        
     if (!newComment.trim()) return;
 
     setSubmittingComment(true);
@@ -266,7 +266,7 @@ export default function StartupIdeaDetail() {
 
   const displayedComments = showAllComments ? comments : comments.slice(0, 3);
 
-  return (
+    return (
     <Layout>
       <div className="min-h-screen bg-muted/10 py-8">
         <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
@@ -483,8 +483,8 @@ export default function StartupIdeaDetail() {
               </div>
             </CardContent>
           </Card>
+          </div>
         </div>
-      </div>
-    </Layout>
-  );
+      </Layout>
+    );
 }
