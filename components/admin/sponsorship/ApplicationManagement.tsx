@@ -17,6 +17,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -30,11 +32,23 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Search, Building2, Mail, Phone, Globe } from "lucide-react";
+import { Search, Building2, Mail, Phone, Globe, AlertCircle, Save } from "lucide-react";
 import axios from 'axios';
 import { format } from 'date-fns';
+import { sponsorshipTemplates, NotificationTemplate } from '@/lib/config/notification-templates';
 
 interface Application {
   id: string;
@@ -64,7 +78,19 @@ export default function ApplicationManagement() {
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [selectedApplication, setSelectedApplication] = useState<Application | null>(null);
   const [showDetailsDialog, setShowDetailsDialog] = useState(false);
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [processingAction, setProcessingAction] = useState<string | null>(null);
+  const [actionType, setActionType] = useState<'APPROVED' | 'REJECTED' | null>(null);
+  const [selectedApplications, setSelectedApplications] = useState<string[]>([]);
+  const [selectedTemplate, setSelectedTemplate] = useState<string>('default');
+  const [customTemplate, setCustomTemplate] = useState<NotificationTemplate>({
+    id: 'custom',
+    name: '',
+    type: 'SPONSORSHIP_APPLICATION',
+    subject: '',
+    emailContent: '',
+    notificationContent: '',
+  });
   const { toast } = useToast();
 
   useEffect(() => {
@@ -88,31 +114,81 @@ export default function ApplicationManagement() {
     }
   };
 
-  const handleStatusChange = async (applicationId: string, newStatus: string) => {
-    try {
-      setProcessingAction(applicationId);
-      await axios.put(`/api/admin/sponsorship-applications/${applicationId}`, {
-        status: newStatus,
-      });
+  const handleStatusAction = async (applicationId: string, newStatus: 'APPROVED' | 'REJECTED') => {
+    setActionType(newStatus);
+    setProcessingAction(applicationId);
+    setSelectedApplications([applicationId]);
+    setShowConfirmDialog(true);
+  };
 
-      setApplications(applications.map(app => 
-        app.id === applicationId ? { ...app, status: newStatus } : app
-      ));
-
+  const handleMassAction = (status: 'APPROVED' | 'REJECTED') => {
+    if (selectedApplications.length === 0) {
       toast({
-        title: 'Success',
-        description: `Application ${newStatus.toLowerCase()} successfully`,
+        title: 'No Applications Selected',
+        description: 'Please select at least one application to process.',
+        variant: 'destructive',
       });
+      return;
+    }
+    setActionType(status);
+    setShowConfirmDialog(true);
+  };
+
+  const handleConfirmAction = async () => {
+    if (!actionType || selectedApplications.length === 0) return;
+
+    try {
+      let template: NotificationTemplate | null = null;
+
+      if (selectedTemplate === 'custom') {
+        template = customTemplate;
+      } else if (selectedTemplate !== 'default') {
+        template = sponsorshipTemplates.find(t => t.id === selectedTemplate) || null;
+      }
+
+      const response = await axios.post('/api/admin/sponsorship-applications/send-notification', {
+        applicationIds: selectedApplications,
+        notificationType: actionType,
+        customTemplate: template,
+      });
+
+      if (response.data.success > 0) {
+        setApplications(applications.map(app =>
+          selectedApplications.includes(app.id) ? { ...app, status: actionType } : app
+        ));
+
+        toast({
+          title: 'Success',
+          description: `${response.data.success} application(s) processed successfully. Notifications sent.`,
+        });
+      } else {
+        throw new Error('Failed to process applications');
+      }
     } catch (error) {
-      console.error('Error updating application status:', error);
+      console.error('Error processing applications:', error);
       toast({
         title: 'Error',
-        description: 'Failed to update application status',
+        description: 'Failed to process applications',
         variant: 'destructive',
       });
     } finally {
       setProcessingAction(null);
+      setActionType(null);
+      setShowConfirmDialog(false);
+      setShowDetailsDialog(false);
+      setSelectedApplications([]);
+      setSelectedTemplate('default');
     }
+  };
+
+  const handleSelectAll = (checked: boolean) => {
+    setSelectedApplications(
+      checked 
+        ? filteredApplications
+            .filter(app => app.status === 'PENDING')
+            .map(app => app.id)
+        : []
+    );
   };
 
   const filteredApplications = applications.filter(app => {
@@ -166,10 +242,40 @@ export default function ApplicationManagement() {
           </Select>
         </div>
 
+        {/* Mass Action Buttons */}
+        {selectedApplications.length > 0 && (
+          <div className="flex items-center gap-4 mb-4 p-4 bg-muted rounded-lg">
+            <span className="text-sm font-medium">
+              {selectedApplications.length} application(s) selected
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              className="bg-green-50 text-green-700 border-green-200 hover:bg-green-100"
+              onClick={() => handleMassAction('APPROVED')}
+            >
+              Approve Selected
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="bg-red-50 text-red-700 border-red-200 hover:bg-red-100"
+              onClick={() => handleMassAction('REJECTED')}
+            >
+              Reject Selected
+            </Button>
+          </div>
+        )}
+
         <div className="rounded-md border">
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-[50px]">
+                  <Checkbox
+                    onCheckedChange={(checked: boolean) => handleSelectAll(checked)}
+                  />
+                </TableHead>
                 <TableHead>Organization</TableHead>
                 <TableHead>Contact</TableHead>
                 <TableHead>Amount</TableHead>
@@ -181,19 +287,33 @@ export default function ApplicationManagement() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8">
+                  <TableCell colSpan={7} className="text-center py-8">
                     Loading applications...
                   </TableCell>
                 </TableRow>
               ) : filteredApplications.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8">
+                  <TableCell colSpan={7} className="text-center py-8">
                     No applications found
                   </TableCell>
                 </TableRow>
               ) : (
                 filteredApplications.map((application) => (
                   <TableRow key={application.id}>
+                    <TableCell>
+                      {application.status === 'PENDING' && (
+                        <Checkbox
+                          checked={selectedApplications.includes(application.id)}
+                          onCheckedChange={(checked: boolean) => {
+                            setSelectedApplications(
+                              checked
+                                ? [...selectedApplications, application.id]
+                                : selectedApplications.filter(id => id !== application.id)
+                            );
+                          }}
+                        />
+                      )}
+                    </TableCell>
                     <TableCell>
                       <div className="flex flex-col">
                         <span className="font-medium">
@@ -239,7 +359,7 @@ export default function ApplicationManagement() {
                               variant="outline"
                               size="sm"
                               className="bg-green-50 text-green-700 border-green-200 hover:bg-green-100"
-                              onClick={() => handleStatusChange(application.id, "APPROVED")}
+                              onClick={() => handleStatusAction(application.id, "APPROVED")}
                               disabled={processingAction === application.id}
                             >
                               Approve
@@ -248,7 +368,7 @@ export default function ApplicationManagement() {
                               variant="outline"
                               size="sm"
                               className="bg-red-50 text-red-700 border-red-200 hover:bg-red-100"
-                              onClick={() => handleStatusChange(application.id, "REJECTED")}
+                              onClick={() => handleStatusAction(application.id, "REJECTED")}
                               disabled={processingAction === application.id}
                             >
                               Reject
@@ -370,32 +490,135 @@ export default function ApplicationManagement() {
               </div>
 
               {selectedApplication.status === "PENDING" && (
-                <div className="flex justify-end gap-4 pt-4">
+                <DialogFooter className="flex justify-end gap-4 pt-4">
                   <Button
                     variant="outline"
                     className="bg-red-50 text-red-700 border-red-200 hover:bg-red-100"
-                    onClick={() => {
-                      handleStatusChange(selectedApplication.id, "REJECTED");
-                      setShowDetailsDialog(false);
-                    }}
+                    onClick={() => handleStatusAction(selectedApplication.id, "REJECTED")}
                   >
                     Reject Application
                   </Button>
                   <Button
                     className="bg-green-600 hover:bg-green-700"
-                    onClick={() => {
-                      handleStatusChange(selectedApplication.id, "APPROVED");
-                      setShowDetailsDialog(false);
-                    }}
+                    onClick={() => handleStatusAction(selectedApplication.id, "APPROVED")}
                   >
                     Approve Application
                   </Button>
-                </div>
+                </DialogFooter>
               )}
             </div>
           )}
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {actionType === 'APPROVED' ? 'Approve Applications' : 'Reject Applications'}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This will {actionType?.toLowerCase()} {selectedApplications.length} application(s) and send notifications to the sponsors.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <div className="py-4">
+            <Select value={selectedTemplate} onValueChange={setSelectedTemplate}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select notification template" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="default">Default Template</SelectItem>
+                <SelectItem value="custom">Create Custom Template</SelectItem>
+                {sponsorshipTemplates
+                  .filter(template => 
+                    actionType === 'APPROVED' 
+                      ? template.id.startsWith('approval-')
+                      : template.id.startsWith('rejection-')
+                  )
+                  .map(template => (
+                    <SelectItem key={template.id} value={template.id}>
+                      {template.name}
+                    </SelectItem>
+                  ))
+                }
+              </SelectContent>
+            </Select>
+
+            {selectedTemplate === 'custom' && (
+              <div className="space-y-4 mt-4">
+                <div>
+                  <Input
+                    placeholder="Template Name"
+                    value={customTemplate.name}
+                    onChange={(e) => setCustomTemplate(prev => ({ ...prev, name: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <Input
+                    placeholder="Email Subject"
+                    value={customTemplate.subject}
+                    onChange={(e) => setCustomTemplate(prev => ({ ...prev, subject: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <Textarea
+                    placeholder="Email Content (HTML supported)"
+                    value={customTemplate.emailContent}
+                    onChange={(e) => setCustomTemplate(prev => ({ ...prev, emailContent: e.target.value }))}
+                    rows={6}
+                  />
+                </div>
+                <div>
+                  <Textarea
+                    placeholder="In-app Notification Content"
+                    value={customTemplate.notificationContent}
+                    onChange={(e) => setCustomTemplate(prev => ({ ...prev, notificationContent: e.target.value }))}
+                    rows={3}
+                  />
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  Available variables: {'{sponsorName}'}, {'{opportunityTitle}'}, {'{applicationUrl}'}
+                </div>
+              </div>
+            )}
+
+            {selectedTemplate !== 'default' && selectedTemplate !== 'custom' && (
+              <div className="mt-4 p-4 bg-muted rounded-lg">
+                <h4 className="font-medium mb-2">Template Preview</h4>
+                {(() => {
+                  const template = sponsorshipTemplates.find(t => t.id === selectedTemplate);
+                  return template ? (
+                    <div className="space-y-2 text-sm">
+                      <p><strong>Subject:</strong> {template.subject}</p>
+                      <p><strong>Notification:</strong> {template.notificationContent}</p>
+                      <details>
+                        <summary className="cursor-pointer text-primary">View Email Content</summary>
+                        <div className="mt-2 p-2 bg-background rounded border">
+                          <div dangerouslySetInnerHTML={{ __html: template.emailContent }} />
+                        </div>
+                      </details>
+                    </div>
+                  ) : null;
+                })()}
+              </div>
+            )}
+          </div>
+
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => {
+              setProcessingAction(null);
+              setActionType(null);
+              setSelectedApplications([]);
+            }}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmAction}>
+              {actionType === 'APPROVED' ? 'Approve' : 'Reject'} & Send Notifications
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 } 
