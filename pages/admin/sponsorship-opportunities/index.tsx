@@ -4,6 +4,7 @@ import { getServerSession } from 'next-auth/next';
 import { authOptions } from '@/pages/api/auth/[...nextauth]';
 import Layout from '@/components/layout/Layout';
 import SponsorshipOpportunityList from '@/components/admin/sponsorship/SponsorshipOpportunityList';
+import ApplicationManagement from '@/components/admin/sponsorship/ApplicationManagement';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { DollarSign, Users, TrendingUp } from 'lucide-react';
@@ -14,6 +15,7 @@ interface DashboardStats {
   activeOpportunities: number;
   totalApplications: number;
   totalAmount: number;
+  pendingApplications: number;
 }
 
 export default function SponsorshipOpportunitiesPage({
@@ -22,6 +24,7 @@ export default function SponsorshipOpportunitiesPage({
   initialStats: DashboardStats;
 }) {
   const [stats, setStats] = useState(initialStats);
+  const [activeTab, setActiveTab] = useState("opportunities");
 
   const fetchStats = async () => {
     try {
@@ -34,22 +37,23 @@ export default function SponsorshipOpportunitiesPage({
 
   return (
     <Layout>
-      <div className="container py-6 space-y-6">
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="container mx-auto py-8">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold">Sponsorship Management</h1>
+          <p className="text-muted-foreground mt-2">
+            Manage sponsorship opportunities and applications
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">
                 Total Opportunities
               </CardTitle>
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">
-                {stats?.totalOpportunities || 0}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Total opportunities
-              </p>
+              <div className="text-2xl font-bold">{stats.totalOpportunities}</div>
             </CardContent>
           </Card>
           <Card>
@@ -57,47 +61,19 @@ export default function SponsorshipOpportunitiesPage({
               <CardTitle className="text-sm font-medium">
                 Active Opportunities
               </CardTitle>
-              <TrendingUp className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">
-                {stats?.activeOpportunities || 0}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Active opportunities
-              </p>
+              <div className="text-2xl font-bold">{stats.activeOpportunities}</div>
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">
-                Total Applications
+                Pending Applications
               </CardTitle>
-              <Users className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">
-                {stats?.totalApplications || 0}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Total applications
-              </p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
-                Total Amount
-              </CardTitle>
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                ${(stats?.totalAmount || 0).toLocaleString()}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Total sponsorship value
-              </p>
+              <div className="text-2xl font-bold">{stats.pendingApplications}</div>
             </CardContent>
           </Card>
         </div>
@@ -106,42 +82,12 @@ export default function SponsorshipOpportunitiesPage({
           <TabsList>
             <TabsTrigger value="opportunities">Opportunities</TabsTrigger>
             <TabsTrigger value="applications">Applications</TabsTrigger>
-            <TabsTrigger value="analytics">Analytics</TabsTrigger>
           </TabsList>
           <TabsContent value="opportunities" className="space-y-4">
             <SponsorshipOpportunityList onStatsChange={fetchStats} />
           </TabsContent>
-          <TabsContent value="applications">
-            <Card>
-              <CardHeader>
-                <CardTitle>Applications</CardTitle>
-                <CardDescription>
-                  View and manage sponsorship applications
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {/* Applications list component will go here */}
-                <p className="text-muted-foreground">
-                  Applications management coming soon...
-                </p>
-              </CardContent>
-            </Card>
-          </TabsContent>
-          <TabsContent value="analytics">
-            <Card>
-              <CardHeader>
-                <CardTitle>Analytics</CardTitle>
-                <CardDescription>
-                  View sponsorship opportunity analytics
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {/* Analytics component will go here */}
-                <p className="text-muted-foreground">
-                  Analytics dashboard coming soon...
-                </p>
-              </CardContent>
-            </Card>
+          <TabsContent value="applications" className="space-y-4">
+            <ApplicationManagement />
           </TabsContent>
         </Tabs>
       </div>
@@ -193,6 +139,7 @@ export const getServerSideProps: GetServerSideProps = async (context) => {
           activeOpportunities: 0,
           totalApplications: 0,
           totalAmount: 0,
+          pendingApplications: 0,
         },
       },
     };

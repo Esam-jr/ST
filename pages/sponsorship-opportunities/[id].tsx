@@ -71,12 +71,31 @@ export default function PublicSponsorshipOpportunityDetailPage() {
     null
   );
   const [loading, setLoading] = useState(true);
+  const [hasApplied, setHasApplied] = useState(false);
+  const [existingApplication, setExistingApplication] = useState<any>(null);
 
   useEffect(() => {
     if (id) {
       fetchOpportunityData();
     }
   }, [id]);
+
+  useEffect(() => {
+    if (session?.user && opportunity?.id) {
+      checkExistingApplication();
+    }
+  }, [session, opportunity]);
+
+  const checkExistingApplication = async () => {
+    try {
+      if (!opportunity) return;
+      const response = await axios.get(`/api/sponsorship-opportunities/${opportunity.id}/check-application`);
+      setHasApplied(response.data.hasApplied);
+      setExistingApplication(response.data.application);
+    } catch (error) {
+      console.error('Error checking application status:', error);
+    }
+  };
 
   const fetchOpportunityData = async () => {
     try {
@@ -87,18 +106,14 @@ export default function PublicSponsorshipOpportunityDetailPage() {
         `/api/public/sponsorship-opportunities/${id}`
       );
       setOpportunity(opportunityResponse.data);
-    } catch (error) {
-      console.error("Error fetching opportunity data:", error);
-
+    } catch (error: any) {
+      console.error('Error fetching opportunity:', error);
       toast({
-        title: "Error",
-        description:
-          "Could not load the sponsorship opportunity. Please try again later.",
-        variant: "destructive",
+        title: 'Error',
+        description: error.response?.data?.message || 'Failed to load opportunity',
+        variant: 'destructive',
       });
-
-      // Navigate back to the opportunities list if we can't load this one
-      router.push("/sponsorship-opportunities");
+      router.push('/sponsorship-opportunities');
     } finally {
       setLoading(false);
     }
@@ -393,51 +408,56 @@ export default function PublicSponsorshipOpportunityDetailPage() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <Info className="h-5 w-5" />
-                    Ready to Apply?
+                    {hasApplied ? 'Application Submitted' : 'Ready to Apply?'}
                   </CardTitle>
                   <CardDescription>
                     {session.user?.role === "SPONSOR"
-                      ? "Submit your application to sponsor this opportunity."
+                      ? hasApplied 
+                        ? `You have already applied for this opportunity on ${new Date(existingApplication?.createdAt).toLocaleDateString()}. Status: ${existingApplication?.status}`
+                        : "Submit your application to sponsor this opportunity."
                       : "Only sponsors can apply for this opportunity."}
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                  {session.user?.role === "SPONSOR" ? (
-                    <ApplySponsorshipForm
-                      opportunityId={opportunity.id}
-                      minAmount={opportunity.minAmount}
-                      maxAmount={opportunity.maxAmount}
-                      currency={opportunity.currency}
-                      onSuccess={() => {
-                        toast({
-                          title: "Application Submitted",
-                            description: "Your application has been submitted successfully.",
-                          variant: "default",
-                        });
-                          fetchOpportunityData();
-                      }}
-                    />
-                  ) : (
-                    <Button
-                      variant="outline"
+                    {session.user?.role === "SPONSOR" ? (
+                      hasApplied ? (
+                        <Button
+                          variant="outline"
+                          className="w-full flex items-center justify-center gap-2"
+                          disabled
+                        >
+                          <Info className="h-4 w-4" />
+                          Already Applied
+                        </Button>
+                      ) : (
+                        <ApplySponsorshipForm
+                          opportunityId={opportunity.id}
+                          minAmount={opportunity.minAmount}
+                          maxAmount={opportunity.maxAmount}
+                          currency={opportunity.currency}
+                          onSuccess={() => {
+                            toast({
+                              title: "Application Submitted",
+                              description: "Your application has been submitted successfully.",
+                              variant: "default",
+                            });
+                            setHasApplied(true);
+                            checkExistingApplication();
+                          }}
+                        />
+                      )
+                    ) : (
+                      <Button
+                        variant="outline"
                         className="w-full flex items-center justify-center gap-2"
-                      disabled
-                    >
-                      <Info className="h-4 w-4" />
-                      Only Sponsors Can Apply
-                    </Button>
-                  )}
-                  <Link href="/sponsorship-opportunities">
-                    <Button
-                      variant="outline"
-                        className="w-full flex items-center justify-center gap-2"
-                    >
-                      <ArrowLeft className="h-4 w-4" />
-                      Back to List
-                    </Button>
-                  </Link>
-                </div>
+                        disabled
+                      >
+                        <Info className="h-4 w-4" />
+                        Only Sponsors Can Apply
+                      </Button>
+                    )}
+                  </div>
                 </CardContent>
               </Card>
             )}

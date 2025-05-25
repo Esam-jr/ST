@@ -1,92 +1,66 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getServerSession } from 'next-auth/next';
-import { authOptions } from '../../auth/[...nextauth]';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
+  const session = await getServerSession(req, res, authOptions);
+
+  if (!session) {
+    return res.status(401).json({ message: 'Not authenticated' });
+  }
+
+  if (session.user.role !== 'ADMIN') {
+    return res.status(403).json({ message: 'Not authorized' });
+  }
+
   if (req.method !== 'GET') {
     return res.status(405).json({ message: 'Method not allowed' });
   }
 
-  const session = await getServerSession(req, res, authOptions);
-
-  if (!session || session.user.role !== 'ADMIN') {
-    return res.status(401).json({ message: 'Unauthorized' });
-  }
-
   try {
-    // Get total opportunities
+    // Get total opportunities count
     const totalOpportunities = await prisma.sponsorshipOpportunity.count();
 
-    // Get active opportunities (status = 'OPEN')
+    // Get active opportunities count (status = OPEN)
     const activeOpportunities = await prisma.sponsorshipOpportunity.count({
       where: {
         status: 'OPEN',
       },
     });
 
-    // Get total applications
+    // Get total applications count
     const totalApplications = await prisma.sponsorshipApplication.count();
 
-    // Get total amount from all applications
-    const applications = await prisma.sponsorshipApplication.findMany({
-      select: {
-        amount: true,
+    // Get pending applications count
+    const pendingApplications = await prisma.sponsorshipApplication.count({
+      where: {
+        status: 'PENDING',
       },
     });
 
-    const totalAmount = applications.reduce((sum, app) => sum + app.amount, 0);
-
-    // Get recent activity
-    const recentActivity = await prisma.sponsorshipApplication.findMany({
-      take: 5,
-      orderBy: {
-        createdAt: 'desc',
+    // Get total amount from approved applications
+    const approvedApplications = await prisma.sponsorshipApplication.aggregate({
+      where: {
+        status: 'APPROVED',
       },
-      include: {
-        opportunity: {
-          select: {
-            title: true,
-          },
-        },
-        sponsor: {
-          select: {
-            name: true,
-          },
-        },
+      _sum: {
+        proposedAmount: true,
       },
-    });
-
-    // Get status distribution
-    const statusDistribution = await prisma.sponsorshipOpportunity.groupBy({
-      by: ['status'],
-      _count: true,
-    });
-
-    // Get monthly trends
-    const monthlyTrends = await prisma.sponsorshipApplication.groupBy({
-      by: ['createdAt'],
-      _count: true,
-      orderBy: {
-        createdAt: 'asc',
-      },
-      take: 12,
     });
 
     return res.status(200).json({
       totalOpportunities,
       activeOpportunities,
       totalApplications,
-      totalAmount,
-      recentActivity,
-      statusDistribution,
-      monthlyTrends,
+      pendingApplications,
+      totalAmount: approvedApplications._sum.proposedAmount || 0,
     });
   } catch (error) {
     console.error('Error fetching stats:', error);
-    return res.status(500).json({ message: 'Internal server error' });
+    return res.status(500).json({ message: 'Failed to fetch stats' });
   }
 } 
