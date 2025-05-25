@@ -420,7 +420,7 @@ export default function PublicSponsorshipOpportunityDetailPage() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    {session.user?.role === "SPONSOR" ? (
+                  {session.user?.role === "SPONSOR" ? (
                       hasApplied ? (
                         <Button
                           variant="outline"
@@ -431,33 +431,33 @@ export default function PublicSponsorshipOpportunityDetailPage() {
                           Already Applied
                         </Button>
                       ) : (
-                        <ApplySponsorshipForm
-                          opportunityId={opportunity.id}
-                          minAmount={opportunity.minAmount}
-                          maxAmount={opportunity.maxAmount}
-                          currency={opportunity.currency}
-                          onSuccess={() => {
-                            toast({
-                              title: "Application Submitted",
+                    <ApplySponsorshipForm
+                      opportunityId={opportunity.id}
+                      minAmount={opportunity.minAmount}
+                      maxAmount={opportunity.maxAmount}
+                      currency={opportunity.currency}
+                      onSuccess={() => {
+                        toast({
+                          title: "Application Submitted",
                               description: "Your application has been submitted successfully.",
-                              variant: "default",
-                            });
+                          variant: "default",
+                        });
                             setHasApplied(true);
                             checkExistingApplication();
-                          }}
-                        />
+                      }}
+                    />
                       )
-                    ) : (
-                      <Button
-                        variant="outline"
+                  ) : (
+                    <Button
+                      variant="outline"
                         className="w-full flex items-center justify-center gap-2"
-                        disabled
-                      >
-                        <Info className="h-4 w-4" />
-                        Only Sponsors Can Apply
-                      </Button>
-                    )}
-                  </div>
+                      disabled
+                    >
+                      <Info className="h-4 w-4" />
+                      Only Sponsors Can Apply
+                    </Button>
+                  )}
+                </div>
                 </CardContent>
               </Card>
             )}

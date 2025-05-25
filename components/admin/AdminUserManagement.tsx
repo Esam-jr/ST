@@ -33,8 +33,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Search,
+import { 
+  Search, 
   UserCheck,
   UserX,
   UserCog,
@@ -208,52 +208,52 @@ export default function AdminUserManagement() {
   return (
     <div className="space-y-6">
       {/* Stats Overview */}
-      <div className="grid gap-4 md:grid-cols-4">
-        <Card>
-          <CardContent className="flex items-center gap-4 pt-6">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-purple-100">
-              <Shield className="h-6 w-6 text-purple-600" />
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Admins</p>
+          <div className="grid gap-4 md:grid-cols-4">
+            <Card>
+              <CardContent className="flex items-center gap-4 pt-6">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-purple-100">
+                  <Shield className="h-6 w-6 text-purple-600" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Admins</p>
               <p className="text-xl font-bold">{stats?.roles.admin || 0}</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex items-center gap-4 pt-6">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-100">
-              <Building className="h-6 w-6 text-blue-600" />
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Entrepreneurs</p>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="flex items-center gap-4 pt-6">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-blue-100">
+                  <Building className="h-6 w-6 text-blue-600" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Entrepreneurs</p>
               <p className="text-xl font-bold">{stats?.roles.entrepreneur || 0}</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex items-center gap-4 pt-6">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-100">
-              <FileCheck className="h-6 w-6 text-amber-600" />
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Reviewers</p>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="flex items-center gap-4 pt-6">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-100">
+                  <FileCheck className="h-6 w-6 text-amber-600" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Reviewers</p>
               <p className="text-xl font-bold">{stats?.roles.reviewer || 0}</p>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="flex items-center gap-4 pt-6">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-green-100">
-              <Users className="h-6 w-6 text-green-600" />
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Sponsors</p>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="flex items-center gap-4 pt-6">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-green-100">
+                  <Users className="h-6 w-6 text-green-600" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Sponsors</p>
               <p className="text-xl font-bold">{stats?.roles.sponsor || 0}</p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
 
       {/* Analytics Chart */}
       <Card>
@@ -274,37 +274,37 @@ export default function AdminUserManagement() {
                 <Bar dataKey="count" fill="#3B82F6" />
               </BarChart>
             </ResponsiveContainer>
-          </div>
+            </div>
         </CardContent>
       </Card>
 
       {/* Filters */}
       <div className="flex items-center justify-between">
         <div className="relative w-[300px]">
-          <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search users..."
-            className="pl-8"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-        </div>
-        <Select value={roleFilter} onValueChange={setRoleFilter}>
+                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search users..."
+                  className="pl-8"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
+              <Select value={roleFilter} onValueChange={setRoleFilter}>
           <SelectTrigger className="w-[180px]">
             <SelectValue placeholder="Filter by role" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Roles</SelectItem>
-            <SelectItem value="ADMIN">Admin</SelectItem>
-            <SelectItem value="ENTREPRENEUR">Entrepreneur</SelectItem>
-            <SelectItem value="REVIEWER">Reviewer</SelectItem>
-            <SelectItem value="SPONSOR">Sponsor</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Roles</SelectItem>
+                  <SelectItem value="ADMIN">Admin</SelectItem>
+                  <SelectItem value="ENTREPRENEUR">Entrepreneur</SelectItem>
+                  <SelectItem value="REVIEWER">Reviewer</SelectItem>
+                  <SelectItem value="SPONSOR">Sponsor</SelectItem>
+                </SelectContent>
+              </Select>
+          </div>
 
-      {/* User Table */}
-      <Card>
+          {/* User Table */}
+          <Card>
         <CardHeader>
           <CardTitle>Users</CardTitle>
           <CardDescription>
@@ -312,17 +312,17 @@ export default function AdminUserManagement() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>User</TableHead>
-                <TableHead>Role</TableHead>
-                <TableHead>Joined</TableHead>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>User</TableHead>
+                    <TableHead>Role</TableHead>
+                    <TableHead>Joined</TableHead>
                 <TableHead>Last Updated</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
               {loading ? (
                 <TableRow>
                   <TableCell colSpan={5} className="text-center py-6">
@@ -330,33 +330,33 @@ export default function AdminUserManagement() {
                   </TableCell>
                 </TableRow>
               ) : users.length === 0 ? (
-                <TableRow>
+                    <TableRow>
                   <TableCell colSpan={5} className="text-center py-6 text-muted-foreground">
-                    No users found matching your criteria.
-                  </TableCell>
-                </TableRow>
-              ) : (
+                        No users found matching your criteria.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
                 users.map((user) => (
-                  <TableRow key={user.id}>
-                    <TableCell>
-                      <div className="flex items-center gap-3">
-                        <Avatar className="h-9 w-9">
+                      <TableRow key={user.id}>
+                        <TableCell>
+                          <div className="flex items-center gap-3">
+                            <Avatar className="h-9 w-9">
                           {user.image ? (
                             <AvatarImage src={user.image} alt={user.name || ''} />
-                          ) : null}
+                              ) : null}
                           <AvatarFallback>{user.name?.charAt(0) || user.email.charAt(0)}</AvatarFallback>
-                        </Avatar>
-                        <div>
+                            </Avatar>
+                            <div>
                           <p className="font-medium">{user.name || 'No name'}</p>
-                          <p className="text-sm text-muted-foreground">{user.email}</p>
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell>{getRoleBadge(user.role)}</TableCell>
+                              <p className="text-sm text-muted-foreground">{user.email}</p>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>{getRoleBadge(user.role)}</TableCell>
                     <TableCell className="text-sm">{formatDate(user.createdAt)}</TableCell>
                     <TableCell className="text-sm">{formatDate(user.updatedAt)}</TableCell>
-                    <TableCell>
-                      <div className="flex gap-2">
+                        <TableCell>
+                          <div className="flex gap-2">
                         <Button 
                           variant="ghost" 
                           size="icon"
@@ -365,9 +365,9 @@ export default function AdminUserManagement() {
                             setIsViewDialogOpen(true);
                           }}
                         >
-                          <Eye className="h-4 w-4" />
+                              <Eye className="h-4 w-4" />
                           <span className="sr-only">View Details</span>
-                        </Button>
+                            </Button>
                         <Button 
                           variant="ghost" 
                           size="icon"
@@ -377,9 +377,9 @@ export default function AdminUserManagement() {
                             setIsEditRoleDialogOpen(true);
                           }}
                         >
-                          <UserCog className="h-4 w-4" />
+                              <UserCog className="h-4 w-4" />
                           <span className="sr-only">Edit Role</span>
-                        </Button>
+                            </Button>
                         <Button 
                           variant="ghost" 
                           size="icon"
@@ -390,14 +390,14 @@ export default function AdminUserManagement() {
                         >
                           <UserX className="h-4 w-4" />
                           <span className="sr-only">Disable Account</span>
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
 
           {/* Pagination */}
           {totalPages > 1 && (
