@@ -50,6 +50,10 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { PrismaClient } from "@prisma/client";
+import { format } from "date-fns";
+
+const prisma = new PrismaClient();
 
 // Define types
 interface SponsorshipOpportunity {
@@ -81,157 +85,110 @@ interface SponsorshipApplication {
   id: string;
   opportunityId: string;
   sponsorId: string;
-  amount: number;
+  
+  // Sponsor Information
+  sponsorType: 'COMPANY' | 'INDIVIDUAL' | 'NGO' | 'FOUNDATION' | 'OTHER';
+  organizationName?: string;
+  legalName: string;
+  website?: string;
+  description: string;
+  annualBudget?: string;
+  size?: string;
+  foundedYear?: number;
+  headquarters?: string;
+  taxStatus?: string;
+  
+  // Contact Information
+  primaryContact: {
+    name: string;
+    title: string;
+    email: string;
+    phone: string;
+  };
+  alternateContact?: {
+    name: string;
+    title: string;
+    email: string;
+    phone: string;
+  };
+  
+  // Sponsorship Details
+  proposedAmount: number;
   currency: string;
-  message: string | null;
+  sponsorshipGoals: string;
+  hasPreviousSponsorships: boolean;
+  previousSponsorshipsDetails?: string;
+  preferredPaymentSchedule?: string;
+  additionalRequests?: string;
+  proposedStartDate?: Date;
+  proposedEndDate?: Date;
+  
+  // Status
   status: string;
   createdAt: string;
   updatedAt: string;
-  sponsorName: string;
-  contactPerson: string;
-  email: string;
-  phone: string | null;
-  website: string | null;
-  sponsorshipType: string;
-  otherType: string | null;
+  
+  // Relations
   sponsor?: {
     id: string;
     name: string;
     email: string;
-    phone?: string | null;
-    website?: string | null;
+    phone?: string;
+    website?: string;
   };
 }
 
-export default function SponsorshipOpportunityDetail() {
-  const router = useRouter();
-  const { id } = router.query;
-  const { data: session, status: sessionStatus } = useSession();
-  const { toast } = useToast();
-  const [opportunity, setOpportunity] = useState<SponsorshipOpportunity | null>(
-    null
-  );
-  const [applications, setApplications] = useState<SponsorshipApplication[]>(
-    []
-  );
-  const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("details");
+interface Props {
+  opportunity: SponsorshipOpportunity;
+  applications: SponsorshipApplication[];
+}
+
+export default function OpportunityDetails({ opportunity, applications: initialApplications }: Props) {
+  const [applications, setApplications] = useState<SponsorshipApplication[]>(initialApplications);
+  const [selectedApplication, setSelectedApplication] = useState<SponsorshipApplication | null>(null);
   const [processingAction, setProcessingAction] = useState<string | null>(null);
-  const [selectedApplication, setSelectedApplication] =
-    useState<SponsorshipApplication | null>(null);
-  const [dialogOpen, setDialogOpen] = useState(false);
+  const { toast } = useToast();
 
-  useEffect(() => {
-    // Redirect if not admin
-    if (sessionStatus === "unauthenticated") {
-      router.push("/auth/signin?callbackUrl=" + router.asPath);
-    } else if (
-      sessionStatus === "authenticated" &&
-      session?.user?.role !== "ADMIN"
-    ) {
-      router.push("/dashboard");
-    } else if (sessionStatus === "authenticated" && id) {
-      fetchOpportunityData();
-    }
-  }, [sessionStatus, session, router, id]);
-
-  useEffect(() => {
-    if (id && session && activeTab === "applications") {
-      fetchApplications();
-    }
-  }, [id, session, activeTab]);
-
-  const fetchOpportunityData = async () => {
+  const handleStatusChange = async (applicationId: string, newStatus: string) => {
+    setProcessingAction(applicationId);
     try {
-      setLoading(true);
-
-      // Fetch opportunity details
-      const opportunityResponse = await axios.get(
-        `/api/sponsorship-opportunities/${id}`
-      );
-      setOpportunity(opportunityResponse.data);
-
-      // Fetch applications for this opportunity
-      const applicationsResponse = await axios.get(
-        `/api/sponsorship-opportunities/${id}/applications`
-      );
-      setApplications(applicationsResponse.data);
-    } catch (error) {
-      console.error("Error fetching opportunity data:", error);
-      toast({
-        title: "Error",
-        description: "Failed to load opportunity data",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchApplications = async () => {
-    try {
-      const response = await axios.get(
-        `/api/admin/sponsorship-opportunities/${id}/applications`
-      );
-      setApplications(response.data);
-    } catch (error) {
-      console.error("Error fetching applications:", error);
-      toast({
-        title: "Error",
-        description: "Failed to load applications. Please try again.",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleStatusChange = async (status: string) => {
-    try {
-      setProcessingAction("status");
-      await axios.patch(`/api/sponsorship-opportunities/${id}`, { status });
-
-      setOpportunity((prev) => (prev ? { ...prev, status } : null));
-
-      toast({
-        title: "Success",
-        description: `Opportunity status updated to ${status}`,
-      });
-    } catch (error) {
-      console.error("Error updating status:", error);
-      toast({
-        title: "Error",
-        description: "Failed to update opportunity status",
-        variant: "destructive",
-      });
-    } finally {
-      setProcessingAction(null);
-    }
-  };
-
-  const handleApplicationStatusChange = async (
-    applicationId: string,
-    newStatus: string
-  ) => {
-    try {
-      setProcessingAction(applicationId);
-
-      await axios.patch(`/api/sponsorship-applications/${applicationId}`, {
-        status: newStatus,
+      const response = await fetch(`/api/sponsorship-applications/${applicationId}/status`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status: newStatus }),
       });
 
-      // Update local state
-      setApplications((prevApps) =>
-        prevApps.map((app) =>
+      if (!response.ok) {
+        throw new Error('Failed to update application status');
+      }
+
+      const updatedApplication = await response.json();
+
+      setApplications((prevApplications) =>
+        prevApplications.map((app) =>
           app.id === applicationId ? { ...app, status: newStatus } : app
         )
       );
 
       toast({
         title: "Success",
-        description: `Application ${
-          newStatus === "approved" ? "approved" : "rejected"
-        } successfully`,
+        description: `Application status updated to ${newStatus.toLowerCase()} successfully`,
       });
-    } catch (error) {
+
+      // Send notification to the sponsor
+      await prisma.notification.create({
+        data: {
+          userId: updatedApplication.sponsorId,
+          title: "Sponsorship Application Status Update",
+          message: `Your sponsorship application for "${opportunity.title}" has been ${newStatus.toLowerCase()}.`,
+          type: "SPONSORSHIP_APPLICATION",
+          link: `/sponsorship-applications/${applicationId}`,
+        },
+      });
+
+    } catch (error: unknown) {
       console.error("Error updating application status:", error);
       toast({
         title: "Error",
@@ -252,600 +209,184 @@ export default function SponsorshipOpportunityDetail() {
     }).format(amount);
   };
 
-  // Get status badge
-  const getStatusBadge = (status: string) => {
-    switch (status.toLowerCase()) {
-      case "draft":
-        return <Badge variant="outline">Draft</Badge>;
-      case "active":
-        return (
-          <Badge className="bg-green-100 text-green-800 border-green-200">
-            Active
-          </Badge>
-        );
-      case "closed":
-        return (
-          <Badge className="bg-gray-100 text-gray-800 border-gray-200">
-            Closed
-          </Badge>
-        );
-      case "archived":
-        return <Badge variant="secondary">Archived</Badge>;
-      case "pending":
-        return (
-          <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200">
-            Pending
-          </Badge>
-        );
-      case "approved":
-        return (
-          <Badge className="bg-green-100 text-green-800 border-green-200">
-            Approved
-          </Badge>
-        );
-      case "rejected":
-        return (
-          <Badge className="bg-red-100 text-red-800 border-red-200">
-            Rejected
-          </Badge>
-        );
-      case "withdrawn":
-        return (
-          <Badge className="bg-gray-100 text-gray-800 border-gray-200">
-            Withdrawn
-          </Badge>
-        );
-      default:
-        return <Badge>{status}</Badge>;
-    }
-  };
-
-  // Format date
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    });
-  };
-
-  const handleViewApplication = (application: SponsorshipApplication) => {
-    setSelectedApplication(application);
-    setDialogOpen(true);
-  };
-
-  const renderDetailsTab = () => {
-    if (!opportunity) {
-      return null;
-    }
-
-    return (
-      <TabsContent value="details" className="space-y-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center">
-              <span>Opportunity Details</span>
-              <div className="ml-auto">
-                <Badge
-                  variant={
-                    opportunity.status === "active"
-                      ? "default"
-                      : opportunity.status === "closed"
-                      ? "destructive"
-                      : "secondary"
-                  }
-                  className="text-xs uppercase"
-                >
-                  {opportunity.status}
-                </Badge>
-              </div>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {opportunity.coverImage && (
-              <div className="mb-6">
-                <img
-                  src={opportunity.coverImage}
-                  alt={opportunity.title}
-                  className="w-full h-48 object-cover rounded-lg"
-                />
-              </div>
-            )}
-
-            <div>
-              <h3 className="text-lg font-medium mb-2">Description</h3>
-              <div className="bg-gray-50 p-4 rounded-md">
-                <p className="text-gray-700 whitespace-pre-line">
-                  {opportunity.description}
-                </p>
-              </div>
-            </div>
-
-            <Separator />
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="bg-gray-50 p-4 rounded-md">
-                <h3 className="text-lg font-medium mb-2">Funding Range</h3>
-                <div className="flex items-center text-gray-700">
-                  <DollarSign className="h-5 w-5 mr-2 text-primary" />
-                  <span className="text-xl font-medium">
-                    {formatCurrency(
-                      opportunity.minAmount,
-                      opportunity.currency
-                    )}{" "}
-                    —
-                    {formatCurrency(
-                      opportunity.maxAmount,
-                      opportunity.currency
-                    )}
-                  </span>
-                </div>
-              </div>
-
-              <div className="bg-gray-50 p-4 rounded-md">
-                <h3 className="text-lg font-medium mb-2">Application Deadline</h3>
-                <div className="flex items-center text-gray-700">
-                  <Calendar className="h-5 w-5 mr-2 text-primary" />
-                  <span>
-                    {opportunity.deadline
-                      ? new Date(opportunity.deadline).toLocaleDateString()
-                      : "No deadline set"}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {opportunity.industryFocus && (
-              <>
-                <Separator />
-                <div className="bg-gray-50 p-4 rounded-md">
-                  <h3 className="text-lg font-medium mb-2">Industry Focus</h3>
-                  <p className="text-gray-700">{opportunity.industryFocus}</p>
-                </div>
-              </>
-            )}
-
-            {opportunity.tags && opportunity.tags.length > 0 && (
-              <>
-                <Separator />
-                <div className="bg-gray-50 p-4 rounded-md">
-                  <h3 className="text-lg font-medium mb-2">Tags</h3>
-                  <div className="flex flex-wrap gap-2">
-                    {opportunity.tags.map((tag, index) => (
-                      <Badge key={index} variant="secondary">
-                        {tag}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-              </>
-            )}
-
-            {opportunity.eligibility && (
-              <>
-                <Separator />
-                <div className="bg-gray-50 p-4 rounded-md">
-                  <h3 className="text-lg font-medium mb-2">Eligibility</h3>
-                  <p className="text-gray-700 whitespace-pre-line">
-                    {opportunity.eligibility}
-                  </p>
-                </div>
-              </>
-            )}
-
-            {opportunity.startupCall && (
-              <>
-                <Separator />
-                <div className="bg-blue-50 p-4 rounded-md">
-                  <h3 className="text-lg font-medium mb-2">
-                    Associated Startup Call
-                  </h3>
-                  <Link
-                    href={`/admin/startup-calls/${opportunity.startupCallId}`}
-                    className="text-primary hover:underline flex items-center"
-                  >
-                    {opportunity.startupCall.title}
-                    <ExternalLink className="ml-1 h-4 w-4" />
-                  </Link>
-                </div>
-              </>
-            )}
-
-            <Separator />
-
-            <div>
-              <h3 className="text-lg font-medium mb-2">Sponsor Benefits</h3>
-              {opportunity.benefits.length > 0 ? (
-                <div className="bg-gray-50 p-4 rounded-md">
-                  <ul className="grid grid-cols-1 md:grid-cols-2 gap-2 pl-5">
-                    {opportunity.benefits.map((benefit, index) => (
-                      <li key={index} className="text-gray-700">
-                        {benefit}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : (
-                <div className="bg-gray-50 p-4 rounded-md text-center text-gray-500 italic">
-                  No benefits specified
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      </TabsContent>
-    );
-  };
-
-  const renderApplicationsTab = () => {
-    if (applications.length === 0) {
-      return (
-        <div className="text-center py-10 bg-gray-50 rounded-md">
-          <p className="text-gray-500 mb-4">
-            No applications have been submitted yet.
-          </p>
-          <p className="text-sm text-gray-400">
-            When sponsors apply, their applications will appear here.
-          </p>
-        </div>
-      );
-    }
-
-    return (
-      <div className="rounded-md border">
-        <Table>
-          <TableHeader className="bg-gray-50">
-            <TableRow>
-              <TableHead>Sponsor</TableHead>
-              <TableHead>Amount</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Applied On</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {applications.slice(0, 5).map((application) => (
-              <TableRow
-                key={application.id}
-                className="hover:bg-gray-50 transition-colors"
-              >
-                <TableCell className="font-medium">
-                  <div>
-                    <div>
-                      {application.sponsor?.name ||
-                        application.sponsorName ||
-                        "Unknown"}
-                    </div>
-                    <div className="text-sm text-gray-500">
-                      {application.sponsor?.email ||
-                        application.email ||
-                        "No email provided"}
-                    </div>
-                  </div>
-                </TableCell>
-                <TableCell>
-                  {formatCurrency(
-                    application.amount,
-                    application.currency
-                  )}
-                </TableCell>
-                <TableCell>
-                  {getStatusBadge(application.status)}
-                </TableCell>
-                <TableCell>
-                  {formatDate(application.createdAt)}
-                </TableCell>
-                <TableCell className="text-right">
-                  <div className="flex justify-end space-x-2">
-                    <Link
-                      href={`/admin/sponsorship-applications/${application.id}`}
-                    >
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-8"
-                      >
-                        <MessageCircle className="h-4 w-4 mr-1" />
-                        Details
-                      </Button>
-                    </Link>
-
-                    {application.status === "pending" && (
-                      <>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="bg-green-50 text-green-700 border-green-200 hover:bg-green-100 h-8"
-                          onClick={() =>
-                            handleApplicationStatusChange(
-                              application.id,
-                              "approved"
-                            )
-                          }
-                          disabled={
-                            processingAction === application.id
-                          }
-                        >
-                          {processingAction === application.id ? (
-                            <div className="animate-spin h-4 w-4 border-2 border-b-transparent border-green-700 rounded-full"></div>
-                          ) : (
-                            <>
-                              <Check className="h-4 w-4 mr-1" />
-                              Approve
-                            </>
-                          )}
-                        </Button>
-
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="bg-red-50 text-red-700 border-red-200 hover:bg-red-100 h-8"
-                          onClick={() =>
-                            handleApplicationStatusChange(
-                              application.id,
-                              "rejected"
-                            )
-                          }
-                          disabled={
-                            processingAction === application.id
-                          }
-                        >
-                          {processingAction === application.id ? (
-                            <div className="animate-spin h-4 w-4 border-2 border-b-transparent border-red-700 rounded-full"></div>
-                          ) : (
-                            <>
-                              <X className="h-4 w-4 mr-1" />
-                              Reject
-                            </>
-                          )}
-                        </Button>
-                      </>
-                    )}
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-        {applications.length > 5 && opportunity && (
-          <div className="p-4 text-center border-t">
-            <Link
-              href={`/admin/sponsorship-opportunities/${opportunity.id}/applications`}
-            >
-              <Button variant="ghost" size="sm">
-                View all {applications.length} applications
-              </Button>
-            </Link>
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  const renderHeader = () => (
-    <div className="flex items-center mb-6">
-      <Link href="/admin/sponsorship-opportunities" className="mr-4">
-        <Button variant="ghost" size="sm">
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Back
-        </Button>
-      </Link>
-      <h1 className="text-3xl font-bold">
-        {opportunity ? opportunity.title : "Sponsorship Opportunity"}
-      </h1>
-    </div>
-  );
-
-  const renderContent = () => {
-    if (loading) {
-      return <div className="text-center py-8">Loading...</div>;
-    }
-
-    if (!opportunity) {
-      return (
-        <div className="text-center py-8">
-          <p className="text-gray-500">Opportunity not found</p>
-        </div>
-      );
-    }
-
-    return (
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="details">Details</TabsTrigger>
-          <TabsTrigger value="applications">
-            Applications{" "}
-            {opportunity._count?.applications ? (
-              <Badge variant="secondary" className="ml-2">
-                {opportunity._count.applications}
-              </Badge>
-            ) : null}
-          </TabsTrigger>
-        </TabsList>
-        <TabsContent value="details" className="pt-4">
-          {renderDetailsTab()}
-        </TabsContent>
-        <TabsContent value="applications" className="pt-4">
-          {renderApplicationsTab()}
-        </TabsContent>
-      </Tabs>
-    );
-  };
-
   return (
-    <>
-      <Head>
-        <title>{opportunity?.title || "Sponsorship Opportunity"} | Admin</title>
-      </Head>
-      <div className="container py-6">
-        {renderHeader()}
-        <div className="mt-6">{renderContent()}</div>
+    <div className="container mx-auto py-6">
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-2xl font-bold">{opportunity.title}</h1>
+        <div className="flex items-center gap-4">
+          <Badge variant="outline" className="text-sm">
+            {opportunity.status}
+          </Badge>
+        </div>
       </div>
 
-      {/* Application Detail Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Application Details</DialogTitle>
-            <DialogDescription>
-              {selectedApplication &&
-                `Submitted on ${new Date(
-                  selectedApplication.createdAt
-                ).toLocaleDateString()}`}
-            </DialogDescription>
-          </DialogHeader>
-
-          {/* Only render content if selectedApplication exists */}
-          {selectedApplication && (
-            <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <h3 className="text-sm font-medium text-gray-500">Sponsor</h3>
-                  <p className="font-medium">
-                    {selectedApplication.sponsor?.name ||
-                      selectedApplication.sponsorName ||
-                      "Unknown"}
-                  </p>
-                </div>
-                <div>
-                  <h3 className="text-sm font-medium text-gray-500">Status</h3>
-                  <Badge
-                    variant={
-                      selectedApplication.status === "APPROVED"
-                        ? "default"
-                        : selectedApplication.status === "REJECTED"
-                        ? "destructive"
-                        : "secondary"
-                    }
-                  >
-                    {selectedApplication.status.charAt(0) +
-                      selectedApplication.status.slice(1).toLowerCase()}
-                  </Badge>
-                </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2">
+          <Card>
+            <CardHeader>
+              <CardTitle>Applications</CardTitle>
+              <CardDescription>
+                Review and manage sponsorship applications
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Sponsor</TableHead>
+                      <TableHead>Amount</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Date</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {applications.map((application) => (
+                      <TableRow key={application.id}>
+                        <TableCell>
+                          <div className="flex items-center">
+                            <div className="ml-4">
+                              <div className="text-sm font-medium text-gray-900">
+                                {application.organizationName || application.legalName}
+                              </div>
+                              <div className="text-sm text-gray-500">
+                                {application.primaryContact.email}
+                              </div>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {formatCurrency(
+                            application.proposedAmount,
+                            application.currency
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={
+                              application.status === "APPROVED"
+                                ? "default"
+                                : application.status === "REJECTED"
+                                ? "destructive"
+                                : "secondary"
+                            }
+                          >
+                            {application.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {format(new Date(application.createdAt), "MMM d, yyyy")}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="bg-green-50 text-green-700 border-green-200 hover:bg-green-100 h-8"
+                              onClick={() => handleStatusChange(application.id, "APPROVED")}
+                              disabled={processingAction === application.id}
+                            >
+                              Approve
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="bg-red-50 text-red-700 border-red-200 hover:bg-red-100 h-8"
+                              onClick={() => handleStatusChange(application.id, "REJECTED")}
+                              disabled={processingAction === application.id}
+                            >
+                              Reject
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setSelectedApplication(application)}
+                            >
+                              View
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
               </div>
+            </CardContent>
+          </Card>
+        </div>
 
-              <div>
-                <h3 className="text-sm font-medium text-gray-500">
-                  Contact Information
-                </h3>
-                <div className="mt-1 space-y-1">
-                  <div className="flex items-center">
-                    <Mail className="h-4 w-4 mr-2 text-gray-400" />
-                    <p>
-                      {selectedApplication.sponsor?.email ||
-                        selectedApplication.email ||
-                        "No email provided"}
+        <div className="lg:col-span-1">
+          <Card>
+            <CardHeader>
+              <CardTitle>Details</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {selectedApplication ? (
+                <div className="space-y-4">
+                  <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div>
+                      <h4 className="text-sm font-medium">Organization</h4>
+                      <p>
+                        {selectedApplication.organizationName || selectedApplication.legalName}
+                        <br />
+                        {selectedApplication.website && (
+                          <a
+                            href={selectedApplication.website}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:text-blue-800"
+                          >
+                            {selectedApplication.website}
+                          </a>
+                        )}
+                      </p>
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-medium">Contact Information</h4>
+                      <p>
+                        {selectedApplication.primaryContact.name}
+                        <br />
+                        {selectedApplication.primaryContact.email}
+                        <br />
+                        {selectedApplication.primaryContact.phone}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 className="text-sm font-medium">Description</h4>
+                    <p className="mt-1 whitespace-pre-line">
+                      {selectedApplication.description}
                     </p>
                   </div>
-                  {(selectedApplication.phone ||
-                    selectedApplication.sponsor?.phone) && (
-                    <div className="flex items-center">
-                      <Phone className="h-4 w-4 mr-2 text-gray-400" />
-                      <p>
-                        {selectedApplication.phone ||
-                          selectedApplication.sponsor?.phone}
+
+                  <div>
+                    <h4 className="text-sm font-medium">Sponsorship Goals</h4>
+                    <p className="mt-1 whitespace-pre-line">
+                      {selectedApplication.sponsorshipGoals}
+                    </p>
+                  </div>
+
+                  {selectedApplication.hasPreviousSponsorships && selectedApplication.previousSponsorshipsDetails && (
+                    <div>
+                      <h4 className="text-sm font-medium">Previous Sponsorships</h4>
+                      <p className="mt-1 whitespace-pre-line">
+                        {selectedApplication.previousSponsorshipsDetails}
                       </p>
                     </div>
                   )}
-                  {(selectedApplication.website ||
-                    selectedApplication.sponsor?.website) && (
-                    <div className="flex items-center">
-                      <Globe className="h-4 w-4 mr-2 text-gray-400" />
-                      <a
-                        ref={
-                          selectedApplication.website ||
-                          selectedApplication.sponsor?.website
-                        }
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-500 hover:underline"
-                      >
-                        {selectedApplication.website ||
-                          selectedApplication.sponsor?.website}
-                      </a>
-                    </div>
-                  )}
                 </div>
-              </div>
-
-              <div>
-                <h3 className="text-sm font-medium text-gray-500">
-                  Sponsorship Details
-                </h3>
-                <div className="mt-1 space-y-1">
-                  <div className="flex items-center">
-                    <DollarSign className="h-4 w-4 mr-2 text-gray-400" />
-                    <p>
-                      {selectedApplication.amount
-                        ? formatCurrency(
-                            selectedApplication.amount,
-                            selectedApplication.currency || "USD"
-                          )
-                        : "Amount not specified"}
-                    </p>
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-medium">Sponsorship Type</h4>
-                    <p>
-                      {selectedApplication.sponsorshipType || "Not specified"}
-                      {selectedApplication.sponsorshipType === "OTHER" &&
-                      selectedApplication.otherType
-                        ? ` (${selectedApplication.otherType})`
-                        : ""}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {selectedApplication.message && (
-                <div>
-                  <h3 className="text-sm font-medium text-gray-500">Message</h3>
-                  <p className="mt-1 whitespace-pre-line">
-                    {selectedApplication.message}
-                  </p>
+              ) : (
+                <div className="text-center text-gray-500">
+                  Select an application to view details
                 </div>
               )}
-            </div>
-          )}
-
-          <DialogFooter className="flex justify-between">
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>
-              Close
-            </Button>
-            {selectedApplication &&
-              selectedApplication.status === "PENDING" && (
-                <div className="flex space-x-2">
-                  <Button
-                    variant="destructive"
-                    onClick={() => {
-                      // Handle rejection
-                      setDialogOpen(false);
-                      toast({
-                        title: "Application rejected",
-                        description: "The application has been rejected.",
-                      });
-                    }}
-                  >
-                    Reject
-                  </Button>
-                  <Button
-                    variant="default"
-                    onClick={() => {
-                      // Handle approval
-                      setDialogOpen(false);
-                      toast({
-                        title: "Application approved",
-                        description: "The application has been approved.",
-                      });
-                    }}
-                  >
-                    Approve
-                  </Button>
-                </div>
-              )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    </div>
   );
 }
+

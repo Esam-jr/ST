@@ -1,6 +1,6 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '../auth/[...nextauth]';
+import { getServerSession } from 'next-auth/next';
+import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { z } from 'zod';
 
@@ -20,164 +20,149 @@ interface SponsorshipOpportunity {
   updatedAt: Date;
 }
 
-// Define validation schema for creating an application
-const createApplicationSchema = z.object({
-  opportunityId: z.string().min(1, { message: 'Opportunity ID is required' }),
-  amount: z.coerce.number().positive({ message: 'Amount must be positive' }),
-  currency: z.string().min(1, { message: 'Currency is required' }),
-  message: z.string().optional(),
+// Validation schema for the request body
+const applicationSchema = z.object({
+  // Sponsor Information
+  sponsorType: z.enum(['COMPANY', 'INDIVIDUAL', 'NGO', 'FOUNDATION', 'OTHER']),
+  organizationName: z.string().optional(),
+  legalName: z.string().min(2, "Legal name is required"),
+  website: z.string().url("Please enter a valid URL").optional().or(z.literal("")),
+  description: z.string().min(50, "Please provide a detailed description"),
+  annualBudget: z.string().optional(),
+  size: z.string().optional(),
+  foundedYear: z.number().min(1900).max(new Date().getFullYear()).optional(),
+  headquarters: z.string().optional(),
+  taxStatus: z.string().optional(),
+
+  // Contact Information
+  primaryContact: z.object({
+    name: z.string().min(2, "Contact name is required"),
+    title: z.string().min(2, "Job title is required"),
+    email: z.string().email("Please enter a valid email"),
+    phone: z.string().min(10, "Please enter a valid phone number"),
+  }),
+  alternateContact: z
+    .object({
+      name: z.string(),
+      title: z.string(),
+      email: z.string().email("Please enter a valid email"),
+      phone: z.string(),
+    })
+    .optional(),
+
+  // Sponsorship Details
+  opportunityId: z.string().min(1, "Opportunity ID is required"),
+  proposedAmount: z.number().min(1, "Amount must be greater than 0"),
+  currency: z.string().default("USD"),
+  sponsorshipGoals: z.string().min(10, "Please describe your sponsorship goals"),
+  hasPreviousSponsorships: z.boolean().default(false),
+  previousSponsorshipsDetails: z.string().optional(),
+  preferredPaymentSchedule: z.string().optional(),
+  additionalRequests: z.string().optional(),
+  proposedStartDate: z.string().optional().transform(val => val ? new Date(val) : undefined),
+  proposedEndDate: z.string().optional().transform(val => val ? new Date(val) : undefined),
 });
 
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
-  // Check if the user is authenticated
+  // Only allow POST method
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method not allowed" });
+  }
+
+  try {
+    // Get the user session
   const session = await getServerSession(req, res, authOptions);
-  if (!session) {
-    return res.status(401).json({ message: 'Unauthorized' });
+    if (!session?.user) {
+      return res.status(401).json({ error: "Unauthorized" });
   }
 
-  // Handle GET request - retrieve applications
-  if (req.method === 'GET') {
-    try {
-      const applications = await getApplicationsForUser(session.user.id, session.user.role);
-      return res.status(200).json(applications);
-    } catch (error) {
-      console.error('Error fetching sponsorship applications:', error);
-      return res.status(500).json({
-        message: 'Failed to fetch sponsorship applications',
-        error: error instanceof Error ? error.message : 'Unknown error'
-      });
+    // Verify user is a sponsor
+    if (session.user.role !== "SPONSOR") {
+      return res.status(403).json({ error: "Only sponsors can submit applications" });
     }
-  }
 
-  // Handle POST request - create new application
-  else if (req.method === 'POST') {
-    try {
-      // Validate request data
-      const validationResult = createApplicationSchema.safeParse(req.body);
+    // Validate request body
+    const validatedData = applicationSchema.parse(req.body);
       
-      if (!validationResult.success) {
-        return res.status(400).json({
-          message: 'Validation error',
-          errors: validationResult.error.errors
-        });
-      }
-      
-      const data = validationResult.data;
-      
-      // Get the opportunity to check if it exists and validate requirements
+    // Verify the opportunity exists and is open
       const opportunity = await prisma.sponsorshipOpportunity.findUnique({
-        where: { id: data.opportunityId }
-      }) as SponsorshipOpportunity | null;
+      where: { id: validatedData.opportunityId },
+    });
       
       if (!opportunity) {
-        return res.status(404).json({ message: 'Sponsorship opportunity not found' });
+      return res.status(404).json({ error: "Sponsorship opportunity not found" });
       }
       
-      // Check if opportunity is active (case-insensitive)
-      if (opportunity.status.toUpperCase() !== 'ACTIVE') {
-        return res.status(400).json({ message: 'This opportunity is not open for applications' });
+    // Check if the opportunity is still open
+    if (opportunity.status !== "OPEN" || (opportunity.deadline && new Date(opportunity.deadline) < new Date())) {
+      return res.status(400).json({ error: "This opportunity is no longer accepting applications" });
       }
       
-      // Check if deadline has passed
-      if (opportunity.deadline && new Date(opportunity.deadline) < new Date()) {
-        return res.status(400).json({ message: 'The application deadline has passed' });
-      }
-      
-      // Check currency
-      if (data.currency !== opportunity.currency) {
-        return res.status(400).json({ 
-          message: `Currency must match the opportunity currency: ${opportunity.currency}` 
-        });
-      }
-      
-      // Check amount range
-      if (data.amount < opportunity.minAmount || data.amount > opportunity.maxAmount) {
-        return res.status(400).json({ 
-          message: `Amount must be between ${opportunity.minAmount} and ${opportunity.maxAmount} ${opportunity.currency}` 
-        });
-      }
-      
-      // Check if user already has a pending or accepted application for this opportunity
+    // Check if the user has already applied
       const existingApplication = await prisma.sponsorshipApplication.findFirst({
         where: {
-          opportunityId: data.opportunityId,
+        opportunityId: validatedData.opportunityId,
           sponsorId: session.user.id,
-          status: {
-            in: ['PENDING', 'ACCEPTED']
-          }
-        }
+      },
       });
       
       if (existingApplication) {
-        return res.status(409).json({ 
-          message: 'You already have a pending or accepted application for this opportunity' 
-        });
+      return res.status(400).json({ error: "You have already applied for this opportunity" });
       }
       
       // Create the application
       const application = await prisma.sponsorshipApplication.create({
         data: {
-          amount: data.amount,
-          currency: data.currency,
-          message: data.message || '',
-          status: 'PENDING',
-          opportunity: {
-            connect: { id: data.opportunityId }
-          },
-          sponsor: {
-            connect: { id: session.user.id }
-          }
-        },
-        include: {
-          opportunity: {
-            select: {
-              id: true,
-              title: true,
-              status: true,
-            }
-          },
-          sponsor: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-            }
-          }
-        }
+        opportunityId: validatedData.opportunityId,
+        sponsorId: session.user.id,
+        sponsorType: validatedData.sponsorType,
+        organizationName: validatedData.organizationName,
+        legalName: validatedData.legalName,
+        website: validatedData.website,
+        description: validatedData.description,
+        annualBudget: validatedData.annualBudget,
+        size: validatedData.size,
+        foundedYear: validatedData.foundedYear,
+        headquarters: validatedData.headquarters,
+        taxStatus: validatedData.taxStatus,
+        primaryContact: validatedData.primaryContact,
+        alternateContact: validatedData.alternateContact,
+        proposedAmount: validatedData.proposedAmount,
+        currency: validatedData.currency,
+        sponsorshipGoals: validatedData.sponsorshipGoals,
+        hasPreviousSponsorships: validatedData.hasPreviousSponsorships,
+        previousSponsorshipsDetails: validatedData.previousSponsorshipsDetails,
+        preferredPaymentSchedule: validatedData.preferredPaymentSchedule,
+        additionalRequests: validatedData.additionalRequests,
+        status: "PENDING",
+        proposedStartDate: validatedData.proposedStartDate,
+        proposedEndDate: validatedData.proposedEndDate,
+      },
       });
       
-      // TODO: Send notification to admins about new application
+    // Create a notification for the opportunity owner
+    await prisma.notification.create({
+      data: {
+        userId: opportunity.createdById,
+        title: "New Sponsorship Application",
+        message: `${validatedData.organizationName} has applied to sponsor "${opportunity.title}"`,
+        type: "SPONSORSHIP_APPLICATION",
+        link: `/admin/sponsorship-applications/${application.id}`,
+      },
+    });
       
       return res.status(201).json(application);
     } catch (error) {
-      console.error('Error creating sponsorship application:', error);
+    console.error("Error creating sponsorship application:", error);
       
-      // Handle Prisma-specific errors
-      if (error instanceof Error && error.name === 'PrismaClientKnownRequestError') {
-        // Cast to any to access code
-        const prismaError = error as any;
-        
-        if (prismaError.code === 'P2025') {
-          return res.status(404).json({ 
-            message: 'Referenced resource not found',
-            error: error.message
-          });
-        }
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ error: "Validation error", details: error.errors });
       }
       
-      return res.status(500).json({
-        message: 'Failed to create sponsorship application',
-        error: error instanceof Error ? error.message : 'Unknown error'
-      });
-    }
-  }
-  
-  // Handle other methods
-  else {
-    return res.status(405).json({ message: 'Method not allowed' });
+    return res.status(500).json({ error: "Internal server error" });
   }
 }
 
