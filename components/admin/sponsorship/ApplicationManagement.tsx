@@ -154,12 +154,16 @@ export default function ApplicationManagement() {
 
       if (response.data.success > 0) {
         setApplications(applications.map(app =>
-          selectedApplications.includes(app.id) ? { ...app, status: actionType } : app
+          selectedApplications.includes(app.id) 
+            ? { ...app, status: actionType === 'APPROVED' ? 'PRE_APPROVED' : 'REJECTED' }
+            : app
         ));
 
         toast({
           title: 'Success',
-          description: `${response.data.success} application(s) processed successfully. Notifications sent.`,
+          description: actionType === 'APPROVED' 
+            ? `${response.data.success} application(s) pre-approved and notifications sent.`
+            : `${response.data.success} application(s) rejected and notifications sent.`,
         });
       } else {
         throw new Error('Failed to process applications');
@@ -236,6 +240,7 @@ export default function ApplicationManagement() {
             <SelectContent>
               <SelectItem value="ALL">All Status</SelectItem>
               <SelectItem value="PENDING">Pending</SelectItem>
+              <SelectItem value="PRE_APPROVED">Pre-Approved</SelectItem>
               <SelectItem value="APPROVED">Approved</SelectItem>
               <SelectItem value="REJECTED">Rejected</SelectItem>
             </SelectContent>
@@ -340,6 +345,8 @@ export default function ApplicationManagement() {
                         variant={
                           application.status === "APPROVED"
                             ? "default"
+                            : application.status === "PRE_APPROVED"
+                            ? "outline"
                             : application.status === "REJECTED"
                             ? "destructive"
                             : "secondary"
@@ -362,7 +369,7 @@ export default function ApplicationManagement() {
                               onClick={() => handleStatusAction(application.id, "APPROVED")}
                               disabled={processingAction === application.id}
                             >
-                              Approve
+                              Pre-Approve
                             </Button>
                             <Button
                               variant="outline"
@@ -374,6 +381,25 @@ export default function ApplicationManagement() {
                               Reject
                             </Button>
                           </>
+                        )}
+                        {application.status === "PRE_APPROVED" && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="bg-green-50 text-green-700 border-green-200 hover:bg-green-100"
+                            onClick={() => {
+                              const newStatus = "APPROVED";
+                              setApplications(applications.map(app =>
+                                app.id === application.id ? { ...app, status: newStatus } : app
+                              ));
+                              toast({
+                                title: 'Success',
+                                description: 'Application has been fully approved.',
+                              });
+                            }}
+                          >
+                            Finalize Approval
+                          </Button>
                         )}
                         <Button
                           variant="outline"
