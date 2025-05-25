@@ -1,133 +1,331 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import { useSession } from 'next-auth/react';
-import Layout from '../../components/layout/Layout';
-import StartupHeader from '../../components/startups/StartupHeader';
-import LoadingSpinner from '../../components/ui/LoadingSpinner';
-import ErrorAlert from '../../components/ui/ErrorAlert';
-import StartupTabs from '../../components/startups/StartupTabs';
+import axios from 'axios';
+import Layout from '@/components/layout/Layout';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Heart, MessageCircle, Share2, ExternalLink, Globe, Linkedin, Twitter } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+import LoadingSpinner from '@/components/ui/LoadingSpinner';
+import { Separator } from '@/components/ui/separator';
+import Link from 'next/link';
 
-export default function StartupDetails() {
+interface StartupIdea {
+  id: string;
+  title: string;
+  description: string;
+  industry: string[];
+  coverImage?: string;
+  socialLinks?: {
+    website?: string;
+    linkedin?: string;
+    twitter?: string;
+  };
+  status: string;
+  createdAt: string;
+  updatedAt: string;
+  user: {
+    id: string;
+    name: string;
+    image?: string;
+  };
+  _count: {
+    likes: number;
+    comments: number;
+  };
+  isLiked?: boolean;
+}
+
+interface Comment {
+  id: string;
+  content: string;
+  createdAt: string;
+  user: {
+    name: string;
+    image: string;
+  };
+}
+
+export default function StartupIdeaDetail() {
   const router = useRouter();
   const { id } = router.query;
   const { data: session, status } = useSession();
-  const [startup, setStartup] = useState<any>(null);
+  const { toast } = useToast();
+  const [idea, setIdea] = useState<StartupIdea | null>(null);
+  const [comments, setComments] = useState<Comment[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
-  const [activeTab, setActiveTab] = useState('overview');
+  const [liked, setLiked] = useState(false);
+  const [newComment, setNewComment] = useState('');
+  const [submittingComment, setSubmittingComment] = useState(false);
 
   useEffect(() => {
-    // Fetch startup data when ID is available
-    const fetchStartupData = async () => {
-      if (!id) return;
-      
-      try {
-        setLoading(true);
-        const response = await fetch(`/api/startups/${id}`);
-        
-        if (!response.ok) {
-          if (response.status === 404) {
-            setError('Startup not found');
-          } else if (response.status === 403) {
-            setError('You do not have permission to view this startup');
-          } else {
-            setError('Failed to load startup details');
-          }
-          setLoading(false);
-          return;
-        }
-        
-        const data = await response.json();
-        setStartup(data);
-        setLoading(false);
-      } catch (err) {
-        console.error('Error fetching startup:', err);
-        setError('An error occurred while loading the startup details');
-        setLoading(false);
-      }
-    };
-
     if (id) {
-      fetchStartupData();
+      fetchIdeaDetails();
+      fetchComments();
     }
   }, [id]);
 
-  // If not signed in, show sign-in prompt
-  if (status === 'unauthenticated') {
-    return (
-      <Layout title="Sign In Required | Startup Call Management System">
-        <div className="flex min-h-screen items-center justify-center bg-gray-50 dark:bg-gray-900">
-          <div className="rounded-lg bg-white p-8 shadow-lg dark:bg-gray-800">
-            <h2 className="mb-4 text-2xl font-bold text-gray-900 dark:text-white">Sign In Required</h2>
-            <p className="mb-6 text-gray-600 dark:text-gray-300">
-              Please sign in to view startup details.
-            </p>
-            <button
-              onClick={() => router.push(`/auth/signin?callbackUrl=${encodeURIComponent(`/startups/${id}`)}`)}
-              className="w-full rounded-md bg-primary-600 px-4 py-2 text-center text-sm font-medium text-white hover:bg-primary-700"
-            >
-              Sign In
-            </button>
-          </div>
-        </div>
-      </Layout>
-    );
-  }
+  const fetchIdeaDetails = async () => {
+    try {
+      const response = await axios.get(`/api/startup-ideas/${id}`);
+      setIdea(response.data);
+      setLoading(false);
+    } catch (error) {
+      console.error('Error fetching idea details:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to load idea details',
+        variant: 'destructive',
+      });
+      router.push('/startups');
+    }
+  };
 
-  // Loading state
+  const fetchComments = async () => {
+    try {
+      const response = await axios.get(`/api/startup-ideas/${id}/comments`);
+      setComments(response.data);
+    } catch (error) {
+      console.error('Error fetching comments:', error);
+    }
+  };
+
+  const handleLike = async () => {
+    if (!session) {
+      toast({
+        title: 'Authentication Required',
+        description: 'Please sign in to like ideas',
+        variant: 'default',
+      });
+      return;
+    }
+
+    try {
+      await axios.post(`/api/startup-ideas/${id}/like`);
+      fetchIdeaDetails();
+    } catch (error) {
+      console.error('Error liking idea:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to like the idea',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleSubmitComment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!session) {
+      toast({
+        title: 'Authentication Required',
+        description: 'Please sign in to comment',
+        variant: 'default',
+      });
+      return;
+    }
+
+    if (!newComment.trim()) return;
+
+    setSubmittingComment(true);
+    try {
+      await axios.post(`/api/startup-ideas/${id}/comments`, {
+        content: newComment,
+      });
+      setNewComment('');
+      fetchComments();
+      fetchIdeaDetails();
+    } catch (error) {
+      console.error('Error posting comment:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to post comment',
+        variant: 'destructive',
+      });
+    } finally {
+      setSubmittingComment(false);
+    }
+  };
+
+  const handleShare = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      toast({
+        title: 'Success',
+        description: 'Link copied to clipboard',
+      });
+    } catch (error) {
+      console.error('Error sharing idea:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to copy link',
+        variant: 'destructive',
+      });
+    }
+  };
+
   if (loading) {
     return (
-      <Layout title="Loading... | Startup Call Management System">
-        <div className="flex min-h-screen items-center justify-center bg-gray-50 dark:bg-gray-900">
-          <LoadingSpinner message="Loading startup details..." />
+      <Layout>
+        <div className="flex min-h-screen items-center justify-center">
+          <LoadingSpinner size="lg" />
         </div>
       </Layout>
     );
   }
 
-  // Error state
-  if (error) {
+  if (!idea) {
     return (
-      <Layout title="Error | Startup Call Management System">
-        <div className="flex min-h-screen items-center justify-center bg-gray-50 dark:bg-gray-900">
-          <ErrorAlert
-            title="Error Loading Startup"
-            message={error}
-            actionText="Go Back"
-            onAction={() => router.back()}
-          />
-        </div>
-      </Layout>
-    );
-  }
-
-  // If startup data is loaded successfully
-  if (startup) {
-    return (
-      <Layout title={`${startup.name} | Startup Call Management System`}>
-        <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-          {/* Header with startup info and actions */}
-          <StartupHeader
-            startup={startup}
-            isOwner={session?.user?.id === startup.founderId}
-            isAdmin={session?.user?.role === 'ADMIN'}
-          />
-
-          {/* Tab navigation and content */}
-          <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-            <StartupTabs
-              startup={startup}
-              activeTab={activeTab}
-              onTabChange={setActiveTab}
-              userRole={session?.user?.role}
-              userId={session?.user?.id}
-            />
+      <Layout>
+        <div className="flex min-h-screen items-center justify-center">
+          <div className="text-center">
+            <h2 className="text-2xl font-bold">Idea Not Found</h2>
+            <p className="text-muted-foreground mt-2">
+              The startup idea you're looking for doesn't exist or has been removed.
+            </p>
+            <Button
+              variant="outline"
+              className="mt-4"
+              onClick={() => router.push('/startups')}
+            >
+              View All Ideas
+            </Button>
           </div>
         </div>
       </Layout>
     );
   }
 
-  // Fallback if startup is null but no error/loading state
-  return null;
+  const formatDate = (date: string) => {
+    return new Date(date).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+  };
+
+  return (
+    <Layout>
+      <div className="min-h-screen bg-muted/10 py-8">
+        <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
+          {/* Cover Image */}
+          {idea.coverImage && (
+            <div className="mb-8 rounded-lg overflow-hidden shadow-lg">
+              <img
+                src={idea.coverImage}
+                alt={idea.title}
+                className="w-full h-[300px] object-cover"
+              />
+            </div>
+          )}
+
+          <Card>
+            <CardHeader>
+              <div className="flex items-start justify-between">
+                <div>
+                  <CardTitle className="text-3xl">{idea.title}</CardTitle>
+                  <CardDescription className="mt-2">
+                    Posted by{' '}
+                    <span className="font-medium">{idea.user.name}</span> on{' '}
+                    {formatDate(idea.createdAt)}
+                  </CardDescription>
+                </div>
+                {session?.user?.id === idea.user.id && (
+                  <Button
+                    variant="outline"
+                    onClick={() =>
+                      router.push(`/entrepreneur-dashboard/ideas/${idea.id}/edit`)
+                    }
+                  >
+                    Edit Idea
+                  </Button>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent>
+              {/* Industry Tags */}
+              <div className="flex flex-wrap gap-2 mb-6">
+                {idea.industry.map((tag) => (
+                  <Badge key={tag} variant="secondary">
+                    {tag}
+                  </Badge>
+                ))}
+              </div>
+
+              {/* Description */}
+              <div className="prose max-w-none">
+                <p className="whitespace-pre-wrap">{idea.description}</p>
+              </div>
+
+              <Separator className="my-6" />
+
+              {/* Social Links */}
+              {idea.socialLinks && (
+                <div className="flex gap-4 mb-6">
+                  {idea.socialLinks.website && (
+                    <a
+                      href={idea.socialLinks.website}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center text-muted-foreground hover:text-primary"
+                    >
+                      <Globe className="h-5 w-5" />
+                      <span className="ml-2">Website</span>
+                    </a>
+                  )}
+                  {idea.socialLinks.linkedin && (
+                    <a
+                      href={idea.socialLinks.linkedin}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center text-muted-foreground hover:text-primary"
+                    >
+                      <Linkedin className="h-5 w-5" />
+                      <span className="ml-2">LinkedIn</span>
+                    </a>
+                  )}
+                  {idea.socialLinks.twitter && (
+                    <a
+                      href={idea.socialLinks.twitter}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center text-muted-foreground hover:text-primary"
+                    >
+                      <Twitter className="h-5 w-5" />
+                      <span className="ml-2">Twitter</span>
+                    </a>
+                  )}
+                </div>
+              )}
+
+              {/* Engagement Actions */}
+              <div className="flex items-center gap-4 mt-6">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleLike}
+                  className={idea.isLiked ? 'text-red-500' : ''}
+                >
+                  <Heart className="h-5 w-5" />
+                  <span className="ml-2">{idea._count.likes}</span>
+                </Button>
+                <Button variant="ghost" size="sm" asChild>
+                  <Link href={`/startups/${idea.id}/comments`}>
+                    <MessageCircle className="h-5 w-5" />
+                    <span className="ml-2">{idea._count.comments}</span>
+                  </Link>
+                </Button>
+                <Button variant="ghost" size="sm" onClick={handleShare}>
+                  <Share2 className="h-5 w-5" />
+                  <span className="ml-2">Share</span>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    </Layout>
+  );
 }
