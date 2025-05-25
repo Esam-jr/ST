@@ -37,6 +37,14 @@ export default async function handler(
   try {
     // Fetch active sponsorship opportunities
     const opportunities = await prisma.sponsorshipOpportunity.findMany({
+      where: {
+        status: "OPEN",
+        visibility: "PUBLIC",
+        OR: [
+          { deadline: null },
+          { deadline: { gt: new Date() } }
+        ]
+      },
       include: {
         startupCall: {
           select: {
@@ -44,27 +52,19 @@ export default async function handler(
             title: true,
           },
         },
+        _count: {
+          select: {
+            applications: true
+          }
+        }
       },
+      orderBy: {
+        createdAt: 'desc'
+      }
     });
 
-    console.log(`Found ${opportunities.length} total opportunities`);
-
-    // Filter opportunities to only include those with ACTIVE status (case insensitive)
-    // and deadlines that haven't passed
-    const now = new Date();
-    const activeOpportunities = opportunities.filter((opportunity) => {
-      const isActive = opportunity.status.toUpperCase() === "ACTIVE";
-      const deadlineNotPassed =
-        !opportunity.deadline || new Date(opportunity.deadline) > now;
-      return isActive && deadlineNotPassed;
-    });
-
-    console.log(
-      `Found ${activeOpportunities.length} active opportunities with valid deadlines`
-    );
-
-    // Return the filtered opportunities
-    return res.status(200).json(activeOpportunities);
+    // Return the opportunities
+    return res.status(200).json(opportunities);
   } catch (error) {
     console.error("Error fetching sponsorship opportunities:", error);
     return res

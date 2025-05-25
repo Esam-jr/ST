@@ -66,10 +66,10 @@ export default async function handler(
     }
 
     // Only allow active opportunities to be viewed publicly (case insensitive)
-    if (opportunity.status.toUpperCase() !== "ACTIVE") {
+    if (opportunity.status.toUpperCase() !== "OPEN") {
       return res
         .status(403)
-        .json({ message: "This opportunity is not currently available" });
+        .json({ message: "This opportunity is not currently accepting applications" });
     }
 
     // Check if deadline has passed
