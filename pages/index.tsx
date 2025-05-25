@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { ArrowRight, CheckCircle, LineChart, LucideRocket, Users, Wallet, Calendar, Megaphone } from 'lucide-react';
 import useSWR from 'swr';
 import axios from 'axios';
+import FAQSection from '@/components/home/FAQSection';
 
 // Fetcher function for SWR
 const fetcher = (url: string) => axios.get(url).then(res => res.data);
@@ -347,6 +348,8 @@ export default function Home() {
           </div>
         </div>
       </section>
+
+      <FAQSection />
     </Layout>
   );
 }
