@@ -5,6 +5,7 @@ import {
   Target,
   Briefcase,
   CheckCircle,
+  Lightbulb,
 } from "lucide-react";
 
 interface DashboardSidebarProps {
@@ -47,7 +48,7 @@ export default function DashboardSidebar({
             onClick={() => setActiveView("applications")}
           >
             <FileText className="mr-2 h-4 w-4" />
-            My Applications
+            Applications
           </Button>
           <Button
             variant={activeView === "opportunities" ? "default" : "ghost"}
@@ -93,6 +94,19 @@ export default function DashboardSidebar({
               </Button>
             </>
           )}
+
+          <Button
+            variant={activeView === "ideas" ? "default" : "ghost"}
+            className={`w-full justify-start ${
+              activeView === "ideas"
+                ? "bg-primary text-primary-foreground"
+                : "hover:bg-muted"
+            }`}
+            onClick={() => setActiveView("ideas")}
+          >
+            <Lightbulb className="mr-2 h-4 w-4" />
+            My Ideas
+          </Button>
         </nav>
       </div>
     </div>
