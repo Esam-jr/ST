@@ -24,6 +24,13 @@ import {
   Globe,
   TrendingUp,
 } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 
 // Define types
 interface Founder {
@@ -39,6 +46,19 @@ interface StartupDetails {
   logo: string | null;
   website: string | null;
   industry: string | null;
+}
+
+interface ExpenseCategory {
+  name: string;
+  amount: number;
+  percentage: number;
+}
+
+interface StartupExpenses {
+  totalExpenses: number;
+  remainingBudget: number;
+  categories: ExpenseCategory[];
+  lastUpdate: string;
 }
 
 interface SponsoredStartup {
@@ -58,6 +78,13 @@ interface SponsoredStartup {
   description: string;
   founderDetails: Founder;
   startupDetails: StartupDetails | null;
+  expenses?: StartupExpenses;
+  milestones?: {
+    total: number;
+    completed: number;
+    nextMilestone?: string;
+    nextDeadline?: string;
+  };
 }
 
 export default function SponsoredStartups() {
@@ -131,6 +158,8 @@ export default function SponsoredStartups() {
                 description: winner.description,
                 founderDetails: winner.user,
                 startupDetails: winner.startup,
+                expenses: winner.expenses,
+                milestones: winner.milestones,
               });
             }
           } catch (error) {
@@ -194,7 +223,7 @@ export default function SponsoredStartups() {
       <CardHeader>
         <CardTitle>Sponsored Startups</CardTitle>
         <CardDescription>
-          Startups you're supporting through your sponsorships
+          Track the progress and expenses of startups you're supporting
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -216,76 +245,183 @@ export default function SponsoredStartups() {
                     <div>
                       <CardTitle>{startup.startupName}</CardTitle>
                       <CardDescription className="mt-1">
-                        From {startup.startupCallTitle} | Sponsored:{" "}
-                        {formatCurrency(
-                          startup.sponsorshipAmount,
-                          startup.sponsorshipCurrency
-                        )}
+                        From {startup.startupCallTitle}
                       </CardDescription>
                     </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-medium">
+                      {formatCurrency(
+                        startup.sponsorshipAmount,
+                        startup.sponsorshipCurrency
+                      )}
+                    </p>
+                    <p className="text-sm text-muted-foreground">Total Sponsored</p>
                   </div>
                 </div>
               </CardHeader>
               <CardContent>
-                <p className="text-muted-foreground">{startup.description}</p>
+                <div className="space-y-6">
+                  {/* Basic Info */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div>
+                      <p className="text-sm text-muted-foreground">Industry</p>
+                      <p className="font-medium">{startup.industry}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Stage</p>
+                      <p className="font-medium">{startup.stage}</p>
+                    </div>
+                    {startup.milestones && (
+                      <div>
+                        <p className="text-sm text-muted-foreground">Milestones</p>
+                        <p className="font-medium">
+                          {startup.milestones.completed} of {startup.milestones.total} Completed
+                        </p>
+                      </div>
+                    )}
+                    {startup.website && (
+                      <div>
+                        <p className="text-sm text-muted-foreground">Website</p>
+                        <a
+                          href={startup.website}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary hover:underline font-medium"
+                        >
+                          Visit Site
+                        </a>
+                      </div>
+                    )}
+                  </div>
 
-                <div className="grid grid-cols-2 gap-4 mt-4">
-                  <div className="flex items-center space-x-2">
-                    <Building className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm">{startup.industry}</span>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <TrendingUp className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm">{startup.stage}</span>
-                  </div>
-                  {startup.website && (
-                    <div className="flex items-center space-x-2">
-                      <Globe className="h-4 w-4 text-muted-foreground" />
-                      <a
-                        href={startup.website}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-sm hover:underline"
-                      >
-                        {startup.website}
-                      </a>
+                  {/* Budget Progress */}
+                  {startup.expenses && (
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h4 className="font-medium">Budget Utilization</h4>
+                          <p className="text-sm text-muted-foreground">
+                            Last updated: {format(new Date(startup.expenses.lastUpdate), "MMM d, yyyy")}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-medium">
+                            {formatCurrency(
+                              startup.expenses.remainingBudget,
+                              startup.sponsorshipCurrency
+                            )}
+                          </p>
+                          <p className="text-sm text-muted-foreground">Remaining</p>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Progress
+                          value={
+                            (startup.expenses.totalExpenses /
+                              startup.sponsorshipAmount) *
+                            100
+                          }
+                        />
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">
+                            {formatCurrency(
+                              startup.expenses.totalExpenses,
+                              startup.sponsorshipCurrency
+                            )}{" "}
+                            spent
+                          </span>
+                          <span className="text-muted-foreground">
+                            {Math.round(
+                              (startup.expenses.totalExpenses /
+                                startup.sponsorshipAmount) *
+                                100
+                            )}
+                            % of budget
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Expense Categories */}
+                      <Accordion type="single" collapsible>
+                        <AccordionItem value="expenses">
+                          <AccordionTrigger>
+                            View Expense Breakdown
+                          </AccordionTrigger>
+                          <AccordionContent>
+                            <div className="space-y-4 pt-4">
+                              {startup.expenses.categories.map((category) => (
+                                <div
+                                  key={category.name}
+                                  className="flex items-center justify-between"
+                                >
+                                  <div>
+                                    <p className="font-medium">
+                                      {category.name}
+                                    </p>
+                                    <p className="text-sm text-muted-foreground">
+                                      {category.percentage}% of total expenses
+                                    </p>
+                                  </div>
+                                  <p className="font-medium">
+                                    {formatCurrency(
+                                      category.amount,
+                                      startup.sponsorshipCurrency
+                                    )}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+                          </AccordionContent>
+                        </AccordionItem>
+                      </Accordion>
+                    </div>
+                  )}
+
+                  {/* Next Milestone */}
+                  {startup.milestones?.nextMilestone && (
+                    <div className="bg-primary/5 rounded-lg p-4">
+                      <h4 className="font-medium">Next Milestone</h4>
+                      <p className="text-sm mt-1">
+                        {startup.milestones.nextMilestone}
+                      </p>
+                      {startup.milestones.nextDeadline && (
+                        <p className="text-sm text-muted-foreground mt-2">
+                          Due by:{" "}
+                          {format(
+                            new Date(startup.milestones.nextDeadline),
+                            "MMM d, yyyy"
+                          )}
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>
-
-                <Separator className="my-4" />
-
-                <div className="flex items-center space-x-3">
-                  <Avatar className="h-8 w-8">
-                    <AvatarImage
-                      src={startup.founderDetails?.image || ""}
-                      alt={startup.founderDetails?.name}
-                    />
-                    <AvatarFallback>
-                      {startup.founderDetails?.name
-                        ?.substring(0, 2)
-                        .toUpperCase() || ""}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div>
-                    <p className="text-sm font-medium">
-                      {startup.founderDetails?.name}
-                    </p>
-                    <p className="text-xs text-muted-foreground">Founder</p>
-                  </div>
-                </div>
               </CardContent>
-              <CardFooter>
-                <Button variant="outline" size="sm" className="w-full">
-                  <a href={`/startups/${startup.startupId}`}>
-                    <ExternalLink className="h-4 w-4 mr-2" />
-                    View Startup Details
+              <CardFooter className="flex justify-end space-x-2">
+                <Button variant="outline" size="sm" asChild>
+                  <a
+                    href={`/sponsored-startups/${startup.startupId}`}
+                    className="flex items-center"
+                  >
+                    View Details
+                    <ExternalLink className="h-4 w-4 ml-2" />
                   </a>
                 </Button>
               </CardFooter>
             </Card>
           ))}
         </div>
+
+        {startups.length === 0 && (
+          <div className="bg-muted/50 rounded-lg p-6 text-center">
+            <p className="text-muted-foreground">
+              Once your sponsorship application is approved and a winner is
+              selected for the startup call, they will appear here.
+            </p>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
