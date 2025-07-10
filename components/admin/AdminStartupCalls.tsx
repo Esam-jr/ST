@@ -57,6 +57,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { useRouter } from 'next/navigation';
+import type { Application } from '../../path/to/ApplicationType'; // Adjust the path as needed
 
 // Define types
 type StartupCallStatus = 'DRAFT' | 'PUBLISHED' | 'CLOSED' | 'ARCHIVED';
@@ -232,7 +233,7 @@ const AdminStartupCalls = () => {
               const callApplications = await fetchApplications(call.id);
               if (callApplications && callApplications.length > 0) {
                 // Add the call title to each application for easy reference
-                const applicationsWithCallTitle = callApplications.map(app => ({
+                const applicationsWithCallTitle = callApplications.map((app: Application) => ({
                   ...app,
                   callTitle: call.title
                 }));
